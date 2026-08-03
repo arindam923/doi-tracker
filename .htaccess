@@ -1,0 +1,30 @@
+# Ternfluenzy Security Rules
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /doi-tracker/
+</IfModule>
+
+# Deny direct access to config and helpers
+<FilesMatch "^(config|auth_middleware|functions|csrf)\.php$">
+    Require all denied
+</FilesMatch>
+
+# Deny direct access to tracking config
+<FilesMatch "^config\.php$">
+    Require all denied
+</FilesMatch>
+
+# Deny directory listing
+Options -Indexes
+
+# Protect .htaccess itself
+<Files .htaccess>
+    Require all denied
+</Files>
+
+# Security headers
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+    Header set X-Frame-Options "SAMEORIGIN"
+    Header set X-XSS-Protection "1; mode=block"
+</IfModule>

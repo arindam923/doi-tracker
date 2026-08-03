@@ -1,0 +1,126 @@
+<?php
+require_once __DIR__ . '/../config.php';
+require_role(['super_admin', 'campaign_manager']);
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+        set_flash('danger', 'Invalid form submission.');
+        redirect(BASE_URL . '/clients/create.php');
+    }
+
+    $client_name = trim($_POST['client_name'] ?? '');
+    $client_code = strtoupper(trim($_POST['client_code'] ?? ''));
+    $contact_person = trim($_POST['contact_person'] ?? '');
+    $email = trim($_POST['email'] ?? '');
+    $phone = trim($_POST['phone'] ?? '');
+    $country = trim($_POST['country'] ?? '');
+    $default_currency = trim($_POST['default_currency'] ?? 'USD');
+    $notes = trim($_POST['notes'] ?? '');
+
+    $errors = [];
+    if (empty($client_name)) $errors[] = 'Client name is required.';
+    if (empty($client_code)) $errors[] = 'Client code is required.';
+    if (strlen($client_code) < 2 || strlen($client_code) > 20) $errors[] = 'Client code must be 2-20 characters.';
+
+    if (empty($errors)) {
+        $check = $pdo->prepare("SELECT id FROM clients WHERE client_code = ?");
+        $check->execute([$client_code]);
+        if ($check->fetch()) $errors[] = 'Client code already exists. Please choose a different one.';
+    }
+
+    if (!empty($errors)) {
+        set_flash('danger', implode(' | ', $errors));
+        $_SESSION['form_data'] = $_POST;
+        redirect(BASE_URL . '/clients/create.php');
+    }
+
+    $stmt = $pdo->prepare("INSERT INTO clients (client_name, client_code, contact_person, email, phone, country, default_currency, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+    $stmt->execute([$client_name, $client_code, $contact_person, $email, $phone, $country, $default_currency, $notes]);
+
+    regenerate_csrf_token();
+    set_flash('success', 'Client "' . $client_name . '" created successfully.');
+    redirect(BASE_URL . '/clients/list.php');
+}
+
+$form_data = $_SESSION['form_data'] ?? [];
+unset($_SESSION['form_data']);
+
+$page_title = 'Add New Client';
+require_once __DIR__ . '/../helpers/layout_header.php';
+?>
+
+<div class="row justify-content-center">
+    <div class="col-12 col-lg-8">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white border-bottom py-3">
+                <h5 class="mb-0 fw-semibold">Client Details</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" id="clientForm">
+                    <?php echo csrf_field(); ?>
+
+                    <div class="row g-3">
+                        <div class="col-12 col-md-8">
+                            <label for="client_name" class="form-label small fw-semibold text-secondary">Client Name <span class="text-danger">*</span></label>
+                            <input type="text" id="client_name" name="client_name" class="form-control"
+                                   value="<?php echo sanitize($form_data['client_name'] ?? ''); ?>" required>
+                        </div>
+
+                        <div class="col-12 col-md-4">
+                            <label for="client_code" class="form-label small fw-semibold text-secondary">Client Code <span class="text-danger">*</span></label>
+                            <input type="text" id="client_code" name="client_code" class="form-control"
+                                   value="<?php echo sanitize($form_data['client_code'] ?? ''); ?>"
+                                   maxlength="20" style="text-transform: uppercase;" required>
+                            <p class="form-text">Short code (e.g. EASD, QCVA)</p>
+                        </div>
+
+                        <div class="col-12 col-md-6">
+                            <label for="contact_person" class="form-label small fw-semibold text-secondary">Contact Person</label>
+                            <input type="text" id="contact_person" name="contact_person" class="form-control"
+                                   value="<?php echo sanitize($form_data['contact_person'] ?? ''); ?>">
+                        </div>
+
+                        <div class="col-12 col-md-6">
+                            <label for="email" class="form-label small fw-semibold text-secondary">Email</label>
+                            <input type="email" id="email" name="email" class="form-control"
+                                   value="<?php echo sanitize($form_data['email'] ?? ''); ?>">
+                        </div>
+
+                        <div class="col-12 col-md-4">
+                            <label for="phone" class="form-label small fw-semibold text-secondary">Phone</label>
+                            <input type="text" id="phone" name="phone" class="form-control"
+                                   value="<?php echo sanitize($form_data['phone'] ?? ''); ?>">
+                        </div>
+
+                        <div class="col-12 col-md-4">
+                            <label for="country" class="form-label small fw-semibold text-secondary">Country</label>
+                            <input type="text" id="country" name="country" class="form-control"
+                                   value="<?php echo sanitize($form_data['country'] ?? ''); ?>">
+                        </div>
+
+                        <div class="col-12 col-md-4">
+                            <label for="default_currency" class="form-label small fw-semibold text-secondary">Default Currency</label>
+                            <select id="default_currency" name="default_currency" class="form-select">
+                                <?php foreach (['USD','EUR','GBP','INR','AED','SAR','CAD','AUD'] as $cur): ?>
+                                <option value="<?php echo $cur; ?>" <?php echo ($form_data['default_currency'] ?? 'USD') === $cur ? 'selected' : ''; ?>><?php echo $cur; ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+
+                        <div class="col-12">
+                            <label for="notes" class="form-label small fw-semibold text-secondary">Notes</label>
+                            <textarea id="notes" name="notes" class="form-control" rows="3"><?php echo sanitize($form_data['notes'] ?? ''); ?></textarea>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2 pt-3 mt-3 border-top">
+                        <a href="<?php echo BASE_URL; ?>/clients/list.php" class="btn btn-secondary">Cancel</a>
+                        <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i>Create Client</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<?php require_once __DIR__ . '/../helpers/layout_footer.php'; ?>

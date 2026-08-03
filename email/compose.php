@@ -1,0 +1,185 @@
+<?php
+require_once __DIR__ . '/../config.php';
+require_role(['super_admin', 'campaign_manager']);
+
+$page_title = 'Send Email';
+
+$clients = $pdo->query("SELECT id, client_name, email, contact_person FROM clients WHERE is_active = 1 AND email != '' AND email IS NOT NULL ORDER BY client_name")->fetchAll();
+$client_count = count($clients);
+
+require_once __DIR__ . '/../helpers/layout_header.php';
+?>
+
+<style>
+    .stat-tile { padding: 1rem 1.25rem; }
+    .stat-tile .stat-label { font-size: .7rem; letter-spacing: .06em; text-transform: uppercase; color: #64748b; font-weight: 600; margin-bottom: .5rem; }
+    .stat-tile .stat-value { font-size: 1.75rem; font-weight: 700; color: #0f172a; line-height: 1.1; }
+    #client_ids { min-height: 12rem; }
+    .preview-pre { background: #f8fafc; padding: 1rem; border-radius: .375rem; white-space: pre-wrap; font-family: inherit; font-size: .9rem; margin: 0; }
+</style>
+
+<div class="row g-4">
+    <div class="col-12 col-lg-8">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white border-bottom py-3">
+                <h5 class="mb-0 fw-semibold">Compose Email</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="<?php echo BASE_URL; ?>/email/send.php" id="emailForm">
+                    <?php echo csrf_field(); ?>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold text-secondary">Recipients <span class="text-danger">*</span></label>
+                        <div class="d-flex gap-3 mb-2">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="recipient_mode" id="modeSelected" value="selected" checked onchange="toggleRecipientMode()">
+                                <label class="form-check-label" for="modeSelected">Selected clients</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="recipient_mode" id="modeAll" value="all" onchange="toggleRecipientMode()">
+                                <label class="form-check-label" for="modeAll">All clients with email</label>
+                            </div>
+                        </div>
+
+                        <div id="recipientSelector">
+                            <select class="form-select" name="client_ids[]" id="client_ids" multiple size="8">
+                                <?php foreach ($clients as $c): ?>
+                                <option value="<?php echo $c['id']; ?>">
+                                    <?php echo sanitize($c['client_name']); ?>
+                                    <?php if ($c['contact_person']): ?>— <?php echo sanitize($c['contact_person']); ?><?php endif; ?>
+                                    (<?php echo sanitize($c['email']); ?>)
+                                </option>
+                                <?php endforeach; ?>
+                            </select>
+                            <p class="form-text"><?php echo $client_count; ?> clients with email addresses</p>
+                        </div>
+
+                        <div id="allRecipientNotice" hidden>
+                            <div class="alert alert-info d-flex align-items-start mb-0">
+                                <i class="bi bi-info-circle me-2 mt-1"></i>
+                                <div>Email will be sent to all <?php echo $client_count; ?> clients with email addresses.</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="subject" class="form-label small fw-semibold text-secondary">Subject <span class="text-danger">*</span></label>
+                        <input type="text" id="subject" name="subject" class="form-control" required maxlength="300" placeholder="Enter email subject">
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="body" class="form-label small fw-semibold text-secondary">Message <span class="text-danger">*</span></label>
+                        <textarea id="body" name="body" class="form-control" rows="14" required placeholder="Write your email message here..."></textarea>
+                        <p class="form-text">Plain text only. Each recipient will receive an individual email.</p>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2 pt-3 mt-3 border-top">
+                        <button type="button" class="btn btn-secondary" onclick="previewEmail()"><i class="bi bi-eye"></i>Preview</button>
+                        <button type="submit" class="btn btn-primary" id="sendBtn"><i class="bi bi-send"></i>Send Email</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-lg-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white border-bottom py-3">
+                <h5 class="mb-0 fw-semibold">Recipients Overview</h5>
+            </div>
+            <div class="card-body">
+                <div class="stat-label">Total clients with email</div>
+                <div class="stat-value mb-4"><?php echo $client_count; ?></div>
+
+                <hr>
+
+                <div class="stat-label">Recipients selected</div>
+                <div class="stat-value text-primary mb-4" id="selectedCount">0</div>
+
+                <a href="<?php echo BASE_URL; ?>/email/history.php" class="btn btn-outline-primary btn-sm w-100">
+                    <i class="bi bi-clock-history"></i>View Sent History
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Preview Modal -->
+<div id="previewModal" class="tf-modal is-lg" hidden role="dialog" aria-modal="true" aria-labelledby="previewModal-title">
+    <div class="tf-modal-backdrop" data-tf-modal-close></div>
+    <div class="tf-modal-dialog">
+        <div class="tf-modal-header">
+            <h3 id="previewModal-title" class="tf-modal-title">Email Preview</h3>
+            <button type="button" class="tf-modal-close" data-tf-modal-close aria-label="Close"><i class="bi bi-x-lg"></i></button>
+        </div>
+        <div class="tf-modal-body">
+            <div class="mb-3">
+                <label class="form-label small fw-semibold text-secondary">To:</label>
+                <p class="mb-0" style="white-space: pre-line;" id="previewTo">—</p>
+            </div>
+            <div class="mb-3">
+                <label class="form-label small fw-semibold text-secondary">Subject:</label>
+                <p class="mb-0" id="previewSubject">—</p>
+            </div>
+            <div class="mb-0">
+                <label class="form-label small fw-semibold text-secondary">Message:</label>
+                <pre class="preview-pre" id="previewBody">—</pre>
+            </div>
+        </div>
+        <div class="tf-modal-footer">
+            <button type="button" class="btn btn-secondary" data-tf-modal-close>Close</button>
+        </div>
+    </div>
+</div>
+
+<script>
+function toggleRecipientMode() {
+    const mode = document.querySelector('input[name="recipient_mode"]:checked').value;
+    document.getElementById('recipientSelector').hidden = mode !== 'selected';
+    document.getElementById('allRecipientNotice').hidden = mode !== 'all';
+}
+
+document.getElementById('client_ids').addEventListener('change', function() {
+    document.getElementById('selectedCount').textContent = this.selectedOptions.length;
+});
+
+document.getElementById('emailForm').addEventListener('submit', function(e) {
+    const mode = document.querySelector('input[name="recipient_mode"]:checked').value;
+    if (mode === 'selected' && document.getElementById('client_ids').selectedOptions.length === 0) {
+        e.preventDefault();
+        alert('Please select at least one recipient.');
+        return;
+    }
+    if (!confirm('Send this email to ' + (mode === 'all' ? 'ALL clients' : document.getElementById('client_ids').selectedOptions.length + ' selected client(s)') + '?')) {
+        e.preventDefault();
+        return;
+    }
+    const btn = document.getElementById('sendBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Sending…';
+});
+
+function previewEmail() {
+    const subject = document.getElementById('subject').value || '(no subject)';
+    const body = document.getElementById('body').value || '(empty)';
+    const mode = document.querySelector('input[name="recipient_mode"]:checked').value;
+    const select = document.getElementById('client_ids');
+    let recipients;
+
+    if (mode === 'all') {
+        recipients = 'All clients with email (<?php echo $client_count; ?> recipients)';
+    } else {
+        const selected = Array.from(select.selectedOptions).map(o => o.textContent.trim());
+        recipients = selected.length ? selected.join('\n') : '(none selected)';
+    }
+
+    document.getElementById('previewTo').textContent = recipients;
+    document.getElementById('previewSubject').textContent = subject;
+    document.getElementById('previewBody').textContent = body;
+    openModal('previewModal');
+}
+
+document.getElementById('selectedCount').textContent = document.getElementById('client_ids').selectedOptions.length;
+</script>
+
+<?php require_once __DIR__ . '/../helpers/layout_footer.php'; ?>

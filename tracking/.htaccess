@@ -1,0 +1,4 @@
+# Protect config.php in tracking directory
+<Files "config.php">
+    Require all denied
+</Files>
