@@ -6,7 +6,7 @@ $all_time = !empty($_GET['all_time']) || ($_GET['preset'] ?? '') === 'all';
 // Accept both project_id and id (defensive — some links pass ?id=)
 $project_filter = intval($_GET['project_id'] ?? $_GET['id'] ?? 0);
 $breakdown_group = $_GET['group'] ?? 'project';
-if (!in_array($breakdown_group, ['project','vendor'], true)) $breakdown_group = 'project';
+if (!in_array($breakdown_group, ['project','vendor','client','country','device'], true)) $breakdown_group = 'project';
 
 // Date preset
 $preset = $_GET['preset'] ?? '30d';
@@ -68,12 +68,13 @@ $where_date = "AND c.converted_at BETWEEN ? AND DATE_ADD(?, INTERVAL 1 DAY)";
 $params_date = [$from_date, $to_date];
 
 $sql = "SELECT COUNT(*) as cnt, COALESCE(SUM(client_revenue),0) as revenue, COALESCE(SUM(vendor_cost),0) as cost, COALESCE(SUM(profit),0) as profit FROM conversions c WHERE c.status = 'complete' $where_date";
+$totals_params = $params_date;
 if ($project_filter) {
     $sql .= " AND c.project_id = ?";
-    $params_date[] = $project_filter;
+    $totals_params[] = $project_filter;
 }
 $stmt = $pdo->prepare($sql);
-$stmt->execute($params_date);
+$stmt->execute($totals_params);
 $totals = $stmt->fetch() ?: ['cnt' => 0, 'revenue' => 0, 'cost' => 0, 'profit' => 0];
 
 $totals['cnt']     = (int)($totals['cnt'] ?? 0);
@@ -82,9 +83,13 @@ $totals['cost']    = (float)($totals['cost'] ?? 0);
 $totals['profit']  = (float)($totals['profit'] ?? 0);
 
 // Rejected count + clicks for EPC
-$rej = $pdo->prepare("SELECT COUNT(*) as cnt FROM conversions c WHERE c.status = 'complete' AND c.approval_status = 'rejected' $where_date");
+$rejected_sql = "SELECT COUNT(*) as cnt FROM conversions c WHERE c.status = 'complete' AND c.approval_status = 'rejected' $where_date";
 $rej_params = $params_date;
-if ($project_filter) $rej_params[] = $project_filter;
+if ($project_filter) {
+    $rejected_sql .= ' AND c.project_id = ?';
+    $rej_params[] = $project_filter;
+}
+$rej = $pdo->prepare($rejected_sql);
 $rej->execute($rej_params);
 $totals['rejected'] = (int)$rej->fetch()['cnt'];
 
@@ -136,6 +141,48 @@ $sql .= " GROUP BY c.vendor_id ORDER BY revenue DESC";
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params_vend);
 $vendor_breakdown = $stmt->fetchAll();
+
+// Additional requested reporting dimensions. Country and device are captured
+// with the click and joined through the immutable click_id attribution key.
+$breakdown_rows_by_group = [
+    'project' => array_map(fn($row) => [
+        'label' => $row['project_name'], 'code' => $row['project_code'], 'cpi' => $row['client_cpi'],
+        'completes' => $row['completes'], 'revenue' => $row['revenue'], 'cost' => $row['cost'], 'profit' => $row['profit'],
+    ], $project_breakdown),
+    'vendor' => array_map(fn($row) => [
+        'label' => $row['vendor_name'], 'code' => null, 'cpi' => $row['vendor_cpi'],
+        'completes' => $row['completes'], 'revenue' => $row['revenue'], 'cost' => $row['cost'], 'profit' => $row['profit'],
+    ], $vendor_breakdown),
+];
+
+$dimension_sql = [
+    'client' => "SELECT COALESCE(cl.client_name, 'Unassigned client') AS label, NULL AS code, 0 AS cpi,
+        COUNT(c.id) AS completes, COALESCE(SUM(c.client_revenue),0) AS revenue,
+        COALESCE(SUM(c.vendor_cost),0) AS cost, COALESCE(SUM(c.profit),0) AS profit
+        FROM conversions c JOIN projects p ON p.id = c.project_id
+        LEFT JOIN clients cl ON cl.id = p.client_id WHERE c.status = 'complete' $where_date",
+    'country' => "SELECT COALESCE(NULLIF(clk.country_code, ''), 'Unknown') AS label, NULL AS code, 0 AS cpi,
+        COUNT(c.id) AS completes, COALESCE(SUM(c.client_revenue),0) AS revenue,
+        COALESCE(SUM(c.vendor_cost),0) AS cost, COALESCE(SUM(c.profit),0) AS profit
+        FROM conversions c LEFT JOIN clicks clk ON clk.click_id = c.click_id
+        WHERE c.status = 'complete' $where_date",
+    'device' => "SELECT COALESCE(NULLIF(clk.device_type, ''), 'Unknown') AS label, NULL AS code, 0 AS cpi,
+        COUNT(c.id) AS completes, COALESCE(SUM(c.client_revenue),0) AS revenue,
+        COALESCE(SUM(c.vendor_cost),0) AS cost, COALESCE(SUM(c.profit),0) AS profit
+        FROM conversions c LEFT JOIN clicks clk ON clk.click_id = c.click_id
+        WHERE c.status = 'complete' $where_date",
+];
+foreach ($dimension_sql as $dimension => $dimension_query) {
+    $dimension_params = $params_date;
+    if ($project_filter) {
+        $dimension_query .= ' AND c.project_id = ?';
+        $dimension_params[] = $project_filter;
+    }
+    $dimension_query .= ' GROUP BY label ORDER BY revenue DESC';
+    $dimension_stmt = $pdo->prepare($dimension_query);
+    $dimension_stmt->execute($dimension_params);
+    $breakdown_rows_by_group[$dimension] = $dimension_stmt->fetchAll();
+}
 
 // ─── Look up the project's start / last conversion date for the empty-state hint ───
 $project_info = null;
@@ -624,12 +671,13 @@ require_once __DIR__ . '/../helpers/layout_header.php';
 
 <!-- Breakdown (Project / Vendor) -->
 <?php
-$rows = $breakdown_group === 'vendor' ? $vendor_breakdown : $project_breakdown;
-$row_label = $breakdown_group === 'vendor' ? 'Vendor' : 'Project';
-$row_label_plural = $breakdown_group === 'vendor' ? 'vendors' : 'projects';
+$rows = $breakdown_rows_by_group[$breakdown_group];
+$group_labels = ['project' => 'Project', 'vendor' => 'Vendor', 'client' => 'Client', 'country' => 'Country', 'device' => 'Device'];
+$row_label = $group_labels[$breakdown_group];
+$row_label_plural = strtolower($row_label) . 's';
 $row_count = count($rows);
-$empty_title = $breakdown_group === 'vendor' ? 'No vendor data in this period' : 'No conversion data in this period';
-$empty_icon = $breakdown_group === 'vendor' ? 'bi-people' : 'bi-bar-chart';
+$empty_title = $breakdown_group === 'vendor' ? 'No vendor data in this period' : 'No ' . strtolower($row_label) . ' data in this period';
+$empty_icon = $breakdown_group === 'vendor' || $breakdown_group === 'client' ? 'bi-people' : 'bi-bar-chart';
 $empty_hint = $breakdown_group === 'vendor'
     ? 'Enable <em>All time</em> or widen the date range to see historical vendor performance.'
     : 'Try the <em>All time</em> toggle, or pick a wider date range.';
@@ -638,7 +686,7 @@ $empty_hint = $breakdown_group === 'vendor'
     <div class="data-header">
         <div>
             <h5>Revenue by <?php echo $row_label; ?></h5>
-            <p class="small text-secondary mb-0"><?php echo $breakdown_group === 'vendor' ? 'Top traffic sources by profitability' : 'Performance breakdown for each campaign'; ?></p>
+            <p class="small text-secondary mb-0">Performance breakdown for the selected reporting dimension.</p>
         </div>
         <div class="d-flex align-items-center gap-2">
             <?php
@@ -652,6 +700,9 @@ $empty_hint = $breakdown_group === 'vendor'
             <div class="tf-segmented" role="tablist">
                 <a href="<?php echo $tab_url('project'); ?>" class="tf-segmented-btn <?php echo $breakdown_group === 'project' ? 'is-active' : ''; ?>" role="tab">Project</a>
                 <a href="<?php echo $tab_url('vendor'); ?>" class="tf-segmented-btn <?php echo $breakdown_group === 'vendor' ? 'is-active' : ''; ?>" role="tab">Vendor</a>
+                <a href="<?php echo $tab_url('client'); ?>" class="tf-segmented-btn <?php echo $breakdown_group === 'client' ? 'is-active' : ''; ?>" role="tab">Client</a>
+                <a href="<?php echo $tab_url('country'); ?>" class="tf-segmented-btn <?php echo $breakdown_group === 'country' ? 'is-active' : ''; ?>" role="tab">Country</a>
+                <a href="<?php echo $tab_url('device'); ?>" class="tf-segmented-btn <?php echo $breakdown_group === 'device' ? 'is-active' : ''; ?>" role="tab">Device</a>
             </div>
             <span class="badge bg-light text-dark border"><?php echo $row_count; ?> <?php echo $row_label_plural; ?></span>
         </div>
@@ -701,9 +752,9 @@ $empty_hint = $breakdown_group === 'vendor'
                 </tr>
                 <?php else: ?>
                 <?php foreach ($rows as $r):
-                    $row_name = $breakdown_group === 'vendor' ? $r['vendor_name'] : $r['project_name'];
-                    $row_code = $breakdown_group === 'vendor' ? null : $r['project_code'];
-                    $row_cpi = $breakdown_group === 'vendor' ? $r['vendor_cpi'] : $r['client_cpi'];
+                    $row_name = $r['label'];
+                    $row_code = $r['code'];
+                    $row_cpi = $r['cpi'];
                     $margin = $r['revenue'] > 0 ? round(($r['profit'] / $r['revenue']) * 100, 1) : 0;
                     $margin_class = $margin >= 20 ? 'is-positive' : ($margin < 0 ? 'is-negative' : 'is-neutral');
                 ?>
