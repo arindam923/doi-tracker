@@ -19,10 +19,11 @@ if (!$code || !preg_match('/^[A-Za-z0-9_-]{4,16}$/', $code)) {
 $stmt = $pdo->prepare("
     SELECT p.id AS project_id, p.project_name, p.project_code, p.status AS project_status,
            pv.vendor_id AS vendor_id, gv.vendor_name, gv.vendor_code, pv.status AS vendor_status, pv.allowed_clicks_limit
-    FROM projects p
-    JOIN project_vendor pv ON pv.project_id = p.id
+    FROM short_links sl
+    JOIN projects p ON p.id = sl.project_id
+    JOIN project_vendor pv ON pv.project_id = sl.project_id AND pv.vendor_id = sl.vendor_id
     JOIN global_vendors gv ON gv.id = pv.vendor_id
-    WHERE p.short_code = ?
+    WHERE sl.code = ?
     LIMIT 1
 ");
 $stmt->execute([$code]);

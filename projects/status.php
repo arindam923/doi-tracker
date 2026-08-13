@@ -26,11 +26,13 @@ function json_or_redirect($is_ajax, $success, $message, $redirect_url = null) {
 }
 
 $project_id = intval($_POST['project_id'] ?? 0);
-$new_status = $_POST['new_status'] ?? '';
+$campaign_status = tf_campaign_status_for_request($_POST['new_status'] ?? '');
 
-if (!$project_id || !in_array($new_status, ['live', 'hold', 'closed', 'archived'], true)) {
+if (!$project_id || $campaign_status === null) {
     json_or_redirect($is_ajax, false, 'Invalid request.', BASE_URL . '/projects/list.php');
 }
+
+$new_status = tf_operational_status_for_campaign($campaign_status);
 
 $stmt = $pdo->prepare("SELECT * FROM projects WHERE id = ?");
 $stmt->execute([$project_id]);
@@ -41,9 +43,9 @@ if (!$project) {
 
 $old_status = $project['status'];
 
-// Update project status + keep campaign_status in sync
+// Persist the client-facing lifecycle and its corresponding traffic state.
 $pdo->prepare("UPDATE projects SET status = ?, campaign_status = ? WHERE id = ?")
-    ->execute([$new_status, $new_status, $project_id]);
+    ->execute([$new_status, $campaign_status, $project_id]);
 
 // Cascade vendor status (don't touch vendors on 'archived' — preserve their state)
 if ($new_status === 'hold' || $new_status === 'closed') {
@@ -58,11 +60,15 @@ if ($new_status === 'hold' || $new_status === 'closed') {
 
 // Log
 $pdo->prepare("INSERT INTO logs (log_type, project_id, status, message) VALUES (?, ?, ?, ?)")
-    ->execute(['status_change', $project_id, 'success', "Status changed: {$old_status} → {$new_status}"]);
+    ->execute(['status_change', $project_id, 'success', "Campaign status changed: {$project['campaign_status']} → {$campaign_status}; traffic state: {$old_status} → {$new_status}"]);
+
+audit_log($pdo, 'status_change', 'project', $project_id,
+    ['status' => $old_status, 'campaign_status' => $project['campaign_status']],
+    ['status' => $new_status, 'campaign_status' => $campaign_status]);
 
 if ($is_ajax) {
-    json_or_redirect(true, true, 'Status changed to ' . ucfirst($new_status) . '.', null);
+    json_or_redirect(true, true, 'Campaign status changed to ' . (tf_campaign_status()[$campaign_status] ?? $campaign_status) . '.', null);
 }
 
-set_flash('success', 'Project status changed to ' . ucfirst($new_status) . '.');
+set_flash('success', 'Campaign status changed to ' . (tf_campaign_status()[$campaign_status] ?? $campaign_status) . '.');
 redirect(BASE_URL . '/projects/detail.php?id=' . $project_id);

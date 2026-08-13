@@ -24,20 +24,6 @@ $stmt = $pdo->prepare("
 $stmt->execute([$code]);
 $row = $stmt->fetch();
 
-if (!$row) {
-    // Path 2: legacy project short_code — pick a random active assigned vendor
-    $stmt = $pdo->prepare("
-        SELECT p.id AS project_id, pv.vendor_id AS vendor_id
-        FROM projects p
-        JOIN project_vendor pv ON pv.project_id = p.id AND pv.status = 'active'
-        WHERE p.short_code = ?
-        ORDER BY RAND()
-        LIMIT 1
-    ");
-    $stmt->execute([$code]);
-    $row = $stmt->fetch();
-}
-
 if (!$row || empty($row['project_id']) || empty($row['vendor_id'])) {
     http_response_code(404);
     die('Tracking link not found.');
@@ -47,6 +33,11 @@ if (!$row || empty($row['project_id']) || empty($row['vendor_id'])) {
 $qs = http_build_query([
     'project_id' => $row['project_id'],
     'vendor_id'  => $row['vendor_id'],
+    'sub1' => substr((string)($_GET['sub1'] ?? ''), 0, 200),
+    'sub2' => substr((string)($_GET['sub2'] ?? ''), 0, 200),
+    'sub3' => substr((string)($_GET['sub3'] ?? ''), 0, 200),
+    'sub4' => substr((string)($_GET['sub4'] ?? ''), 0, 200),
+    'sub5' => substr((string)($_GET['sub5'] ?? ''), 0, 200),
 ]);
 header('Location: ' . rtrim(dirname($_SERVER['SCRIPT_NAME']), '/') . '/click.php?' . $qs, true, 302);
 exit;

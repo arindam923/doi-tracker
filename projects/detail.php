@@ -110,8 +110,6 @@ $total_profit = $rev_data['profit'];
 
 $page_title = $project['project_name'];
 $client_postback = BASE_URL . '/tracking/postback.php?click_id={click_id}&status=1&token=' . $project['postback_token'];
-$tracking_short = BASE_URL . '/c/' . $project['short_code'];
-$test_postback = BASE_URL . '/tracking/test.php?c=' . $project['short_code'];
 
 $page_actions = '
 <div class="d-flex align-items-center gap-2 flex-wrap">
@@ -261,57 +259,33 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                 </div>
                 <?php endif; ?>
 
-                <div class="mb-3">
-                    <label class="form-label small fw-semibold text-secondary d-flex align-items-center justify-content-between gap-2">
-                        <span>Short Tracking Link <span class="badge bg-light text-dark border">/c/<?php echo sanitize($project['short_code']); ?></span>
-                        <span class="text-muted small fw-normal">(routes to a random attached vendor)</span>
-                    </label>
-                    <div class="input-group">
-                        <input type="text" class="form-control" style="font-family: ui-monospace, monospace; font-size: .85em;" readonly value="<?php echo sanitize($tracking_short); ?>">
-                        <button class="btn btn-secondary" data-copy="<?php echo sanitize($tracking_short); ?>" aria-label="Copy"><i class="bi bi-clipboard"></i></button>
-                        <a href="<?php echo sanitize($tracking_short); ?>" target="_blank" rel="noopener" class="btn btn-outline-secondary" title="Open in new tab"><i class="bi bi-box-arrow-up-right"></i></a>
-                        <a href="<?php echo BASE_URL; ?>/tracking/qr.php?c=<?php echo urlencode($project['short_code']); ?>" target="_blank" rel="noopener" class="btn btn-outline-secondary" title="Show QR"><i class="bi bi-qr-code"></i></a>
-                    </div>
-                </div>
-
                 <?php if (!empty($vendors)): ?>
                 <div class="mb-3">
                     <label class="form-label small fw-semibold text-secondary">Vendor-Specific Tracking Links</label>
                     <div class="list-group list-group-flush border rounded">
                         <?php foreach ($vendors as $v):
-                            if (!empty($v['vendor_short_code'])) {
-                                $link = BASE_URL . '/c/' . $v['vendor_short_code'];
-                            } else {
-                                // Fallback if no short code (pivot backfill hasn't run yet)
-                                $link = $tracking_short;
-                            }
+                            $link = !empty($v['vendor_short_code']) ? BASE_URL . '/c/' . $v['vendor_short_code'] : null;
                         ?>
                         <div class="list-group-item px-3 py-2 d-flex align-items-center gap-2 flex-wrap">
                             <div class="fw-semibold text-dark" style="min-width: 180px;"><?php echo sanitize($v['vendor_name']); ?></div>
-                            <div class="input-group input-group-sm flex-grow-1">
-                                <input type="text" class="form-control" style="font-family: ui-monospace, monospace; font-size: .75em;" readonly value="<?php echo sanitize($link); ?>">
-                                <button class="btn btn-secondary" data-copy="<?php echo sanitize($link); ?>" aria-label="Copy"><i class="bi bi-clipboard"></i></button>
-                                <a href="<?php echo sanitize($link); ?>" target="_blank" rel="noopener" class="btn btn-outline-secondary" title="Open"><i class="bi bi-box-arrow-up-right"></i></a>
-                                <?php if (!empty($v['vendor_short_code'])): ?>
-                                <a href="<?php echo BASE_URL; ?>/tracking/qr.php?c=<?php echo urlencode($v['vendor_short_code']); ?>" target="_blank" rel="noopener" class="btn btn-outline-secondary" title="QR"><i class="bi bi-qr-code"></i></a>
-                                <?php endif; ?>
-                            </div>
+                            <?php if ($link): ?>
+                                <div class="input-group input-group-sm flex-grow-1">
+                                    <input type="text" class="form-control" style="font-family: ui-monospace, monospace; font-size: .75em;" readonly value="<?php echo sanitize($link); ?>">
+                                    <button class="btn btn-secondary" data-copy="<?php echo sanitize($link); ?>" aria-label="Copy"><i class="bi bi-clipboard"></i></button>
+                                    <a href="<?php echo sanitize($link); ?>" target="_blank" rel="noopener" class="btn btn-outline-secondary" title="Open"><i class="bi bi-box-arrow-up-right"></i></a>
+                                    <a href="<?php echo BASE_URL; ?>/tracking/qr.php?c=<?php echo urlencode($v['vendor_short_code']); ?>" target="_blank" rel="noopener" class="btn btn-outline-secondary" title="QR"><i class="bi bi-qr-code"></i></a>
+                                </div>
+                                <div class="w-100 small text-secondary mt-1">
+                                    Test link: <code><?php echo sanitize(BASE_URL . '/tracking/test.php?c=' . $v['vendor_short_code']); ?></code>
+                                </div>
+                            <?php else: ?>
+                                <span class="small text-warning">No opaque link yet — re-save this assignment after the migration.</span>
+                            <?php endif; ?>
                         </div>
                         <?php endforeach; ?>
                     </div>
                 </div>
                 <?php endif; ?>
-
-                <div class="mb-3">
-                    <label class="form-label small fw-semibold text-secondary d-flex align-items-center gap-2">
-                        <span>Test Link</span>
-                        <i class="bi bi-info-circle text-muted" data-bs-toggle="tooltip" data-bs-placement="top" title="Validates the link is reachable and shows the bound project/vendor, without consuming a click."></i>
-                    </label>
-                    <div class="input-group">
-                        <input type="text" class="form-control" style="font-family: ui-monospace, monospace; font-size: .85em;" readonly value="<?php echo sanitize($test_postback); ?>">
-                        <button class="btn btn-secondary" data-copy="<?php echo sanitize($test_postback); ?>" aria-label="Copy"><i class="bi bi-clipboard"></i></button>
-                    </div>
-                </div>
 
                 <div class="mb-3">
                     <label class="form-label small fw-semibold text-secondary d-flex align-items-center gap-2">
@@ -405,7 +379,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                 <?php else: foreach ($vendors as $v):
                     $vs = $vendor_stats[$v['vendor_id']] ?? ['clicks'=>0,'completes'=>0,'revenue'=>0,'cost'=>0,'profit'=>0];
                     $vccr = calc_ccr($vs['completes'], $vs['clicks']);
-                    $vlink = !empty($v['vendor_short_code']) ? (BASE_URL . '/c/' . $v['vendor_short_code']) : (BASE_URL . '/c/' . $project['short_code']);
+                    $vlink = !empty($v['vendor_short_code']) ? (BASE_URL . '/c/' . $v['vendor_short_code']) : null;
                 ?>
                 <tr>
                     <td><strong><?php echo sanitize($v['vendor_name']); ?></strong>
@@ -413,13 +387,13 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                     </td>
                     <td class="text-end"><?php echo format_currency($v['payout'], $v['currency'] ?? $currency); ?></td>
                     <td>
-                        <div class="input-group" style="max-width: 300px;">
+                        <?php if ($vlink): ?><div class="input-group" style="max-width: 300px;">
                             <input type="text" class="form-control" style="font-family: ui-monospace, monospace; font-size: .75em;" readonly value="<?php echo sanitize($vlink); ?>">
                             <button class="btn btn-secondary" data-copy="<?php echo sanitize($vlink); ?>" aria-label="Copy"><i class="bi bi-clipboard"></i></button>
                             <?php if (!empty($v['vendor_short_code'])): ?>
                             <a href="<?php echo BASE_URL; ?>/tracking/qr.php?c=<?php echo urlencode($v['vendor_short_code']); ?>" target="_blank" rel="noopener" class="btn btn-outline-secondary" title="QR"><i class="bi bi-qr-code"></i></a>
                             <?php endif; ?>
-                        </div>
+                        </div><?php else: ?><span class="small text-warning">Opaque link pending migration</span><?php endif; ?>
                     </td>
                     <td class="text-end"><?php echo number_format($vs['clicks']); ?></td>
                     <td class="text-end"><?php echo number_format($vs['completes']); ?></td>

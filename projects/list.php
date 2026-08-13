@@ -18,15 +18,15 @@ if ($search) {
     $params[] = "%$search%";
     $params[] = "%$search%";
 }
-if ($status_filter && in_array($status_filter, ['live','hold','closed','archived'])) {
-    $where[] = "p.status = ?";
+if ($status_filter && array_key_exists($status_filter, tf_campaign_status())) {
+    $where[] = "p.campaign_status = ?";
     $params[] = $status_filter;
 }
 if ($client_filter) {
     $where[] = "p.client_id = ?";
     $params[] = $client_filter;
 }
-if ($campaign_type_filter && in_array($campaign_type_filter, ['CPL','CPC','CPA'], true)) {
+if ($campaign_type_filter && array_key_exists($campaign_type_filter, tf_campaign_types())) {
     $where[] = "p.campaign_type = ?";
     $params[] = $campaign_type_filter;
 }
@@ -55,7 +55,12 @@ $clients_list = $pdo->query("SELECT id, client_name FROM clients WHERE is_active
 $project_vendor_map = [];
 if (!empty($projects)) {
     $placeholders = implode(',', array_fill(0, count($projects), '?'));
-    $vstmt = $pdo->prepare("SELECT pv.project_id, pv.vendor_id AS id, gv.vendor_name, pv.status FROM project_vendor pv JOIN global_vendors gv ON gv.id = pv.vendor_id WHERE pv.project_id IN ($placeholders) ORDER BY gv.vendor_name");
+    $vstmt = $pdo->prepare("SELECT pv.project_id, pv.vendor_id AS id, gv.vendor_name, pv.status,
+        (SELECT sl.code FROM short_links sl WHERE sl.project_id = pv.project_id AND sl.vendor_id = pv.vendor_id LIMIT 1) AS short_code
+        FROM project_vendor pv
+        JOIN global_vendors gv ON gv.id = pv.vendor_id
+        WHERE pv.project_id IN ($placeholders)
+        ORDER BY gv.vendor_name");
     $vstmt->execute(array_column($projects, 'id'));
     while ($v = $vstmt->fetch()) {
         $project_vendor_map[$v['project_id']][] = $v;
@@ -95,19 +100,18 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                 <label for="status" class="form-label small fw-semibold text-secondary">Status</label>
                 <select id="status" name="status" class="form-select">
                     <option value="">All Status</option>
-                                    <option value="live" <?php echo $status_filter === 'live' ? 'selected' : ''; ?>>Live</option>
-                                    <option value="hold" <?php echo $status_filter === 'hold' ? 'selected' : ''; ?>>Hold</option>
-                                    <option value="closed" <?php echo $status_filter === 'closed' ? 'selected' : ''; ?>>Closed</option>
-                                    <option value="archived" <?php echo $status_filter === 'archived' ? 'selected' : ''; ?>>Archived</option>
+                    <?php foreach (tf_campaign_status() as $status_key => $status_label): ?>
+                    <option value="<?php echo sanitize($status_key); ?>" <?php echo $status_filter === $status_key ? 'selected' : ''; ?>><?php echo sanitize($status_label); ?></option>
+                    <?php endforeach; ?>
                 </select>
             </div>
             <div class="col-6 col-md-2">
                 <label for="campaign_type" class="form-label small fw-semibold text-secondary">Campaign Type</label>
                 <select id="campaign_type" name="campaign_type" class="form-select">
                     <option value="">All Types</option>
-                    <option value="CPL" <?php echo $campaign_type_filter === 'CPL' ? 'selected' : ''; ?>>CPL</option>
-                    <option value="CPC" <?php echo $campaign_type_filter === 'CPC' ? 'selected' : ''; ?>>CPC</option>
-                    <option value="CPA" <?php echo $campaign_type_filter === 'CPA' ? 'selected' : ''; ?>>CPA</option>
+                    <?php foreach (tf_campaign_types() as $type_key => $type_label): ?>
+                    <option value="<?php echo sanitize($type_key); ?>" <?php echo $campaign_type_filter === $type_key ? 'selected' : ''; ?>><?php echo sanitize($type_label); ?></option>
+                    <?php endforeach; ?>
                 </select>
             </div>
             <div class="col-6 col-md-3">
@@ -169,7 +173,12 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                         </a>
                     </td>
                     <td><?php echo sanitize($p['client_name'] ?? '-'); ?></td>
-                    <td class="status-cell"><?php echo status_badge($p['status']); ?></td>
+                    <td class="status-cell">
+                        <?php $list_campaign_status = $p['campaign_status'] ?? $p['status']; ?>
+                        <span class="badge bg-<?php echo $list_campaign_status === 'live' ? 'success' : ($list_campaign_status === 'archived' ? 'light' : ($list_campaign_status === 'completed' ? 'danger' : 'warning')); ?>">
+                            <?php echo sanitize(tf_campaign_status()[$list_campaign_status] ?? ucfirst($list_campaign_status)); ?>
+                        </span>
+                    </td>
                     <td>
                         <?php if ($p['total_quota'] > 0):
                             $pct = min(100, ($p['completes_count'] / $p['total_quota']) * 100);
@@ -257,10 +266,10 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                 <div class="mb-3">
                     <label for="new_status_<?php echo $p['id']; ?>" class="form-label small fw-semibold text-secondary">New Status</label>
                     <select id="new_status_<?php echo $p['id']; ?>" name="new_status" class="form-select">
-                        <option value="live" <?php echo $p['status'] === 'live' ? 'selected' : ''; ?>>🟢 Live</option>
-                        <option value="hold" <?php echo $p['status'] === 'hold' ? 'selected' : ''; ?>>🟡 Hold</option>
-                        <option value="closed" <?php echo $p['status'] === 'closed' ? 'selected' : ''; ?>>🔴 Closed</option>
-                        <option value="archived" <?php echo $p['status'] === 'archived' ? 'selected' : ''; ?>>📦 Archived</option>
+                        <?php $current_campaign_status = $p['campaign_status'] ?? $p['status']; ?>
+                        <?php foreach (tf_campaign_status() as $status_key => $status_label): ?>
+                        <option value="<?php echo sanitize($status_key); ?>" <?php echo $current_campaign_status === $status_key ? 'selected' : ''; ?>><?php echo sanitize($status_label); ?></option>
+                        <?php endforeach; ?>
                     </select>
                 </div>
             </div>
@@ -307,17 +316,21 @@ $project_vendors = $project_vendor_map[$p['id']] ?? [];
             <hr>
             <h6 class="fw-semibold mb-3">Vendor Test Links</h6>
             <?php foreach ($project_vendors as $v):
-                $vendor_url = BASE_URL . '/tracking/click.php?project_id=' . $p['id'] . '&vendor_id=' . $v['id'];
+                $vendor_url = !empty($v['short_code']) ? BASE_URL . '/c/' . $v['short_code'] : null;
             ?>
             <div class="mb-3">
                 <label class="form-label small fw-semibold text-secondary d-flex align-items-center gap-2">
                     <span><?php echo sanitize($v['vendor_name']); ?></span>
                     <?php echo status_badge($v['status']); ?>
                 </label>
-                <div class="input-group">
-                    <input type="text" class="form-control" style="font-family: ui-monospace, monospace; font-size: .85em;" readonly value="<?php echo sanitize($vendor_url); ?>">
-                    <button class="btn btn-secondary" data-copy="<?php echo sanitize($vendor_url); ?>" aria-label="Copy"><i class="bi bi-clipboard"></i></button>
-                </div>
+                <?php if ($vendor_url): ?>
+                    <div class="input-group">
+                        <input type="text" class="form-control" style="font-family: ui-monospace, monospace; font-size: .85em;" readonly value="<?php echo sanitize($vendor_url); ?>">
+                        <button class="btn btn-secondary" data-copy="<?php echo sanitize($vendor_url); ?>" aria-label="Copy"><i class="bi bi-clipboard"></i></button>
+                    </div>
+                <?php else: ?>
+                    <p class="small text-warning mb-0">No opaque link has been generated yet. Re-attach this vendor after running the migration.</p>
+                <?php endif; ?>
             </div>
             <?php endforeach; ?>
             <?php endif; ?>
@@ -364,9 +377,11 @@ document.addEventListener('DOMContentLoaded', function() {
                         const badgeCell = row.querySelector('.status-cell');
                         if (badgeCell) {
                             const newStatus = form.querySelector('select[name="new_status"]').value;
-                            const colorMap = { live: 'success', hold: 'warning', closed: 'danger', archived: 'light' };
+                            const colorMap = { live: 'success', archived: 'light', completed: 'danger', draft: 'warning', pending_approval: 'warning', testing: 'warning', paused: 'warning' };
                             const cls = colorMap[newStatus] || 'light';
-                            badgeCell.innerHTML = '<span class="badge bg-' + cls + '">' + newStatus.charAt(0).toUpperCase() + newStatus.slice(1) + '</span>';
+                            const labelMap = { pending_approval: 'Pending Client Approval' };
+                            const label = labelMap[newStatus] || newStatus.charAt(0).toUpperCase() + newStatus.slice(1);
+                            badgeCell.innerHTML = '<span class="badge bg-' + cls + '">' + label + '</span>';
                         }
                     }
                     // Show inline success notice at top

@@ -124,3 +124,27 @@ function tf_vendor_statuses()  { return $GLOBALS['TF_VENDOR_STATUSES']; }
 function tf_currencies()       { return $GLOBALS['TF_CURRENCIES']; }
 function tf_document_types()   { return $GLOBALS['TF_DOCUMENT_TYPES']; }
 function tf_countries()        { return $GLOBALS['TF_COUNTRIES']; }
+
+/**
+ * Accept only lifecycle values defined for campaigns; callers must not trust a
+ * raw request value when changing a project's state.
+ */
+function tf_campaign_status_for_request($value)
+{
+    return is_string($value) && array_key_exists($value, tf_campaign_status()) ? $value : null;
+}
+
+/**
+ * `projects.status` controls traffic availability while `campaign_status`
+ * preserves the client-facing lifecycle. Keep the two deliberately separate.
+ */
+function tf_operational_status_for_campaign($campaign_status)
+{
+    return match ($campaign_status) {
+        'live' => 'live',
+        'completed' => 'closed',
+        'archived' => 'archived',
+        'draft', 'pending_approval', 'testing', 'paused' => 'hold',
+        default => null,
+    };
+}

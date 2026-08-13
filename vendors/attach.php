@@ -58,12 +58,7 @@ try {
             notes = VALUES(notes)
     ")->execute([$project_id, $global_vendor_id, $payout, $currency, $postback_url, $allowed_clicks_limit, $daily_cap, (int)($_SESSION['user_id'] ?? 0), $notes]);
 
-    // Per-vendor short link
-    $suffix = strtolower(substr(preg_replace('/[^A-Za-z0-9]/', '', $gv['vendor_name'] ?: $gv['vendor_code']), 0, 4));
-    $short_base = $project['short_code'] ?? substr(strtoupper(bin2hex(random_bytes(4))), 0, 8);
-    $short_vendor_code = $short_base . '-' . ($suffix ?: $global_vendor_id);
-    $pdo->prepare("INSERT IGNORE INTO short_links (code, project_id, vendor_id, created_at) VALUES (?, ?, ?, NOW())")
-        ->execute([$short_vendor_code, $project_id, $global_vendor_id]);
+    ensure_vendor_short_link($pdo, $project_id, $global_vendor_id);
 
     audit_log($pdo, 'attach', 'project_vendor', $project_id . ':' . $global_vendor_id, null, [
         'project_id' => $project_id,

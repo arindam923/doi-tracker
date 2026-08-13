@@ -19,7 +19,7 @@ if (!$code || !preg_match('/^[A-Za-z0-9_-]{4,16}$/', $code)) {
 }
 
 // Verify the code exists in our DB (so QR isn't leaked for deleted projects)
-$stmt = $pdo->prepare("SELECT short_code FROM projects WHERE short_code = ?");
+$stmt = $pdo->prepare("SELECT code FROM short_links WHERE code = ?");
 $stmt->execute([$code]);
 if (!$stmt->fetch()) {
     http_response_code(404);

@@ -328,6 +328,34 @@ function ensure_project_short_code($pdo, $project_id, $existing = null) {
 }
 
 /**
+ * Return the one opaque public URL code assigned to a project/vendor pair.
+ * The unique database constraint is the collision authority; retry instead of
+ * falling back to a project-level URL, which would lose vendor attribution.
+ */
+function ensure_vendor_short_link($pdo, $project_id, $vendor_id) {
+    $existing = $pdo->prepare('SELECT code FROM short_links WHERE project_id = ? AND vendor_id = ? LIMIT 1');
+    $existing->execute([$project_id, $vendor_id]);
+    $code = $existing->fetchColumn();
+    if ($code) return $code;
+
+    for ($attempt = 0; $attempt < 10; $attempt++) {
+        $candidate = generate_short_code(12);
+        try {
+            $insert = $pdo->prepare('INSERT INTO short_links (code, project_id, vendor_id, created_at) VALUES (?, ?, ?, NOW())');
+            $insert->execute([$candidate, $project_id, $vendor_id]);
+            return $candidate;
+        } catch (PDOException $e) {
+            // A collision is extremely unlikely; fetch in case another request
+            // created the same pair while this request was in progress.
+            $existing->execute([$project_id, $vendor_id]);
+            $code = $existing->fetchColumn();
+            if ($code) return $code;
+        }
+    }
+    throw new RuntimeException('Could not allocate a unique tracking code.');
+}
+
+/**
  * Write to audit_logs. No-op if the table doesn't exist yet (Phase 1 not applied).
  * Sensitive/PII fields are redacted before persistence (Phase 9 hardening).
  */
