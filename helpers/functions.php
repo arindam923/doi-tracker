@@ -521,3 +521,74 @@ function lookup_isp($ip) {
     @file_put_contents($cache_file, $isp);
     return $isp;
 }
+
+/** Opaque tracking codes are 4–12 URL-safe characters (matches short_links.code). */
+function tf_short_code_regex()
+{
+    return '/^[A-Za-z0-9_-]{4,12}$/';
+}
+
+function tf_is_valid_short_code($code)
+{
+    return is_string($code) && (bool)preg_match(tf_short_code_regex(), $code);
+}
+
+function tf_opaque_tracking_url($code)
+{
+    return rtrim(BASE_URL, '/') . '/c/' . $code;
+}
+
+function tf_vendor_can_be_assigned($vendor_status)
+{
+    return $vendor_status === 'approved';
+}
+
+function tf_is_tracking_admin()
+{
+    if (!function_exists('is_logged_in') || !is_logged_in()) {
+        return false;
+    }
+    return in_array($_SESSION['role'] ?? '', ['super_admin', 'campaign_manager'], true);
+}
+
+function tf_request_value($key, $default = '')
+{
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && array_key_exists($key, $_POST)) {
+        return $_POST[$key];
+    }
+    if (array_key_exists($key, $_GET)) {
+        return $_GET[$key];
+    }
+    return $default;
+}
+
+/**
+ * Resolve an opaque code to an active project-vendor assignment.
+ * Inactive, suspended, or unknown codes return null (callers should 404).
+ */
+function tf_resolve_active_short_link($pdo, $code)
+{
+    if (!tf_is_valid_short_code($code)) {
+        return null;
+    }
+    $stmt = $pdo->prepare("
+        SELECT sl.project_id, sl.vendor_id, sl.code, pv.status AS assignment_status, gv.vendor_status
+        FROM short_links sl
+        INNER JOIN project_vendor pv ON pv.project_id = sl.project_id AND pv.vendor_id = sl.vendor_id
+        INNER JOIN global_vendors gv ON gv.id = sl.vendor_id
+        WHERE sl.code = ?
+        LIMIT 1
+    ");
+    $stmt->execute([$code]);
+    $row = $stmt->fetch();
+    if (!$row) {
+        return null;
+    }
+    if (($row['assignment_status'] ?? '') !== 'active') {
+        return null;
+    }
+    if (in_array($row['vendor_status'] ?? '', ['suspended', 'blacklisted'], true)) {
+        return null;
+    }
+    return $row;
+}

@@ -64,8 +64,8 @@ function upsert_list_entries($pdo, $list_id, $rows) {
 
     try {
         $stmt = $pdo->prepare("
-            INSERT INTO email_list_entries (list_id, email, name, metadata_json, is_unsubscribed, dedupe_hash, added_at)
-            VALUES (?, ?, ?, ?, 0, ?, NOW())
+            INSERT INTO email_list_entries (list_id, email, name, country, source, metadata_json, is_unsubscribed, dedupe_hash, added_at)
+            VALUES (?, ?, ?, ?, ?, ?, 0, ?, NOW())
             ON DUPLICATE KEY UPDATE dedupe_hash = VALUES(dedupe_hash)
         ");
         foreach ((array)$rows as $row) {
@@ -76,6 +76,8 @@ function upsert_list_entries($pdo, $list_id, $rows) {
                 $list_id,
                 $email,
                 $row['name'] ?? null,
+                !empty($row['country']) ? strtoupper(substr($row['country'], 0, 2)) : null,
+                $row['source'] ?? null,
                 isset($row['metadata']) ? json_encode($row['metadata']) : null,
                 $hash,
             ]);

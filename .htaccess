@@ -4,8 +4,8 @@
     RewriteBase /doi-tracker/
 
     # /c/CODE → tracking/redirect.php (Phase 4)
-    RewriteRule ^c/([A-Za-z0-9_-]{4,16})$ tracking/redirect.php?c=$1 [L,QSA]
-    RewriteRule ^go/([A-Za-z0-9_-]{4,16})$ tracking/redirect.php?c=$1 [L,QSA]
+    RewriteRule ^c/([A-Za-z0-9_-]{4,12})$ tracking/redirect.php?c=$1 [L,QSA]
+    RewriteRule ^go/([A-Za-z0-9_-]{4,12})$ tracking/redirect.php?c=$1 [L,QSA]
 </IfModule>
 
 # Deny direct access to config and helpers

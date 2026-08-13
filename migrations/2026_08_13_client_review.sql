@@ -13,6 +13,8 @@ DROP PROCEDURE IF EXISTS tf_add_column_if_missing$$
 DROP PROCEDURE IF EXISTS tf_add_index_if_missing$$
 DROP PROCEDURE IF EXISTS tf_drop_legacy_vendor_foreign_keys$$
 DROP PROCEDURE IF EXISTS tf_add_global_vendor_fk_if_missing$$
+DROP PROCEDURE IF EXISTS tf_client_review_preflight$$
+DROP PROCEDURE IF EXISTS tf_remap_vendor_ids_if_table$$
 CREATE PROCEDURE tf_add_column_if_missing(
     IN p_table VARCHAR(64), IN p_column VARCHAR(64), IN p_definition TEXT
 )
@@ -82,7 +84,61 @@ BEGIN
         DEALLOCATE PREPARE tf_stmt;
     END IF;
 END$$
+
+CREATE PROCEDURE tf_client_review_preflight()
+BEGIN
+    DECLARE v_has_vendors INT DEFAULT 0;
+    DECLARE v_dupes INT DEFAULT 0;
+    DECLARE v_missing_project INT DEFAULT 0;
+    DECLARE v_orphan_clicks INT DEFAULT 0;
+
+    SELECT COUNT(*) INTO v_has_vendors
+    FROM information_schema.TABLES
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'vendors';
+
+    IF v_has_vendors > 0 THEN
+        SELECT COUNT(*) INTO v_dupes FROM (
+            SELECT vendor_code FROM vendors
+            WHERE vendor_code IS NOT NULL AND vendor_code <> ''
+            GROUP BY vendor_code HAVING COUNT(*) > 1
+        ) d;
+        IF v_dupes > 0 THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Preflight failed: duplicate vendor_code in vendors';
+        END IF;
+
+        SELECT COUNT(*) INTO v_missing_project
+        FROM vendors v LEFT JOIN projects p ON p.id = v.project_id
+        WHERE p.id IS NULL;
+        IF v_missing_project > 0 THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Preflight failed: vendors rows reference missing projects';
+        END IF;
+
+        SELECT COUNT(*) INTO v_orphan_clicks
+        FROM clicks c
+        LEFT JOIN vendors v ON v.id = c.vendor_id
+        LEFT JOIN global_vendors gv ON gv.id = c.vendor_id
+        WHERE v.id IS NULL AND gv.id IS NULL;
+        IF v_orphan_clicks > 0 THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Preflight failed: clicks reference unknown vendor_id values';
+        END IF;
+    END IF;
+END$$
+
+CREATE PROCEDURE tf_remap_vendor_ids_if_table(IN p_table VARCHAR(64))
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = p_table AND COLUMN_NAME = 'vendor_id'
+    ) THEN
+        SET @tf_sql = CONCAT('UPDATE `', p_table, '` t JOIN migration_vendor_map m ON t.vendor_id = m.legacy_vendor_id SET t.vendor_id = m.global_vendor_id');
+        PREPARE tf_stmt FROM @tf_sql;
+        EXECUTE tf_stmt;
+        DEALLOCATE PREPARE tf_stmt;
+    END IF;
+END$$
 DELIMITER ;
+
+CALL tf_client_review_preflight();
 
 -- Existing-table extensions.
 CALL tf_add_column_if_missing('clients', 'skype', 'VARCHAR(100) NULL');
@@ -306,6 +362,7 @@ CREATE TABLE IF NOT EXISTS email_campaigns (
     project_id INT NOT NULL,
     vendor_id INT NOT NULL,
     template_id INT NULL,
+    list_id INT NULL,
     name VARCHAR(200) NOT NULL,
     subject VARCHAR(300) NOT NULL,
     html_body TEXT NOT NULL,
@@ -432,6 +489,10 @@ CALL tf_drop_legacy_vendor_foreign_keys();
 SET FOREIGN_KEY_CHECKS = 0;
 UPDATE clicks c JOIN migration_vendor_map m ON c.vendor_id = m.legacy_vendor_id SET c.vendor_id = m.global_vendor_id;
 UPDATE conversions c JOIN migration_vendor_map m ON c.vendor_id = m.legacy_vendor_id SET c.vendor_id = m.global_vendor_id;
+CALL tf_remap_vendor_ids_if_table('logs');
+CALL tf_remap_vendor_ids_if_table('email_campaigns');
+CALL tf_remap_vendor_ids_if_table('email_campaign_sends');
+CALL tf_remap_vendor_ids_if_table('email_lists');
 UPDATE logs l JOIN migration_vendor_map m ON l.vendor_id = m.legacy_vendor_id SET l.vendor_id = m.global_vendor_id;
 SET FOREIGN_KEY_CHECKS = 1;
 CALL tf_add_global_vendor_fk_if_missing('clicks', 'fk_clicks_global_vendor');
@@ -440,9 +501,13 @@ INSERT IGNORE INTO short_links (code, project_id, vendor_id)
 SELECT LEFT(SHA2(CONCAT('link:', pv.project_id, ':', pv.vendor_id), 256), 12), pv.project_id, pv.vendor_id
 FROM project_vendor pv;
 
+CALL tf_add_column_if_missing('email_campaigns', 'list_id', 'INT NULL');
+CALL tf_add_index_if_missing('email_campaign_sends', 'uk_campaign_entry', 'UNIQUE KEY `uk_campaign_entry` (`campaign_id`, `entry_id`)');
+
 INSERT INTO settings (setting_key, setting_value) VALUES
     ('global_postback_enabled', '0'), ('global_postback_url', ''), ('ip_enrichment_enabled', '1'),
-    ('vendor_login_enabled', '0'), ('strict_target_device', '0'), ('email_rate_per_minute', '50')
+    ('vendor_login_enabled', '0'), ('strict_target_device', '0'), ('email_rate_per_minute', '50'),
+    ('vendor_portal_show_network_economics', '0')
 ON DUPLICATE KEY UPDATE setting_value = setting_value;
 
 -- Verification: these queries must return 0 before the legacy `vendors` table is retired.
@@ -455,3 +520,5 @@ DROP PROCEDURE IF EXISTS tf_add_column_if_missing;
 DROP PROCEDURE IF EXISTS tf_add_index_if_missing;
 DROP PROCEDURE IF EXISTS tf_drop_legacy_vendor_foreign_keys;
 DROP PROCEDURE IF EXISTS tf_add_global_vendor_fk_if_missing;
+DROP PROCEDURE IF EXISTS tf_client_review_preflight;
+DROP PROCEDURE IF EXISTS tf_remap_vendor_ids_if_table;

@@ -33,7 +33,12 @@ $gv = $gv_stmt->fetch();
 
 if (!$project || !$gv) {
     set_flash('danger', 'Project or vendor not found.');
-    redirect(BASE_URL . '/vendors/global.php');
+    redirect(BASE_URL . '/projects/detail.php?id=' . $project_id);
+}
+
+if (!tf_vendor_can_be_assigned($gv['vendor_status'] ?? '')) {
+    set_flash('danger', 'Suspended or blacklisted vendors cannot be assigned to campaigns.');
+    redirect(BASE_URL . '/projects/detail.php?id=' . $project_id);
 }
 
 if ($currency === 'USD' && !empty($project['currency'])) $currency = $project['currency'];

@@ -11,7 +11,7 @@ ini_set('display_errors', 0);
 require_once __DIR__ . '/config.php';
 
 $code = trim($_GET['c'] ?? '');
-if (!$code || !preg_match('/^[A-Za-z0-9_-]{4,16}$/', $code)) {
+if (!tf_is_valid_short_code($code)) {
     http_response_code(400);
     die('Invalid code.');
 }

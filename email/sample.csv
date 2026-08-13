@@ -1,4 +1,4 @@
-email,name
-alice@example.com,Alice Smith
-bob@example.com,Bob Jones
-carol@example.com,Carol Lee
+email,country,first_name,last_name,source
+alice@example.com,US,Alice,Smith,manual
+bob@example.com,GB,Bob,Jones,manual
+carol@example.com,IN,Carol,Lee,manual

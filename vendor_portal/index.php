@@ -22,16 +22,28 @@ $kpi = $pdo->prepare("
         (SELECT COUNT(*) FROM clicks c WHERE c.vendor_id = ?) AS clicks,
         (SELECT COUNT(*) FROM conversions cc WHERE cc.vendor_id = ? AND cc.status='complete') AS conversions,
         (SELECT COUNT(*) FROM conversions cc WHERE cc.vendor_id = ? AND cc.status='complete' AND cc.approval_status='pending') AS pending,
-        (SELECT COALESCE(SUM(cc.vendor_cost),0) FROM conversions cc WHERE cc.vendor_id = ? AND cc.status='complete') AS vendor_revenue,
-        (SELECT COALESCE(SUM(cc.client_revenue),0) FROM conversions cc WHERE cc.vendor_id = ? AND cc.status='complete') AS network_cost,
-        (SELECT COALESCE(SUM(cc.profit),0) FROM conversions cc WHERE cc.vendor_id = ? AND cc.status='complete') AS network_profit
+        (SELECT COALESCE(SUM(cc.vendor_cost),0) FROM conversions cc WHERE cc.vendor_id = ? AND cc.status='complete') AS vendor_revenue
 ");
-$kpi->execute([$global_vendor_id, $global_vendor_id, $global_vendor_id, $global_vendor_id, $global_vendor_id, $global_vendor_id]);
+$kpi->execute([$global_vendor_id, $global_vendor_id, $global_vendor_id, $global_vendor_id]);
 $k = $kpi->fetch();
 $k['clicks'] = (int)($k['clicks'] ?? 0);
 $k['conversions'] = (int)($k['conversions'] ?? 0);
 $k['pending'] = (int)($k['pending'] ?? 0);
 $k['ccr'] = calc_ccr($k['conversions'], $k['clicks']);
+$show_network = get_setting($pdo, 'vendor_portal_show_network_economics', '0') === '1';
+$k['network_cost'] = 0;
+$k['network_profit'] = 0;
+if ($show_network) {
+    $econ = $pdo->prepare("
+        SELECT COALESCE(SUM(cc.client_revenue),0) AS network_cost,
+               COALESCE(SUM(cc.profit),0) AS network_profit
+        FROM conversions cc WHERE cc.vendor_id = ? AND cc.status='complete'
+    ");
+    $econ->execute([$global_vendor_id]);
+    $econ_row = $econ->fetch() ?: [];
+    $k['network_cost'] = $econ_row['network_cost'] ?? 0;
+    $k['network_profit'] = $econ_row['network_profit'] ?? 0;
+}
 
 // ── 7-day chart data ───────────────────────────
 $chart = $pdo->prepare("
@@ -145,9 +157,13 @@ $page_title = 'Vendor Dashboard';
                 <div class="col-6 col-md-4 col-lg-3 col-xl"><article class="tf-stat"><div class="tf-stat-body"><p class="tf-stat-label">Conversions</p><p class="tf-stat-value"><?php echo number_format($k['conversions']); ?></p></div><div class="tf-stat-icon is-indigo" aria-hidden="true"><i class="bi bi-check-circle-fill"></i></div></article></div>
                 <div class="col-6 col-md-4 col-lg-3 col-xl"><article class="tf-stat"><div class="tf-stat-body"><p class="tf-stat-label">CCR</p><p class="tf-stat-value"><?php echo $k['ccr']; ?>%</p></div><div class="tf-stat-icon is-amber" aria-hidden="true"><i class="bi bi-percent"></i></div></article></div>
                 <div class="col-6 col-md-4 col-lg-3 col-xl"><article class="tf-stat"><div class="tf-stat-body"><p class="tf-stat-label">Revenue</p><p class="tf-stat-value is-currency is-positive"><?php echo format_currency($k['vendor_revenue']); ?></p></div><div class="tf-stat-icon is-emerald" aria-hidden="true"><i class="bi bi-arrow-up-circle-fill"></i></div></article></div>
+                <?php if ($show_network): ?>
                 <div class="col-6 col-md-4 col-lg-3 col-xl"><article class="tf-stat"><div class="tf-stat-body"><p class="tf-stat-label">Network Cost</p><p class="tf-stat-value is-currency is-negative"><?php echo format_currency($k['network_cost']); ?></p></div><div class="tf-stat-icon is-red" aria-hidden="true"><i class="bi bi-arrow-down-circle-fill"></i></div></article></div>
+                <?php endif; ?>
                 <div class="col-6 col-md-4 col-lg-3 col-xl"><article class="tf-stat"><div class="tf-stat-body"><p class="tf-stat-label">Pending</p><p class="tf-stat-value is-warning"><?php echo number_format($k['pending']); ?></p></div><div class="tf-stat-icon is-amber" aria-hidden="true"><i class="bi bi-hourglass-split"></i></div></article></div>
+                <?php if ($show_network): ?>
                 <div class="col-6 col-md-4 col-lg-3 col-xl"><article class="tf-stat"><div class="tf-stat-body"><p class="tf-stat-label">Net Profit</p><p class="tf-stat-value is-currency <?php echo (float)$k['network_profit'] >= 0 ? 'is-positive' : 'is-negative'; ?>"><?php echo format_currency($k['network_profit']); ?></p></div><div class="tf-stat-icon is-slate" aria-hidden="true"><i class="bi bi-calculator-fill"></i></div></article></div>
+                <?php endif; ?>
             </div>
 
             <!-- Chart -->
@@ -206,7 +222,7 @@ $page_title = 'Vendor Dashboard';
                                 <thead>
                                     <tr>
                                         <th>Project</th>
-                                        <th class="is-numeric">Amount</th>
+                                        <?php if ($show_network): ?><th class="is-numeric">Amount</th><?php endif; ?>
                                         <th class="is-numeric">Payout</th>
                                         <th>Status</th>
                                         <th>Time</th>
@@ -214,11 +230,11 @@ $page_title = 'Vendor Dashboard';
                                 </thead>
                                 <tbody>
                                     <?php if (empty($conversions)): ?>
-                                    <tr class="is-empty"><td colspan="5" class="text-center py-5 text-muted">No conversions in this view.</td></tr>
+                                    <tr class="is-empty"><td colspan="<?php echo $show_network ? '5' : '4'; ?>" class="text-center py-5 text-muted">No conversions in this view.</td></tr>
                                     <?php else: foreach ($conversions as $c): ?>
                                     <tr>
                                         <td><?php echo htmlspecialchars($c['project_code'], ENT_QUOTES, 'UTF-8'); ?></td>
-                                        <td class="is-numeric"><?php echo format_currency($c['sale_amount'], $c['currency'] ?? 'USD'); ?></td>
+                                        <?php if ($show_network): ?><td class="is-numeric"><?php echo format_currency($c['sale_amount'], $c['currency'] ?? 'USD'); ?></td><?php endif; ?>
                                         <td class="is-numeric text-success"><?php echo format_currency($c['vendor_cost'], $c['currency'] ?? 'USD'); ?></td>
                                         <td>
                                             <?php $cls = $c['approval_status'] === 'approved' ? 'bg-success' : ($c['approval_status'] === 'rejected' ? 'bg-danger' : 'bg-warning'); ?>

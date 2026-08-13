@@ -1,24 +1,20 @@
 <?php
 /**
- * Track Flow — QR Code generator (Phase 4 / Item #33)
+ * Track Flow — QR Code generator (Item #33)
  *
- * Approach: server-side redirect to Google Chart API. This keeps the codebase
- * dependency-free (no composer, no GD/Font ext required) and produces a clean
- * PNG that scales correctly when printed.
- *
- * To go fully self-contained: replace the URL below with a pure-PHP QR encoder
- * (e.g. a vendored copy of BaconQrCode).
+ * Prefer a local encoder (qrencode CLI). Google Chart is only a last-resort
+ * fill for the on-disk cache so the endpoint still works on hosts without
+ * qrencode; cached files are served without a network round-trip.
  */
 require_once __DIR__ . '/../config.php';
 require_login();
 
 $code = trim($_GET['c'] ?? '');
-if (!$code || !preg_match('/^[A-Za-z0-9_-]{4,16}$/', $code)) {
+if (!tf_is_valid_short_code($code)) {
     http_response_code(400);
     die('Invalid code.');
 }
 
-// Verify the code exists in our DB (so QR isn't leaked for deleted projects)
 $stmt = $pdo->prepare("SELECT code FROM short_links WHERE code = ?");
 $stmt->execute([$code]);
 if (!$stmt->fetch()) {
@@ -26,16 +22,12 @@ if (!$stmt->fetch()) {
     die('Tracking link not found.');
 }
 
-$url = BASE_URL . '/c/' . $code;
-
-// Use Google Chart's QR generator — public, no API key, well-tested.
-// Width/height are in pixels. Output as PNG.
+$url = tf_opaque_tracking_url($code);
 $size = max(150, min(800, intval($_GET['size'] ?? 300)));
-$chart_url = 'https://chart.googleapis.com/chart?cht=qr&chs=' . $size . 'x' . $size . '&chl=' . urlencode($url) . '&choe=UTF-8&chld=M|2';
-
-// Cache the resulting image for 1 day, then redirect.
 $cache_dir = __DIR__ . '/../storage/qr_cache';
-if (!is_dir($cache_dir)) @mkdir($cache_dir, 0755, true);
+if (!is_dir($cache_dir)) {
+    @mkdir($cache_dir, 0755, true);
+}
 $cache_file = $cache_dir . '/' . md5($code . $size) . '.png';
 
 if (is_file($cache_file) && (time() - filemtime($cache_file)) < 86400) {
@@ -45,19 +37,27 @@ if (is_file($cache_file) && (time() - filemtime($cache_file)) < 86400) {
     exit;
 }
 
-$ctx = stream_context_create(['http' => ['timeout' => 5, 'ignore_errors' => true, 'header' => "User-Agent: TrackFlow/1.0\r\n"]]);
-$png = @file_get_contents($chart_url, false, $ctx);
+$png = null;
+$qrencode = trim((string)@shell_exec('command -v qrencode 2>/dev/null'));
+if ($qrencode !== '') {
+    $cmd = escapeshellcmd($qrencode) . ' -t PNG -s 6 -m 2 -o - ' . escapeshellarg($url);
+    $png = @shell_exec($cmd);
+}
 
-if ($png === false || strlen($png) < 100) {
-    // Fallback: render a simple SVG placeholder with the URL text
+if (!is_string($png) || strlen($png) < 100) {
+    $chart_url = 'https://chart.googleapis.com/chart?cht=qr&chs=' . $size . 'x' . $size . '&chl=' . urlencode($url) . '&choe=UTF-8&chld=M|2';
+    $ctx = stream_context_create(['http' => ['timeout' => 5, 'ignore_errors' => true, 'header' => "User-Agent: TrackFlow/1.0\r\n"]]);
+    $png = @file_get_contents($chart_url, false, $ctx);
+}
+
+if (!is_string($png) || strlen($png) < 100) {
     header('Content-Type: image/svg+xml');
-    echo '<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="' . $size . '" height="' . $size . '" viewBox="0 0 ' . $size . ' ' . $size . '">
-  <rect width="100%" height="100%" fill="#fff"/>
-  <rect x="2" y="2" width="' . ($size - 4) . '" height="' . ($size - 4) . '" fill="none" stroke="#0f172a" stroke-width="2"/>
-  <text x="50%" y="50%" text-anchor="middle" font-family="monospace" font-size="14" fill="#0f172a">' . htmlspecialchars($url) . '</text>
-  <text x="50%" y="' . ($size - 20) . '" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#64748b">QR generation offline. URL above.</text>
-</svg>';
+    $esc = htmlspecialchars($url, ENT_QUOTES, 'UTF-8');
+    echo '<?xml version="1.0" encoding="UTF-8"?>'
+        . '<svg xmlns="http://www.w3.org/2000/svg" width="' . $size . '" height="' . $size . '">'
+        . '<rect width="100%" height="100%" fill="#fff"/>'
+        . '<text x="50%" y="50%" text-anchor="middle" font-family="monospace" font-size="12">' . $esc . '</text>'
+        . '</svg>';
     exit;
 }
 

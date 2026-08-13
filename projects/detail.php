@@ -343,7 +343,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                 <?php endforeach; ?>
             </select>
             <button type="submit" class="btn btn-success btn-sm"><i class="bi bi-link-45deg"></i>Attach</button>
-            <a href="<?php echo BASE_URL; ?>/vendors/create.php?project_id=<?php echo $id; ?>" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg"></i>New Vendor</a>
+            <a href="<?php echo BASE_URL; ?>/vendors/create.php" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg"></i>Library</a>
         </form>
         <?php endif; ?>
     </div>
@@ -371,8 +371,8 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                         <i class="bi bi-people d-block mb-2" style="font-size: 2.5rem; color: #cbd5e1;"></i>
                         <p class="fw-semibold text-dark mb-2">No vendors added yet</p>
                         <?php if ($project['status'] === 'live'): ?>
-                        <p class="small text-secondary mb-3">Select a vendor from the dropdown above, or add a new one to the library.</p>
-                        <a href="<?php echo BASE_URL; ?>/vendors/create.php?project_id=<?php echo $id; ?>" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg"></i>Add First Vendor</a>
+                        <p class="small text-secondary mb-3">Attach an approved vendor from the library.</p>
+                        <a href="<?php echo BASE_URL; ?>/vendors/create.php" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg"></i>Add Vendor to Library</a>
                         <?php endif; ?>
                     </td>
                 </tr>

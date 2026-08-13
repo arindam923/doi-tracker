@@ -18,12 +18,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($post_action === 'create') {
         $name = trim($_POST['name'] ?? '');
         $description = trim($_POST['description'] ?? '');
+        $vendor_id = intval($_POST['vendor_id'] ?? 0);
+        $owner = $pdo->prepare("SELECT id FROM global_vendors WHERE id = ? AND traffic_type = 'Email'");
+        $owner->execute([$vendor_id]);
         if ($name === '') {
             set_flash('danger', 'List name is required.');
+        } elseif (!$owner->fetch()) {
+            set_flash('danger', 'Choose an Email-traffic vendor to own this list.');
         } else {
             try {
-                $pdo->prepare("INSERT INTO email_lists (name, source, description, created_by, created_at) VALUES (?, 'manual', ?, ?, NOW())")
-                    ->execute([$name, $description, $_SESSION['user_id'] ?? null]);
+                $pdo->prepare("INSERT INTO email_lists (name, source, description, vendor_id, created_by, created_at) VALUES (?, 'manual', ?, ?, ?, NOW())")
+                    ->execute([$name, $description, $vendor_id ?: null, $_SESSION['user_id'] ?? null]);
                 set_flash('success', 'List "' . sanitize($name) . '" created.');
             } catch (Throwable $e) {
                 set_flash('danger', 'Failed to create list: ' . $e->getMessage());
@@ -76,11 +81,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($has_header) {
             $i_email = array_search('email', $header, true);
             $i_name  = array_search('name', $header, true);
+            $i_first = array_search('first_name', $header, true);
+            $i_last  = array_search('last_name', $header, true);
+            $i_country = array_search('country', $header, true);
+            $i_source = array_search('source', $header, true);
             while (($line = fgetcsv($handle)) !== false) {
                 if (count($line) < 1) continue;
-                $row = ['email' => $line[$i_email] ?? ''];
-                if ($i_name !== false) $row['name'] = $line[$i_name] ?? null;
-                $rows[] = $row;
+                $first = ($i_first !== false) ? trim((string)($line[$i_first] ?? '')) : '';
+                $last = ($i_last !== false) ? trim((string)($line[$i_last] ?? '')) : '';
+                $name = ($i_name !== false) ? trim((string)($line[$i_name] ?? '')) : trim($first . ' ' . $last);
+                $rows[] = [
+                    'email' => $line[$i_email] ?? '',
+                    'name' => $name !== '' ? $name : null,
+                    'country' => ($i_country !== false) ? strtoupper(substr(trim((string)($line[$i_country] ?? '')), 0, 2)) : null,
+                    'source' => ($i_source !== false) ? trim((string)($line[$i_source] ?? '')) : null,
+                ];
             }
         } else {
             // First line is data, not a header
@@ -128,11 +143,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // ── GET: render ─────────────────────────────────────────────────
 $lists = $pdo->query("
-    SELECT l.*,
+    SELECT l.*, gv.vendor_name, gv.vendor_code,
         (SELECT COUNT(*) FROM email_list_entries e WHERE e.list_id = l.id) AS entries
     FROM email_lists l
+    LEFT JOIN global_vendors gv ON gv.id = l.vendor_id
     ORDER BY l.created_at DESC
 ")->fetchAll();
+
+$email_vendors = $pdo->query("SELECT id, vendor_name, vendor_code FROM global_vendors WHERE traffic_type = 'Email' ORDER BY vendor_name")->fetchAll();
 
 $page_title = 'Email Lists';
 $page_actions = '<a href="' . BASE_URL . '/email/compose.php" class="btn btn-outline-primary btn-sm"><i class="bi bi-send"></i>Compose Email</a>';
@@ -176,8 +194,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                     <label class="form-label small fw-semibold text-secondary">CSV File</label>
                     <input type="file" name="csv_file" accept=".csv,text/csv" class="form-control" required>
                     <p class="form-text mb-0">
-                        Format: <code>email,name</code> (header row optional). Emails are deduped case-insensitively;
-                        duplicate rows are skipped automatically. Max 10MB.
+                        Format: <code>email,country,first_name,last_name,source</code> (header row optional). Excel is not accepted in this release — export CSV from Excel first. Emails are deduped case-insensitively. Max 10MB.
                     </p>
                 </div>
 
@@ -270,6 +287,16 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                     <?php echo csrf_field(); ?>
                     <input type="hidden" name="action" value="create">
                     <div class="mb-3">
+                        <label class="form-label small fw-semibold text-secondary">Owner vendor <span class="text-danger">*</span></label>
+                        <select name="vendor_id" class="form-select" required>
+                            <option value="">Email vendor…</option>
+                            <?php foreach ($email_vendors as $ev): ?>
+                            <option value="<?php echo (int)$ev['id']; ?>"><?php echo sanitize($ev['vendor_name']); ?> (<?php echo sanitize($ev['vendor_code']); ?>)</option>
+                            <?php endforeach; ?>
+                        </select>
+                        <p class="form-text">Lists are reusable across projects assigned to this vendor.</p>
+                    </div>
+                    <div class="mb-3">
                         <label class="form-label small fw-semibold text-secondary">List Name <span class="text-danger">*</span></label>
                         <input type="text" name="name" class="form-control" required maxlength="200" placeholder="e.g. June Newsletter">
                     </div>
@@ -291,17 +318,18 @@ require_once __DIR__ . '/../helpers/layout_header.php';
             <div class="table-responsive">
                 <table class="table table-hover table-lists align-middle mb-0">
                     <thead>
-                        <tr><th>Name</th><th class="text-center">Recipients</th><th>Deduped</th><th>Created</th><th>Actions</th></tr>
+                        <tr><th>Name</th><th>Owner</th><th class="text-center">Recipients</th><th>Deduped</th><th>Created</th><th>Actions</th></tr>
                     </thead>
                     <tbody>
                         <?php if (empty($lists)): ?>
-                        <tr><td colspan="5" class="text-center py-5 text-muted">No lists yet. Create one on the left.</td></tr>
+                        <tr><td colspan="6" class="text-center py-5 text-muted">No lists yet. Create one on the left.</td></tr>
                         <?php else: foreach ($lists as $l): ?>
                         <tr>
                             <td>
                                 <div class="fw-semibold"><?php echo sanitize($l['name']); ?></div>
                                 <?php if ($l['description']): ?><div class="small text-secondary"><?php echo sanitize($l['description']); ?></div><?php endif; ?>
                             </td>
+                            <td class="small"><?php echo $l['vendor_name'] ? sanitize($l['vendor_name']) : '—'; ?></td>
                             <td class="text-center"><?php echo number_format((int)$l['entries']); ?></td>
                             <td><?php echo $l['is_deduped'] ? '<span class="badge bg-success">Yes</span>' : '<span class="badge bg-light text-dark border">No</span>'; ?></td>
                             <td class="text-secondary small"><?php echo sanitize(date('M j, Y', strtotime($l['created_at']))); ?></td>

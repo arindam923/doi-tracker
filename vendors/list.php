@@ -50,7 +50,7 @@ while ($row = $vs_stmt->fetch()) {
 $currency = $project['currency'] ?? 'USD';
 $page_title = 'Vendors — ' . $project['project_name'];
 $page_actions = '
-    <a href="' . BASE_URL . '/vendors/create.php?project_id=' . $project_id . '" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg"></i>Add Vendor</a>
+    <a href="' . BASE_URL . '/vendors/create.php" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg"></i>Add Vendor</a>
     <a href="' . BASE_URL . '/vendors/global_library.php?project_id=' . $project_id . '" class="btn btn-outline-primary btn-sm"><i class="bi bi-link-45deg"></i>Attach From Library</a>
 ';
 require_once __DIR__ . '/../helpers/layout_header.php';

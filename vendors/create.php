@@ -2,16 +2,15 @@
 require_once __DIR__ . '/../config.php';
 require_role(['super_admin', 'campaign_manager']);
 
-$project_id = intval($_GET['project_id'] ?? 0);
-$project = null;
-if ($project_id) {
-    $stmt = $pdo->prepare("SELECT p.*, c.default_currency FROM projects p LEFT JOIN clients c ON p.client_id = c.id WHERE p.id = ?");
-    $stmt->execute([$project_id]);
-    $project = $stmt->fetch();
-    if (!$project) $project_id = 0;
+$project_id = intval($_GET['project_id'] ?? $_POST['project_id'] ?? 0);
+if ($project_id && $_SERVER['REQUEST_METHOD'] !== 'POST') {
+    set_flash('info', 'Create vendors in the library, then attach them to a campaign.');
+    redirect(BASE_URL . '/vendors/create.php');
 }
+$project_id = 0;
+$project = null;
 
-$default_currency = $project['currency'] ?? ($project['default_currency'] ?? 'USD');
+$default_currency = 'USD';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {

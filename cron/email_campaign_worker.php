@@ -78,9 +78,13 @@ try {
 
     $campaign_id = (int)$campaign['id'];
 
-    $today_count = (int)$pdo->prepare("SELECT COUNT(*) FROM email_campaign_sends WHERE campaign_id = ? AND DATE(created_at) = CURDATE() AND status IN ('sent','delivered','opened','clicked','converted','bounced','failed')")->execute([$campaign_id]) && $pdo->prepare("SELECT COUNT(*) FROM email_campaign_sends WHERE campaign_id = ? AND DATE(created_at) = CURDATE() AND status IN ('sent','delivered','opened','clicked','converted','bounced','failed')")->fetchColumn();
+    $today_stmt = $pdo->prepare("SELECT COUNT(*) FROM email_campaign_sends WHERE campaign_id = ? AND DATE(created_at) = CURDATE() AND status IN ('sent','delivered','opened','clicked','converted','bounced','failed')");
+    $today_stmt->execute([$campaign_id]);
+    $today_count = (int)$today_stmt->fetchColumn();
 
-    $total_sent = (int)$pdo->prepare("SELECT COUNT(*) FROM email_campaign_sends WHERE campaign_id = ? AND status IN ('sent','delivered','opened','clicked','converted','bounced','failed')")->execute([$campaign_id]) && $pdo->prepare("SELECT COUNT(*) FROM email_campaign_sends WHERE campaign_id = ? AND status IN ('sent','delivered','opened','clicked','converted','bounced','failed')")->fetchColumn();
+    $total_stmt = $pdo->prepare("SELECT COUNT(*) FROM email_campaign_sends WHERE campaign_id = ? AND status IN ('sent','delivered','opened','clicked','converted','bounced','failed')");
+    $total_stmt->execute([$campaign_id]);
+    $total_sent = (int)$total_stmt->fetchColumn();
 
     if (($campaign['daily_limit'] > 0 && $today_count >= $campaign['daily_limit']) || ($campaign['total_limit'] > 0 && $total_sent >= $campaign['total_limit'])) {
         $pdo->prepare("UPDATE email_campaigns SET status = 'completed', completed_at = NOW() WHERE id = ?")->execute([$campaign_id]);
@@ -103,6 +107,14 @@ try {
     $vendor_id = (int)$campaign['vendor_id'];
     $project_id = (int)$campaign['project_id'];
 
+    $list_id = (int)($campaign['list_id'] ?? 0);
+    if ($list_id < 1) {
+        $pdo->prepare("UPDATE email_campaigns SET status = 'failed', updated_at = NOW() WHERE id = ?")->execute([$campaign_id]);
+        $pdo->commit();
+        campaign_log('campaign ' . $campaign_id . ' missing list_id');
+        exit(0);
+    }
+
     $allowed_countries = [];
     $geo_rows = $pdo->prepare("SELECT country_code FROM campaign_geo WHERE project_id = ?");
     $geo_rows->execute([$project_id]);
@@ -110,19 +122,21 @@ try {
         $allowed_countries[] = strtoupper(substr($g['country_code'], 0, 2));
     }
 
-    $exclude_statuses = ["'unsubscribed'", "'bounced'", "'invalid'"];
-    $existing_sql = "SELECT recipient_email FROM email_campaign_sends WHERE campaign_id = " . (int)$campaign_id . " AND status NOT IN ('queued','skipped')";
-    $existing = $pdo->query($existing_sql)->fetchAll(PDO::FETCH_COLUMN);
-    $existing_map = array_flip(array_map('strtolower', $existing));
+    $existing_stmt = $pdo->prepare("SELECT entry_id FROM email_campaign_sends WHERE campaign_id = ?");
+    $existing_stmt->execute([$campaign_id]);
+    $existing_ids = $existing_stmt->fetchAll(PDO::FETCH_COLUMN);
 
     $sql = "SELECT ele.id, ele.email, ele.name, ele.country FROM email_list_entries ele
-            JOIN email_lists el ON el.id = ele.list_id
-            WHERE (el.vendor_id = ? OR el.project_id = ?)
+            WHERE ele.list_id = ?
               AND ele.is_unsubscribed = 0
-              AND ele.status NOT IN (" . implode(',', $exclude_statuses) . ")
-              AND LOWER(ele.email) NOT IN (" . implode(',', array_fill(0, count($existing_map), '?')) . ")";
-    $params = [$vendor_id, $project_id];
-    $params = array_merge($params, array_keys($existing_map));
+              AND ele.status NOT IN ('unsubscribed', 'bounced', 'invalid')";
+    $params = [$list_id];
+    if ($existing_ids) {
+        $sql .= " AND ele.id NOT IN (" . implode(',', array_fill(0, count($existing_ids), '?')) . ")";
+        foreach ($existing_ids as $eid) {
+            $params[] = (int)$eid;
+        }
+    }
     $sql .= " LIMIT " . (int)$batch_size;
 
     $stmt = $pdo->prepare($sql);
@@ -195,7 +209,7 @@ try {
             $campaign_id,
             $project_id,
             $vendor_id,
-           0,
+            $list_id,
             (int)$row['id'],
             $row['email'],
             $row['name'] ?? null,

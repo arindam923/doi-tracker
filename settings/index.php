@@ -8,7 +8,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect(BASE_URL . '/settings/index.php');
     }
 
-    $keys = ['site_name', 'default_currency', 'session_timeout_hours', 'smtp_enabled', 'smtp_host', 'smtp_port', 'smtp_user', 'resend_api_key', 'email_from_address', 'email_from_name', 'ip_enrichment_enabled', 'global_postback_enabled', 'vendor_login_enabled', 'global_postback_url', 'strict_target_device', 'email_rate_per_minute'];
+    $keys = ['site_name', 'default_currency', 'session_timeout_hours', 'smtp_enabled', 'smtp_host', 'smtp_port', 'smtp_user', 'resend_api_key', 'email_from_address', 'email_from_name', 'ip_enrichment_enabled', 'global_postback_enabled', 'vendor_login_enabled', 'vendor_portal_show_network_economics', 'global_postback_url', 'strict_target_device', 'email_rate_per_minute'];
     foreach ($keys as $key) {
         if (isset($_POST[$key])) {
             set_setting($pdo, $key, trim($_POST[$key]));
@@ -136,6 +136,13 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                                 <option value="1" <?php echo ($settings['vendor_login_enabled'] ?? '0') === '1' ? 'selected' : ''; ?>>Open (vendor self-service)</option>
                             </select>
                             <p class="form-text mb-0">Vendor login URL: <a href="<?php echo BASE_URL; ?>/vendor_portal/auth.php" target="_blank" rel="noopener"><?php echo BASE_URL; ?>/vendor_portal/auth.php</a></p>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label for="vendor_portal_show_network_economics" class="form-label small fw-semibold text-secondary">Show network economics to vendors</label>
+                            <select id="vendor_portal_show_network_economics" name="vendor_portal_show_network_economics" class="form-select">
+                                <option value="0" <?php echo ($settings['vendor_portal_show_network_economics'] ?? '0') === '0' ? 'selected' : ''; ?>>Hidden (default)</option>
+                                <option value="1" <?php echo ($settings['vendor_portal_show_network_economics'] ?? '0') === '1' ? 'selected' : ''; ?>>Show client revenue and profit</option>
+                            </select>
                         </div>
                     </div>
 

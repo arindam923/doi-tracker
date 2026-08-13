@@ -17,6 +17,16 @@ $vendors = $pdo->prepare("SELECT pv.vendor_id AS id, gv.vendor_name FROM project
 $vendors->execute([$project_id]);
 $vendors = $vendors->fetchAll();
 
+$lists = $pdo->prepare("
+    SELECT l.id, l.name, l.vendor_id, gv.vendor_name
+    FROM email_lists l
+    JOIN global_vendors gv ON gv.id = l.vendor_id
+    JOIN project_vendor pv ON pv.vendor_id = l.vendor_id AND pv.project_id = ?
+    ORDER BY l.name
+");
+$lists->execute([$project_id]);
+$lists = $lists->fetchAll();
+
 $templates = $pdo->query("SELECT id, name, subject FROM email_templates ORDER BY is_default DESC, name ASC")->fetchAll();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -26,6 +36,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     $vendor_id = intval($_POST['vendor_id'] ?? 0);
+    $list_id = intval($_POST['list_id'] ?? 0);
     $template_id = intval($_POST['template_id'] ?? 0);
     $name = trim($_POST['name'] ?? '');
     $subject = trim($_POST['subject'] ?? '');
@@ -38,6 +49,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $errors = [];
     if (!$vendor_id) $errors[] = 'Please select a vendor.';
+    if (!$list_id) $errors[] = 'Please select a central email list.';
+    $assigned = $pdo->prepare("SELECT 1 FROM project_vendor WHERE project_id = ? AND vendor_id = ?");
+    $assigned->execute([$project_id, $vendor_id]);
+    if ($vendor_id && !$assigned->fetch()) $errors[] = 'Vendor is not assigned to this project.';
+    $owned = $pdo->prepare("SELECT 1 FROM email_lists WHERE id = ? AND vendor_id = ?");
+    $owned->execute([$list_id, $vendor_id]);
+    if ($list_id && !$owned->fetch()) $errors[] = 'List must belong to the selected Email vendor.';
     if ($name === '') $errors[] = 'Campaign name is required.';
     if ($subject === '') $errors[] = 'Subject is required.';
     if ($html_body === '') $errors[] = 'HTML body is required.';
@@ -50,8 +68,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     try {
-        $stmt = $pdo->prepare("INSERT INTO email_campaigns (project_id, vendor_id, template_id, name, subject, html_body, from_name, from_email, daily_limit, total_limit, is_multi_step, status, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, NOW(), NOW())");
-        $stmt->execute([$project_id, $vendor_id, $template_id ?: null, $name, $subject, $html_body, $from_name ?: null, $from_email ?: null, $daily_limit, $total_limit, $is_multi_step, $_SESSION['user_id'] ?? null]);
+        $stmt = $pdo->prepare("INSERT INTO email_campaigns (project_id, vendor_id, list_id, template_id, name, subject, html_body, from_name, from_email, daily_limit, total_limit, is_multi_step, status, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, NOW(), NOW())");
+        $stmt->execute([$project_id, $vendor_id, $list_id, $template_id ?: null, $name, $subject, $html_body, $from_name ?: null, $from_email ?: null, $daily_limit, $total_limit, $is_multi_step, $_SESSION['user_id'] ?? null]);
 
         $new_id = (int)$pdo->lastInsertId();
         audit_log($pdo, 'create', 'email_campaign', $new_id, null, ['project_id' => $project_id, 'vendor_id' => $vendor_id, 'name' => $name]);
@@ -88,6 +106,15 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                             <option value="">Select Vendor</option>
                             <?php foreach ($vendors as $v): ?>
                                 <option value="<?php echo (int)$v['id']; ?>" <?php echo ($form_data['vendor_id'] ?? '') == $v['id'] ? 'selected' : ''; ?>><?php echo sanitize($v['vendor_name']); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="tf-field col-12 col-md-6">
+                        <label for="list_id" class="tf-label">Email List <span class="tf-required" aria-hidden="true">*</span></label>
+                        <select id="list_id" name="list_id" class="form-select" required>
+                            <option value="">Select list</option>
+                            <?php foreach ($lists as $lst): ?>
+                                <option value="<?php echo (int)$lst['id']; ?>" <?php echo ($form_data['list_id'] ?? '') == $lst['id'] ? 'selected' : ''; ?>><?php echo sanitize($lst['name']); ?> — <?php echo sanitize($lst['vendor_name']); ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>

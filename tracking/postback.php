@@ -22,20 +22,20 @@ function log_postback($pdo, $project_id, $vendor_id, $click_id, $status, $messag
     }
 }
 
-$click_id = trim($_GET['click_id'] ?? '');
-$status   = intval($_GET['status'] ?? 0);
-$token    = trim($_GET['token'] ?? '');
-$sale_amount = floatval($_GET['sale_amount'] ?? 0);
-$currency = strtoupper(trim($_GET['currency'] ?? '')) ?: 'USD';
-$payout = floatval($_GET['payout'] ?? 0);
-$transaction_id = substr(trim($_GET['transaction_id'] ?? ''), 0, 100);
-$sub1 = substr(trim($_GET['sub1'] ?? ''), 0, 200);
-$sub2 = substr(trim($_GET['sub2'] ?? ''), 0, 200);
-$sub3 = substr(trim($_GET['sub3'] ?? ''), 0, 200);
-$sub4 = substr(trim($_GET['sub4'] ?? ''), 0, 200);
-$sub5 = substr(trim($_GET['sub5'] ?? ''), 0, 200);
+$click_id = trim((string)tf_request_value('click_id'));
+$status   = intval(tf_request_value('status', 0));
+$token    = trim((string)tf_request_value('token'));
+$sale_amount = floatval(tf_request_value('sale_amount', 0));
+$currency = strtoupper(trim((string)tf_request_value('currency'))) ?: 'USD';
+$payout = floatval(tf_request_value('payout', 0));
+$transaction_id = substr(trim((string)tf_request_value('transaction_id')), 0, 100);
+$sub1 = substr(trim((string)tf_request_value('sub1')), 0, 200);
+$sub2 = substr(trim((string)tf_request_value('sub2')), 0, 200);
+$sub3 = substr(trim((string)tf_request_value('sub3')), 0, 200);
+$sub4 = substr(trim((string)tf_request_value('sub4')), 0, 200);
+$sub5 = substr(trim((string)tf_request_value('sub5')), 0, 200);
 $ip_address = $_SERVER['REMOTE_ADDR'] ?? '';
-$payload  = http_build_query($_GET);
+$payload  = http_build_query(array_merge($_GET, $_POST));
 
 if (!preg_match('/^[a-f0-9]{32,64}$/', $click_id)) {
     http_response_code(400);
@@ -152,6 +152,17 @@ try {
         http_response_code(200);
         log_postback($pdo, $project_id, $vendor_id, $click_id, 'rejected', 'Vendor suspended/blacklisted', $payload, $ip_address, 'OK:VENDOR_BLOCKED');
         die('OK:VENDOR_BLOCKED');
+    }
+
+    if ($transaction_id !== '') {
+        $dup_txn = $pdo->prepare("SELECT id FROM conversions WHERE transaction_id = ? LIMIT 1");
+        $dup_txn->execute([$transaction_id]);
+        if ($dup_txn->fetch()) {
+            $pdo->rollBack();
+            http_response_code(200);
+            log_postback($pdo, $project_id, $vendor_id, $click_id, 'duplicate', 'Duplicate transaction_id', $payload, $ip_address, 'OK:DUPLICATE_TXN');
+            die('OK:DUPLICATE_TXN');
+        }
     }
 
     $revenue = $sale_amount > 0 ? $sale_amount : $project['client_cpi'];

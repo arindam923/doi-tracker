@@ -1,25 +1,34 @@
 <?php
 /**
  * TRACK FLOW — Click Tracking Engine (Phase 4)
- * Records every click and redirects to client survey with click_id
- *
- * URL: /tracking/click.php?project_id=101&vendor_id=5
- * Or:  /c/ABC123 (rewritten by .htaccess to redirect.php)
+ * Public traffic must arrive via /c/{code} → redirect.php (internal include).
+ * Direct project_id/vendor_id query params are admin-only diagnostics.
  */
 
 error_reporting(E_ALL);
 ini_set('display_errors', 0);
 
-require_once __DIR__ . '/config.php';
+if (!defined('TF_INTERNAL_CLICK')) {
+    require_once __DIR__ . '/config.php';
+}
 
-// Need project_id + vendor_id from either query string or redirector
-$project_id = intval($_GET['project_id'] ?? 0);
-$vendor_id  = intval($_GET['vendor_id']  ?? 0);
+$project_id = 0;
+$vendor_id = 0;
+if (defined('TF_INTERNAL_CLICK') && TF_INTERNAL_CLICK) {
+    $project_id = (int)($tf_click_project_id ?? 0);
+    $vendor_id = (int)($tf_click_vendor_id ?? 0);
+} elseif (tf_is_tracking_admin()) {
+    $project_id = intval($_GET['project_id'] ?? 0);
+    $vendor_id = intval($_GET['vendor_id'] ?? 0);
+}
 
 if (!$project_id || !$vendor_id) {
-    http_response_code(400);
-    die('Invalid tracking link.');
+    http_response_code(404);
+    die('Tracking link not found.');
 }
+
+$GLOBALS['project_id'] = $project_id;
+$GLOBALS['vendor_id'] = $vendor_id;
 
 // ── Rate limit: per-IP 100 clicks / minute (Phase 9 hardening) ─
 $client_ip = $_SERVER['REMOTE_ADDR'] ?? '';
@@ -47,8 +56,8 @@ function log_click_error($message, $exception = null) {
         $details .= ' | ' . get_class($exception) . ': ' . $exception->getMessage();
         $details .= ' | file=' . $exception->getFile() . ' | line=' . $exception->getLine();
     }
-    $details .= ' | project_id=' . (int)($_GET['project_id'] ?? 0);
-    $details .= ' | vendor_id=' . (int)($_GET['vendor_id'] ?? 0);
+    $details .= ' | project_id=' . (int)($GLOBALS['project_id'] ?? 0);
+    $details .= ' | vendor_id=' . (int)($GLOBALS['vendor_id'] ?? 0);
     $details .= ' | request_uri=' . ($_SERVER['REQUEST_URI'] ?? '');
     $details .= PHP_EOL;
     if (is_dir($log_dir) && is_writable($log_dir)) {
