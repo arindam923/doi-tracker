@@ -1,55 +1,72 @@
 <?php
 /**
- * TERNFLUENZY — Postback Processing Engine
- * Receives conversion notifications from client, validates, records, and fires vendor postback
+ * TRACK FLOW — Postback Processing Engine (Phase 4)
+ * Receives conversion notifications from client, validates, records, fires vendor postback
  *
  * URL: /tracking/postback.php?click_id=abc123&status=1&token=SECRET
+ *      &sale_amount=10&currency=USD&payout=2&transaction_id=TXN123
+ *      &sub1=foo&sub2=bar&sub3=baz&sub4=qux&sub5=quux
  */
 
-// Minimal bootstrap — no session needed for postback
 error_reporting(0);
 ini_set('display_errors', 0);
 
 require_once __DIR__ . '/config.php';
 
-/**
- * Log postback event
- */
 function log_postback($pdo, $project_id, $vendor_id, $click_id, $status, $message, $payload, $ip_address, $response) {
     try {
         $stmt = $pdo->prepare("INSERT INTO logs (log_type, project_id, vendor_id, click_id, status, message, payload, ip_address, response_sent) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
         $stmt->execute(['postback', $project_id, $vendor_id, $click_id, $status, $message, $payload, $ip_address, $response]);
     } catch (Exception $e) {
-        error_log('Ternfluenzy log_postback failed: ' . $e->getMessage());
+        error_log('Track Flow log_postback failed: ' . $e->getMessage());
     }
 }
 
-// ─── Collect Parameters ───
 $click_id = trim($_GET['click_id'] ?? '');
 $status   = intval($_GET['status'] ?? 0);
 $token    = trim($_GET['token'] ?? '');
+$sale_amount = floatval($_GET['sale_amount'] ?? 0);
+$currency = strtoupper(trim($_GET['currency'] ?? '')) ?: 'USD';
+$payout = floatval($_GET['payout'] ?? 0);
+$transaction_id = substr(trim($_GET['transaction_id'] ?? ''), 0, 100);
+$sub1 = substr(trim($_GET['sub1'] ?? ''), 0, 200);
+$sub2 = substr(trim($_GET['sub2'] ?? ''), 0, 200);
+$sub3 = substr(trim($_GET['sub3'] ?? ''), 0, 200);
+$sub4 = substr(trim($_GET['sub4'] ?? ''), 0, 200);
+$sub5 = substr(trim($_GET['sub5'] ?? ''), 0, 200);
 $ip_address = $_SERVER['REMOTE_ADDR'] ?? '';
 $payload  = http_build_query($_GET);
 
-// 1. Validate click_id format (32 hex chars)
 if (!preg_match('/^[a-f0-9]{32,64}$/', $click_id)) {
     http_response_code(400);
     log_postback($pdo, null, null, $click_id, 'failed', 'Invalid click_id format', $payload, $ip_address, '400:INVALID_FORMAT');
     die('Invalid click_id format');
 }
-
-// 2. Validate required params
 if (!$token) {
     http_response_code(400);
     log_postback($pdo, null, null, $click_id, 'failed', 'Missing token', $payload, $ip_address, '400:MISSING_PARAMS');
     die('Missing parameters');
 }
 
+// ── Rate limits (Phase 9 hardening) ────────────────────────────
+// Per-IP: 30 postbacks / minute; per click_id: 1 / minute
+if ($ip_address !== '') {
+    $rl_ip = check_rate_limit($pdo, $ip_address, 'postback', 30, 60);
+    if (!$rl_ip['allowed']) {
+        header('Retry-After: ' . ($rl_ip['retry_after'] ?? 60));
+        http_response_code(429);
+        die('Too many requests');
+    }
+}
+$rl_click = check_rate_limit($pdo, $click_id, 'postback_click', 1, 60);
+if (!$rl_click['allowed']) {
+    http_response_code(429);
+    die('Too many requests for this click');
+}
+
 try {
-    // Begin transaction with SELECT ... FOR UPDATE to prevent race conditions
     $pdo->beginTransaction();
 
-    // 3. Find the click record (lock it)
     $stmt = $pdo->prepare("SELECT * FROM clicks WHERE click_id = ? FOR UPDATE");
     $stmt->execute([$click_id]);
     $click = $stmt->fetch();
@@ -64,7 +81,6 @@ try {
     $project_id = $click['project_id'];
     $vendor_id  = $click['vendor_id'];
 
-    // 4. Check if already converted (within the lock)
     if ($click['is_converted']) {
         $pdo->rollBack();
         http_response_code(200);
@@ -72,7 +88,6 @@ try {
         die('OK:DUPLICATE');
     }
 
-    // 5. Get project and validate token
     $stmt = $pdo->prepare("SELECT * FROM projects WHERE id = ? FOR UPDATE");
     $stmt->execute([$project_id]);
     $project = $stmt->fetch();
@@ -84,7 +99,6 @@ try {
         die('Project not found');
     }
 
-    // Constant-time token comparison
     if (!hash_equals($project['postback_token'], $token)) {
         $pdo->rollBack();
         http_response_code(403);
@@ -92,9 +106,7 @@ try {
         die('Invalid token');
     }
 
-    // 6. Check project status — if not live, store but don't count
     if ($project['status'] !== 'live') {
-        // Still mark the click as converted to prevent re-processing if project comes back live
         $pdo->prepare("UPDATE clicks SET is_converted = 1 WHERE click_id = ?")->execute([$click_id]);
         $pdo->commit();
         http_response_code(200);
@@ -102,18 +114,28 @@ try {
         die('OK:PROJECT_NOT_LIVE');
     }
 
-    // 7. Check quota before recording
     if ($project['total_quota'] > 0 && $project['completes_count'] >= $project['total_quota']) {
         $pdo->prepare("UPDATE projects SET status = 'hold' WHERE id = ? AND status = 'live'")->execute([$project_id]);
-        $pdo->prepare("UPDATE vendors SET status = 'paused' WHERE project_id = ? AND status = 'active'")->execute([$project_id]);
+        $pdo->prepare("UPDATE project_vendor SET status = 'hold' WHERE project_id = ? AND status = 'active'")->execute([$project_id]);
         $pdo->commit();
         http_response_code(200);
         log_postback($pdo, $project_id, $vendor_id, $click_id, 'rejected', 'Quota reached', $payload, $ip_address, 'OK:QUOTA_REACHED');
         die('OK:QUOTA_REACHED');
     }
 
-    // 8. Get vendor details (validate vendor belongs to project)
-    $stmt = $pdo->prepare("SELECT * FROM vendors WHERE id = ? AND project_id = ?");
+    // Per-project daily cap
+    if (($project['daily_cap'] ?? 0) > 0) {
+        $today = $pdo->prepare("SELECT COUNT(*) as cnt FROM conversions WHERE project_id = ? AND DATE(converted_at) = CURDATE() AND status = 'complete'");
+        $today->execute([$project_id]);
+        if ($today->fetch()['cnt'] >= (int)$project['daily_cap']) {
+            $pdo->rollBack();
+            http_response_code(200);
+            log_postback($pdo, $project_id, $vendor_id, $click_id, 'rejected', 'Project daily cap reached', $payload, $ip_address, 'OK:DAILY_CAP');
+            die('OK:DAILY_CAP');
+        }
+    }
+
+    $stmt = $pdo->prepare("SELECT pv.*, gv.vendor_status, gv.vendor_name FROM project_vendor pv JOIN global_vendors gv ON gv.id = pv.vendor_id WHERE pv.vendor_id = ? AND pv.project_id = ?");
     $stmt->execute([$vendor_id, $project_id]);
     $vendor = $stmt->fetch();
 
@@ -124,22 +146,31 @@ try {
         die('Invalid vendor');
     }
 
-    // 9. Calculate revenue, cost, profit
-    $revenue = $project['client_cpi'];
-    $cost    = $vendor['vendor_cpi'];
+    // Master vendor status check
+    if (in_array($vendor['vendor_status'] ?? '', ['suspended', 'blacklisted'], true)) {
+        $pdo->rollBack();
+        http_response_code(200);
+        log_postback($pdo, $project_id, $vendor_id, $click_id, 'rejected', 'Vendor suspended/blacklisted', $payload, $ip_address, 'OK:VENDOR_BLOCKED');
+        die('OK:VENDOR_BLOCKED');
+    }
+
+    $revenue = $sale_amount > 0 ? $sale_amount : $project['client_cpi'];
+    $cost    = $payout > 0 ? $payout : $vendor['payout'];
     $profit  = $revenue - $cost;
+    $click_time = $click['clicked_at'];
+    $now = date('Y-m-d H:i:s');
+    $time_diff_seconds = max(0, strtotime($now) - strtotime($click_time));
 
-    // 10. Record the conversion
-    $stmt = $pdo->prepare("INSERT INTO conversions (click_id, project_id, vendor_id, status, client_revenue, vendor_cost, profit) VALUES (?, ?, ?, 'complete', ?, ?, ?)");
-    $stmt->execute([$click_id, $project_id, $vendor_id, $revenue, $cost, $profit]);
+    $stmt = $pdo->prepare("
+        INSERT INTO conversions (click_id, project_id, vendor_id, status, client_revenue, sale_amount, currency,
+            vendor_cost, payout, profit, transaction_id, click_time, time_diff_seconds, sub1, sub2, sub3, sub4, sub5)
+        VALUES (?, ?, ?, 'complete', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ");
+    $stmt->execute([$click_id, $project_id, $vendor_id, $revenue, $sale_amount, $currency, $cost, $payout, $profit, $transaction_id, $click_time, $time_diff_seconds, $sub1, $sub2, $sub3, $sub4, $sub5]);
 
-    // 11. Update click as converted
     $pdo->prepare("UPDATE clicks SET is_converted = 1 WHERE click_id = ?")->execute([$click_id]);
-
-    // 12. Update project completes count atomically
     $pdo->prepare("UPDATE projects SET completes_count = completes_count + 1 WHERE id = ?")->execute([$project_id]);
 
-    // 13. Re-check quota after increment (within the same transaction)
     if ($project['total_quota'] > 0) {
         $count_stmt = $pdo->prepare("SELECT completes_count FROM projects WHERE id = ?");
         $count_stmt->execute([$project_id]);
@@ -147,34 +178,37 @@ try {
 
         if ($new_count >= $project['total_quota']) {
             $pdo->prepare("UPDATE projects SET status = 'hold' WHERE id = ?")->execute([$project_id]);
-            $pdo->prepare("UPDATE vendors SET status = 'paused' WHERE project_id = ? AND status = 'active'")->execute([$project_id]);
+            $pdo->prepare("UPDATE project_vendor SET status = 'hold' WHERE project_id = ? AND status = 'active'")->execute([$project_id]);
 
             $pdo->prepare("INSERT INTO logs (log_type, project_id, status, message) VALUES (?, ?, ?, ?)")
                 ->execute(['status_change', $project_id, 'success', 'Auto-held: quota reached (' . $new_count . '/' . $project['total_quota'] . ')']);
         }
     }
 
-    // 14. Log successful conversion (within transaction)
     log_postback($pdo, $project_id, $vendor_id, $click_id, 'success', 'Conversion recorded', $payload, $ip_address, 'OK:RECORDED');
 
-    // Commit all changes atomically
     $pdo->commit();
-
 } catch (Exception $e) {
-    if ($pdo->inTransaction()) {
-        $pdo->rollBack();
-    }
+    if ($pdo->inTransaction()) $pdo->rollBack();
     http_response_code(500);
     log_postback($pdo, $project_id ?? null, $vendor_id ?? null, $click_id, 'error', 'Exception: ' . $e->getMessage(), $payload, $ip_address, '500:ERROR');
     die('System error');
 }
 
-// 15. Fire vendor postback (AFTER commit — non-blocking)
+// Fire vendor postback with macro expansion
 $vendor_postback_status = 'no_url';
 if (!empty($vendor['postback_url'])) {
-    $vendor_url = str_replace('{click_id}', $click_id, $vendor['postback_url']);
+    $vendor_url = $vendor['postback_url'];
+    $macros = [
+        '{click_id}' => $click_id,
+        '{status}' => $status,
+        '{payout}' => $cost,
+        '{conversion_id}' => $transaction_id,
+        '{sale_amount}' => $sale_amount,
+        '{currency}' => $currency,
+    ];
+    $vendor_url = strtr($vendor_url, $macros);
 
-    // Validate vendor URL is HTTP/HTTPS
     if (preg_match('/^https?:\/\//', $vendor_url)) {
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $vendor_url);
@@ -183,10 +217,9 @@ if (!empty($vendor['postback_url'])) {
         curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
         curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
-        curl_setopt($ch, CURLOPT_NOSIGNAL, 1);    // Required for async-like behavior
-        curl_setopt($ch, CURLOPT_TCP_NODELAY, 1);  // Don't wait for response
+        curl_setopt($ch, CURLOPT_NOSIGNAL, 1);
+        curl_setopt($ch, CURLOPT_TCP_NODELAY, 1);
         curl_exec($ch);
-
         if (curl_errno($ch)) {
             $vendor_postback_status = 'failed: ' . curl_error($ch);
         } else {
@@ -197,8 +230,44 @@ if (!empty($vendor['postback_url'])) {
         $vendor_postback_status = 'invalid_url';
     }
 
-    // Log vendor postback result
     log_postback($pdo, $project_id, $vendor_id, $click_id, 'vendor_postback', 'Vendor postback: ' . $vendor_postback_status, '', $ip_address, '');
+}
+
+// Fire global postback (Phase 4 — setting wired in Settings UI)
+$global_enabled = get_setting($pdo, 'global_postback_enabled', '0') === '1';
+$global_url     = trim(get_setting($pdo, 'global_postback_url', ''));
+$global_status  = 'disabled';
+if ($global_enabled && $global_url !== '') {
+    $macros = [
+        '{click_id}' => $click_id,
+        '{status}' => $status,
+        '{payout}' => $cost ?? 0,
+        '{conversion_id}' => $transaction_id,
+        '{sale_amount}' => $sale_amount,
+        '{currency}' => $currency,
+    ];
+    $fire_url = strtr($global_url, $macros);
+    if (preg_match('/^https?:\/\//', $fire_url)) {
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $fire_url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+        curl_setopt($ch, CURLOPT_NOSIGNAL, 1);
+        curl_setopt($ch, CURLOPT_TCP_NODELAY, 1);
+        curl_exec($ch);
+        if (curl_errno($ch)) {
+            $global_status = 'failed: ' . curl_error($ch);
+        } else {
+            $global_status = 'success (HTTP ' . curl_getinfo($ch, CURLINFO_HTTP_CODE) . ')';
+        }
+        curl_close($ch);
+    } else {
+        $global_status = 'invalid_url';
+    }
+    log_postback($pdo, $project_id, $vendor_id, $click_id, 'global_postback', 'Global postback: ' . $global_status, '', $ip_address, '');
 }
 
 http_response_code(200);

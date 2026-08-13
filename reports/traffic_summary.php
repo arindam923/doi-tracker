@@ -6,27 +6,26 @@ $from_date = sanitize($_GET['from'] ?? date('Y-m-d', strtotime('-30 days')));
 $to_date   = sanitize($_GET['to'] ?? date('Y-m-d'));
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $from_date)) $from_date = date('Y-m-d', strtotime('-30 days'));
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $to_date)) $to_date = date('Y-m-d');
-$project_filter = intval($_GET['project_id'] ?? 0);
+$project_filter = intval($_GET['project_id'] ?? $_GET['id'] ?? 0);
 
-$sql = "SELECT v.id, v.vendor_name, v.vendor_cpi, v.status, p.project_code,
-        COUNT(cl.id) as total_clicks,
-        SUM(cl.is_converted) as total_converts,
-        COALESCE(SUM(cv.client_revenue),0) as revenue,
-        COALESCE(SUM(cv.vendor_cost),0) as cost,
-        COALESCE(SUM(cv.profit),0) as profit
-        FROM vendors v
-        JOIN projects p ON v.project_id = p.id
-        LEFT JOIN clicks cl ON cl.vendor_id = v.id AND cl.clicked_at BETWEEN ? AND DATE_ADD(?, INTERVAL 1 DAY)
-        LEFT JOIN conversions cv ON cv.vendor_id = v.id AND cv.status = 'complete' AND cv.converted_at BETWEEN ? AND DATE_ADD(?, INTERVAL 1 DAY)
+$sql = "SELECT pv.vendor_id AS id, gv.vendor_name, pv.payout AS vendor_cpi, pv.status, p.project_code,
+        (SELECT COUNT(*) FROM clicks WHERE vendor_id = pv.vendor_id AND project_id = pv.project_id AND clicked_at BETWEEN ? AND DATE_ADD(?, INTERVAL 1 DAY)) AS total_clicks,
+        (SELECT COUNT(*) FROM conversions WHERE vendor_id = pv.vendor_id AND project_id = pv.project_id AND status = 'complete' AND converted_at BETWEEN ? AND DATE_ADD(?, INTERVAL 1 DAY)) AS total_converts,
+        (SELECT COALESCE(SUM(client_revenue),0) FROM conversions WHERE vendor_id = pv.vendor_id AND project_id = pv.project_id AND status = 'complete' AND converted_at BETWEEN ? AND DATE_ADD(?, INTERVAL 1 DAY)) AS revenue,
+        (SELECT COALESCE(SUM(vendor_cost),0)    FROM conversions WHERE vendor_id = pv.vendor_id AND project_id = pv.project_id AND status = 'complete' AND converted_at BETWEEN ? AND DATE_ADD(?, INTERVAL 1 DAY)) AS cost,
+        (SELECT COALESCE(SUM(profit),0)         FROM conversions WHERE vendor_id = pv.vendor_id AND project_id = pv.project_id AND status = 'complete' AND converted_at BETWEEN ? AND DATE_ADD(?, INTERVAL 1 DAY)) AS profit
+        FROM project_vendor pv
+        JOIN projects p ON p.id = pv.project_id
+        JOIN global_vendors gv ON gv.id = pv.vendor_id
         WHERE 1=1";
-$params = [$from_date, $to_date, $from_date, $to_date];
+$params = [$from_date, $to_date, $from_date, $to_date, $from_date, $to_date, $from_date, $to_date, $from_date, $to_date];
 
 if ($project_filter) {
-    $sql .= " AND v.project_id = ?";
+    $sql .= " AND pv.project_id = ?";
     $params[] = $project_filter;
 }
 
-$sql .= " GROUP BY v.id ORDER BY total_clicks DESC";
+$sql .= " ORDER BY total_clicks DESC";
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $vendor_traffic = $stmt->fetchAll();
@@ -105,18 +104,18 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                 </tr>
                 <?php else: ?>
                 <?php foreach ($vendor_traffic as $vt):
-                    $ccr = calc_ccr($vt['total_converts'], $vt['total_clicks']);
+                    $ccr = calc_ccr((int)$vt['total_converts'], (int)$vt['total_clicks']);
                 ?>
                 <tr>
                     <td><strong><?php echo sanitize($vt['vendor_name']); ?></strong></td>
                     <td><code><?php echo sanitize($vt['project_code']); ?></code></td>
-                    <td class="text-end"><?php echo format_currency($vt['vendor_cpi']); ?></td>
-                    <td class="text-end"><?php echo number_format($vt['total_clicks']); ?></td>
-                    <td class="text-end"><?php echo number_format($vt['total_converts']); ?></td>
+                    <td class="text-end"><?php echo format_currency((float)$vt['vendor_cpi']); ?></td>
+                    <td class="text-end"><?php echo number_format((int)$vt['total_clicks']); ?></td>
+                    <td class="text-end"><?php echo number_format((int)$vt['total_converts']); ?></td>
                     <td><span class="badge bg-<?php echo ccr_color($ccr); ?>"><?php echo $ccr; ?>%</span></td>
-                    <td class="text-end fw-semibold text-success"><?php echo format_currency($vt['revenue']); ?></td>
-                    <td class="text-end text-danger"><?php echo format_currency($vt['cost']); ?></td>
-                    <td class="text-end fw-semibold <?php echo $vt['profit'] >= 0 ? 'text-success' : 'text-danger'; ?>"><?php echo format_currency($vt['profit']); ?></td>
+                    <td class="text-end fw-semibold text-success"><?php echo format_currency((float)$vt['revenue']); ?></td>
+                    <td class="text-end text-danger"><?php echo format_currency((float)$vt['cost']); ?></td>
+                    <td class="text-end fw-semibold <?php echo (float)$vt['profit'] >= 0 ? 'text-success' : 'text-danger'; ?>"><?php echo format_currency((float)$vt['profit']); ?></td>
                     <td><?php echo status_badge($vt['status']); ?></td>
                 </tr>
                 <?php endforeach; ?>

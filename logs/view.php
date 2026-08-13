@@ -40,10 +40,10 @@ $total = $count_stmt->fetch()['cnt'];
 $pagination = paginate($total, $per_page, $page);
 
 $stmt = $pdo->prepare("
-    SELECT l.*, p.project_code, v.vendor_name
+    SELECT l.*, p.project_code, gv.vendor_name
     FROM logs l
     LEFT JOIN projects p ON l.project_id = p.id
-    LEFT JOIN vendors v ON l.vendor_id = v.id
+    LEFT JOIN global_vendors gv ON l.vendor_id = gv.id
     $where_sql
     ORDER BY l.created_at DESC
     LIMIT {$pagination['per_page']} OFFSET {$pagination['offset']}

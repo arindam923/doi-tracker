@@ -6,6 +6,7 @@ $page_title = 'Send Email';
 
 $clients = $pdo->query("SELECT id, client_name, email, contact_person FROM clients WHERE is_active = 1 AND email != '' AND email IS NOT NULL ORDER BY client_name")->fetchAll();
 $client_count = count($clients);
+$lists = $pdo->query("SELECT l.id, l.name, (SELECT COUNT(*) FROM email_list_entries e WHERE e.list_id = l.id AND e.is_unsubscribed = 0) AS cnt FROM email_lists l ORDER BY l.name")->fetchAll();
 
 require_once __DIR__ . '/../helpers/layout_header.php';
 ?>
@@ -39,6 +40,20 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                                 <input class="form-check-input" type="radio" name="recipient_mode" id="modeAll" value="all" onchange="toggleRecipientMode()">
                                 <label class="form-check-label" for="modeAll">All clients with email</label>
                             </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="recipient_mode" id="modeList" value="list" onchange="toggleRecipientMode()">
+                                <label class="form-check-label" for="modeList">Pick from email list</label>
+                            </div>
+                        </div>
+
+                        <div id="listSelector" hidden>
+                            <select class="form-select" name="list_id" id="list_id">
+                                <option value="">— Select a list —</option>
+                                <?php foreach ($lists as $l): ?>
+                                <option value="<?php echo (int)$l['id']; ?>"><?php echo sanitize($l['name']); ?> (<?php echo (int)$l['cnt']; ?> active)</option>
+                                <?php endforeach; ?>
+                            </select>
+                            <p class="form-text">Send to every active recipient in a saved email list.</p>
                         </div>
 
                         <div id="recipientSelector">
@@ -137,6 +152,7 @@ function toggleRecipientMode() {
     const mode = document.querySelector('input[name="recipient_mode"]:checked').value;
     document.getElementById('recipientSelector').hidden = mode !== 'selected';
     document.getElementById('allRecipientNotice').hidden = mode !== 'all';
+    document.getElementById('listSelector').hidden = mode !== 'list';
 }
 
 document.getElementById('client_ids').addEventListener('change', function() {
@@ -150,13 +166,21 @@ document.getElementById('emailForm').addEventListener('submit', function(e) {
         alert('Please select at least one recipient.');
         return;
     }
-    if (!confirm('Send this email to ' + (mode === 'all' ? 'ALL clients' : document.getElementById('client_ids').selectedOptions.length + ' selected client(s)') + '?')) {
+    if (mode === 'list' && !document.getElementById('list_id').value) {
+        e.preventDefault();
+        alert('Please pick an email list.');
+        return;
+    }
+    let target = mode === 'all' ? 'ALL clients'
+        : mode === 'list' ? 'the selected email list'
+        : document.getElementById('client_ids').selectedOptions.length + ' selected client(s)';
+    if (!confirm('Queue this email for ' + target + '?')) {
         e.preventDefault();
         return;
     }
     const btn = document.getElementById('sendBtn');
     btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Sending…';
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Queuing…';
 });
 
 function previewEmail() {
@@ -168,6 +192,9 @@ function previewEmail() {
 
     if (mode === 'all') {
         recipients = 'All clients with email (<?php echo $client_count; ?> recipients)';
+    } else if (mode === 'list') {
+        const sel = document.getElementById('list_id');
+        recipients = sel.selectedOptions.length ? 'Email list: ' + sel.selectedOptions[0].textContent : '(no list selected)';
     } else {
         const selected = Array.from(select.selectedOptions).map(o => o.textContent.trim());
         recipients = selected.length ? selected.join('\n') : '(none selected)';

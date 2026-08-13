@@ -65,3 +65,46 @@ function has_role($role) {
     $user = current_user();
     return $user && $user['role'] === $role;
 }
+
+/**
+ * ─── Vendor Portal helpers (Phase 8B) ───────────────────────────
+ * Vendors authenticate into a separate session namespace so an admin and a
+ * vendor can be logged in simultaneously without collision.
+ */
+
+/**
+ * Check whether the vendor portal feature is enabled.
+ */
+function vendor_portal_enabled($pdo) {
+    return get_setting($pdo, 'vendor_login_enabled', '0') === '1';
+}
+
+/**
+ * Resolve current logged-in vendor from $_SESSION['TF_VENDOR'].
+ */
+function current_vendor() {
+    return isset($_SESSION['TF_VENDOR']) && is_array($_SESSION['TF_VENDOR']) ? $_SESSION['TF_VENDOR'] : null;
+}
+
+/**
+ * Whether a vendor is currently authenticated in the vendor namespace.
+ */
+function vendor_logged_in() {
+    return isset($_SESSION['TF_VENDOR']['global_vendor_id']) && !empty($_SESSION['TF_VENDOR']['global_vendor_id']);
+}
+
+/**
+ * Require vendor login; bounce to the vendor auth page otherwise.
+ * Respects the vendor_login_enabled kill-switch.
+ */
+function require_vendor_login($pdo) {
+    if (!vendor_portal_enabled($pdo)) {
+        header('HTTP/1.1 403 Forbidden');
+        die('The vendor portal is currently disabled.');
+    }
+    if (!vendor_logged_in()) {
+        set_flash('danger', 'Please sign in to your vendor account.');
+        redirect(BASE_URL . '/vendor_portal/auth.php');
+    }
+    return current_vendor();
+}

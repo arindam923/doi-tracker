@@ -1,0 +1,11 @@
+# Secrets — never commit
+/env.php
+/config.php
+/tracking/config.php
+
+# Local artifacts
+storage/logs/*.log
+storage/qr_cache/*
+storage/geo_cache/*
+storage/client_docs/*
+.DS_Store

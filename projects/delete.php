@@ -26,7 +26,6 @@ if (!$project) {
 $pdo->prepare("DELETE FROM logs WHERE project_id = ?")->execute([$id]);
 $pdo->prepare("DELETE FROM conversions WHERE project_id = ?")->execute([$id]);
 $pdo->prepare("DELETE FROM clicks WHERE project_id = ?")->execute([$id]);
-$pdo->prepare("DELETE FROM vendors WHERE project_id = ?")->execute([$id]);
 $pdo->prepare("DELETE FROM projects WHERE id = ?")->execute([$id]);
 
 set_flash('success', 'Project "' . sanitize($project['project_name']) . '" deleted.');

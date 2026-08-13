@@ -120,11 +120,14 @@ function paginate($total, $per_page, $current_page) {
 function render_pagination($pagination, $base_url) {
     if ($pagination['total_pages'] <= 1) return '';
 
+    // $base_url may already contain query parameters (e.g. from http_build_query)
+    $sep = strpos($base_url, '?') !== false ? '&' : '?';
+
     $html = '<nav class="tf-pagination" aria-label="Pagination"><ul>';
 
     // Previous
     if ($pagination['has_prev']) {
-        $html .= '<li><a href="' . $base_url . '?page=' . ($pagination['current_page'] - 1) . '" aria-label="Previous page">&laquo;</a></li>';
+        $html .= '<li><a href="' . $base_url . $sep . 'page=' . ($pagination['current_page'] - 1) . '" aria-label="Previous page">&laquo;</a></li>';
     } else {
         $html .= '<li><span class="is-disabled" aria-hidden="true">&laquo;</span></li>';
     }
@@ -134,7 +137,7 @@ function render_pagination($pagination, $base_url) {
     $end = min($pagination['total_pages'], $pagination['current_page'] + 2);
 
     if ($start > 1) {
-        $html .= '<li><a href="' . $base_url . '?page=1">1</a></li>';
+        $html .= '<li><a href="' . $base_url . $sep . 'page=1">1</a></li>';
         if ($start > 2) $html .= '<li><span class="is-disabled" aria-hidden="true">...</span></li>';
     }
 
@@ -142,17 +145,17 @@ function render_pagination($pagination, $base_url) {
         $active = $i == $pagination['current_page'];
         $cls = $active ? ' class="is-active"' : '';
         $aria = $active ? ' aria-current="page"' : '';
-        $html .= '<li><a' . $cls . $aria . ' href="' . $base_url . '?page=' . $i . '">' . $i . '</a></li>';
+        $html .= '<li><a' . $cls . $aria . ' href="' . $base_url . $sep . 'page=' . $i . '">' . $i . '</a></li>';
     }
 
     if ($end < $pagination['total_pages']) {
         if ($end < $pagination['total_pages'] - 1) $html .= '<li><span class="is-disabled" aria-hidden="true">...</span></li>';
-        $html .= '<li><a href="' . $base_url . '?page=' . $pagination['total_pages'] . '">' . $pagination['total_pages'] . '</a></li>';
+        $html .= '<li><a href="' . $base_url . $sep . 'page=' . $pagination['total_pages'] . '">' . $pagination['total_pages'] . '</a></li>';
     }
 
     // Next
     if ($pagination['has_next']) {
-        $html .= '<li><a href="' . $base_url . '?page=' . ($pagination['current_page'] + 1) . '" aria-label="Next page">&raquo;</a></li>';
+        $html .= '<li><a href="' . $base_url . $sep . 'page=' . ($pagination['current_page'] + 1) . '" aria-label="Next page">&raquo;</a></li>';
     } else {
         $html .= '<li><span class="is-disabled" aria-hidden="true">&raquo;</span></li>';
     }
@@ -186,8 +189,8 @@ function status_badge($status) {
         'live' => 'bg-success',
         'hold' => 'bg-warning',
         'closed' => 'bg-danger',
+        'archived' => 'bg-light',
         'active' => 'bg-success',
-        'paused' => 'bg-warning',
         'complete' => 'bg-success',
         'rejected' => 'bg-danger',
         'duplicate' => 'bg-light',
@@ -288,4 +291,205 @@ function decrypt_value($value, $key = null) {
     }
     $decoded = base64_decode($value, true);
     return $decoded !== false ? $decoded : $value;
+}
+
+/**
+ * Generate an 8-character URL-safe short code (base62)
+ * Collision-safe via the caller-supplied UNIQUE column on the table.
+ */
+function generate_short_code($length = 8) {
+    $alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    $code = '';
+    $max = strlen($alphabet) - 1;
+    for ($i = 0; $i < $length; $i++) {
+        $code .= $alphabet[random_int(0, $max)];
+    }
+    return $code;
+}
+
+/**
+ * Ensure the project has a unique short_code; idempotent.
+ */
+function ensure_project_short_code($pdo, $project_id, $existing = null) {
+    if ($existing && !empty($existing)) return $existing;
+    for ($attempt = 0; $attempt < 10; $attempt++) {
+        $code = generate_short_code(8);
+        $stmt = $pdo->prepare("SELECT id FROM projects WHERE short_code = ?");
+        $stmt->execute([$code]);
+        if (!$stmt->fetch()) {
+            $pdo->prepare("UPDATE projects SET short_code = ? WHERE id = ?")->execute([$code, $project_id]);
+            return $code;
+        }
+    }
+    // Last resort: append random suffix
+    $code = generate_short_code(12);
+    $pdo->prepare("UPDATE projects SET short_code = ? WHERE id = ?")->execute([$code, $project_id]);
+    return $code;
+}
+
+/**
+ * Write to audit_logs. No-op if the table doesn't exist yet (Phase 1 not applied).
+ * Sensitive/PII fields are redacted before persistence (Phase 9 hardening).
+ */
+function audit_redact(&$data) {
+    if (!is_array($data)) return;
+    // Fields whose plaintext values we never want in the audit trail
+    $sensitive = ['password','password_hash','postback_token','reset_token','magic_token','smtp_pass',
+                  'resend_api_key','api_key','billing_address','contact_info'];
+    foreach ($data as $k => &$v) {
+        $lk = strtolower((string)$k);
+        if (is_array($v)) { audit_redact($v); continue; }
+        if (in_array($lk, $sensitive, true)) {
+            $v = is_scalar($v) && $v !== null && $v !== '' ? '••••redacted••••' : $v;
+        } elseif (is_string($v) && (stripos($lk, 'email') !== false || $lk === 'phone')) {
+            $v = '••••redacted••••';
+        }
+    }
+}
+
+function audit_log($pdo, $action, $entity_type, $entity_id, $before = null, $after = null, $actor_id = null) {
+    try {
+        if ($actor_id === null && isset($_SESSION['user_id'])) $actor_id = $_SESSION['user_id'];
+        if (is_array($before)) audit_redact($before);
+        if (is_array($after))  audit_redact($after);
+        $pdo->prepare("INSERT INTO audit_logs (actor_id, action, entity_type, entity_id, before_json, after_json, ip_address, user_agent) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+            ->execute([
+                $actor_id, $action, $entity_type, $entity_id,
+                $before !== null ? json_encode($before) : null,
+                $after !== null ? json_encode($after) : null,
+                $_SERVER['REMOTE_ADDR'] ?? null,
+                substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 500),
+            ]);
+    } catch (Throwable $e) {
+        // Audit failures must never break the main flow.
+        error_log('audit_log failed: ' . $e->getMessage());
+    }
+}
+
+/**
+ * Detect browser family from a User-Agent string.
+ * Returns short label like 'Chrome', 'Firefox', 'Safari', 'Edge', 'Opera', 'IE', 'Unknown'.
+ */
+function detect_browser($ua) {
+    if (empty($ua)) return 'Unknown';
+    $ua = strtolower($ua);
+    if (preg_match('/edg\/|edge\//', $ua)) return 'Edge';
+    if (preg_match('/opr\/|opera/', $ua)) return 'Opera';
+    if (preg_match('/chrome|crios/', $ua) && !preg_match('/chromium/', $ua)) return 'Chrome';
+    if (preg_match('/firefox|fxios/', $ua)) return 'Firefox';
+    if (preg_match('/safari/', $ua) && !preg_match('/chrome/', $ua)) return 'Safari';
+    if (preg_match('/msie|trident/', $ua)) return 'IE';
+    if (preg_match('/curl|wget|bot|spider|crawl/', $ua)) return 'Bot';
+    return 'Other';
+}
+
+/**
+ * Detect operating system from a User-Agent string.
+ */
+function detect_os($ua) {
+    if (empty($ua)) return 'Unknown';
+    $ua = strtolower($ua);
+    if (preg_match('/windows nt 10/', $ua)) return 'Windows 10/11';
+    if (preg_match('/windows nt 6\.3/', $ua)) return 'Windows 8.1';
+    if (preg_match('/windows nt 6\.2/', $ua)) return 'Windows 8';
+    if (preg_match('/windows nt 6\.1/', $ua)) return 'Windows 7';
+    if (preg_match('/windows/', $ua)) return 'Windows';
+    if (preg_match('/mac os x|macintosh/', $ua)) {
+        if (preg_match('/iphone|ipad|ipod/', $ua)) return 'iOS';
+        return 'macOS';
+    }
+    if (preg_match('/android/', $ua)) return 'Android';
+    if (preg_match('/linux/', $ua)) return 'Linux';
+    if (preg_match('/cros/', $ua)) return 'ChromeOS';
+    return 'Other';
+}
+
+/**
+ * Sliding-window rate limiter backed by the `rate_limits` table.
+ * Returns ['allowed' => bool, 'retry_after' => minutes|null].
+ */
+function check_rate_limit($pdo, $identity, $action, $max, $window_seconds = 60) {
+    $identity = substr($identity, 0, 45);
+    $stmt = $pdo->prepare("SELECT attempts, locked_until, created_at FROM rate_limits WHERE ip_address = ? AND action = ?");
+    $stmt->execute([$identity, $action]);
+    $row = $stmt->fetch();
+
+    if ($row && $row['locked_until'] && strtotime($row['locked_until']) > time()) {
+        return ['allowed' => false, 'retry_after' => max(1, ceil((strtotime($row['locked_until']) - time()) / 60))];
+    }
+
+    if (!$row) {
+        $pdo->prepare("INSERT INTO rate_limits (ip_address, action, attempts, created_at) VALUES (?, ?, 1, NOW()) ON DUPLICATE KEY UPDATE attempts = attempts")
+            ->execute([$identity, $action]);
+        return ['allowed' => true, 'retry_after' => null];
+    }
+
+    // Sliding window expired → reset
+    if (strtotime($row['created_at']) < time() - $window_seconds) {
+        $pdo->prepare("UPDATE rate_limits SET attempts = 1, locked_until = NULL, created_at = NOW() WHERE ip_address = ? AND action = ?")
+            ->execute([$identity, $action]);
+        return ['allowed' => true, 'retry_after' => null];
+    }
+
+    if ((int)$row['attempts'] >= $max) {
+        $pdo->prepare("UPDATE rate_limits SET attempts = 0, locked_until = DATE_ADD(NOW(), INTERVAL 1 MINUTE) WHERE ip_address = ? AND action = ?")
+            ->execute([$identity, $action]);
+        return ['allowed' => false, 'retry_after' => 1];
+    }
+
+    $pdo->prepare("UPDATE rate_limits SET attempts = attempts + 1 WHERE ip_address = ? AND action = ?")
+        ->execute([$identity, $action]);
+    return ['allowed' => true, 'retry_after' => null];
+}
+
+/**
+ * Best-effort country lookup with file cache.
+ * Returns ISO-2 country code or 'XX' if unknown.
+ * Tries ipapi.co (HTTPS, free, no key) with a 1-day cache.
+ */
+function lookup_country($ip) {
+    if (empty($ip) || !filter_var($ip, FILTER_VALIDATE_IP)) return 'XX';
+    // Skip private/reserved IPs
+    if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) return 'XX';
+
+    $cache_dir = __DIR__ . '/../storage/geo_cache';
+    if (!is_dir($cache_dir)) @mkdir($cache_dir, 0755, true);
+    $cache_file = $cache_dir . '/' . md5($ip) . '.txt';
+    if (is_file($cache_file) && (time() - filemtime($cache_file)) < 86400) {
+        $cached = trim(file_get_contents($cache_file));
+        if ($cached !== '') return $cached;
+    }
+
+    $country = 'XX';
+    $ctx = stream_context_create(['http' => ['timeout' => 2, 'ignore_errors' => true]]);
+    $body = @file_get_contents("https://ipapi.co/{$ip}/country/", false, $ctx);
+    if (is_string($body) && preg_match('/^[A-Z]{2}$/', trim($body))) {
+        $country = trim($body);
+    }
+    @file_put_contents($cache_file, $country);
+    return $country;
+}
+
+/**
+ * Best-effort ISP lookup with file cache. Same caching strategy as country.
+ */
+function lookup_isp($ip) {
+    if (empty($ip) || !filter_var($ip, FILTER_VALIDATE_IP)) return '';
+    if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) return '';
+
+    $cache_dir = __DIR__ . '/../storage/geo_cache';
+    if (!is_dir($cache_dir)) @mkdir($cache_dir, 0755, true);
+    $cache_file = $cache_dir . '/' . md5($ip . '_isp') . '.txt';
+    if (is_file($cache_file) && (time() - filemtime($cache_file)) < 86400) {
+        return trim(file_get_contents($cache_file));
+    }
+
+    $isp = '';
+    $ctx = stream_context_create(['http' => ['timeout' => 2, 'ignore_errors' => true]]);
+    $body = @file_get_contents("https://ipapi.co/{$ip}/org/", false, $ctx);
+    if (is_string($body)) {
+        $isp = trim($body);
+    }
+    @file_put_contents($cache_file, $isp);
+    return $isp;
 }

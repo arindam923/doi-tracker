@@ -16,15 +16,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $client_cpi = floatval($_POST['client_cpi'] ?? 0);
     $vendor_default_cpi = floatval($_POST['vendor_default_cpi'] ?? 0);
     $total_quota = intval($_POST['total_quota'] ?? 0);
+    $daily_cap = intval($_POST['daily_cap'] ?? 0);
     $country_target = trim($_POST['country_target'] ?? '');
+    $campaign_type = $_POST['campaign_type'] ?? 'CPL';
+    $vertical = $_POST['vertical'] ?? 'Other';
+    $conversion_type = $_POST['conversion_type'] ?? 'SOI';
+    $target_device = $_POST['target_device'] ?? 'All';
+    $campaign_status = $_POST['campaign_status'] ?? 'live';
+    $visibility = $_POST['visibility'] ?? 'private';
+    $currency = $_POST['currency'] ?? 'USD';
     $start_date = trim($_POST['start_date'] ?? '');
     $end_date = trim($_POST['end_date'] ?? '');
     $description = trim($_POST['description'] ?? '');
+    $geo_codes = $_POST['geo_codes'] ?? [];
 
     $errors = [];
     if (empty($project_name)) $errors[] = 'Project name is required.';
     if (!$client_id) $errors[] = 'Please select a client.';
-    if (empty($client_survey_link)) $errors[] = 'Client survey link is required.';
+    if (empty($client_survey_link)) $errors[] = 'Client link is required.';
+    if (!in_array($campaign_type, ['CPL', 'CPC', 'CPA', 'CPS', 'CPI', 'CPM', 'RevShare', 'Hybrid'], true)) $campaign_type = 'CPL';
+    if (!in_array($vertical, tf_verticals(), true)) $vertical = 'Other';
+    if (!in_array($conversion_type, tf_conversion_types(), true)) $conversion_type = 'SOI';
+    if (!in_array($target_device, tf_target_devices(), true)) $target_device = 'All';
+    if (!array_key_exists($campaign_status, tf_campaign_status())) $campaign_status = 'live';
+    if (!array_key_exists($visibility, tf_visibility())) $visibility = 'private';
+    if (!in_array($currency, tf_currencies(), true)) $currency = 'USD';
 
     if (!empty($errors)) {
         set_flash('danger', implode(' | ', $errors));
@@ -40,26 +56,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $project_code = generate_project_code($pdo, $country);
     $postback_token = generate_postback_token();
 
-    $stmt = $pdo->prepare("
-        INSERT INTO projects (project_code, project_name, client_id, client_survey_link, postback_token,
-            client_cpi, vendor_default_cpi, total_quota, country_target, start_date, end_date, description, created_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ");
-    $stmt->execute([
-        $project_code, $project_name, $client_id, $client_survey_link, $postback_token,
-        $client_cpi, $vendor_default_cpi, $total_quota, $country_target,
-        $start_date ?: null, $end_date ?: null, $description, $_SESSION['user_id']
-    ]);
+    $pdo->beginTransaction();
+    try {
+        $stmt = $pdo->prepare("
+            INSERT INTO projects (project_code, project_name, client_id, client_survey_link, postback_token,
+                client_cpi, vendor_default_cpi, currency, total_quota, daily_cap, country_target, campaign_type,
+                vertical, conversion_type, target_device, campaign_status, visibility, start_date, end_date, description, created_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ");
+        $stmt->execute([
+            $project_code, $project_name, $client_id, $client_survey_link, $postback_token,
+            $client_cpi, $vendor_default_cpi, $currency, $total_quota, $daily_cap, $country_target, $campaign_type,
+            $vertical, $conversion_type, $target_device, $campaign_status, $visibility,
+            $start_date ?: null, $end_date ?: null, $description, $_SESSION['user_id']
+        ]);
 
-    $new_id = $pdo->lastInsertId();
+        $new_id = $pdo->lastInsertId();
+        if (!$new_id) throw new Exception('Insert failed');
 
-    if (!$new_id) {
+        ensure_project_short_code($pdo, $new_id);
+
+        if (is_array($geo_codes) && !empty($geo_codes)) {
+            $geo_insert = $pdo->prepare("INSERT IGNORE INTO campaign_geo (project_id, country_code, country_name) VALUES (?, ?, ?)");
+            foreach ($geo_codes as $code) {
+                $code = strtoupper(substr(trim($code), 0, 2));
+                if (preg_match('/^[A-Z]{2}$/', $code)) {
+                    $name = tf_countries()[$code] ?? null;
+                    $geo_insert->execute([$new_id, $code, $name]);
+                }
+            }
+        }
+
+        $pdo->prepare("INSERT INTO logs (log_type, project_id, status, message) VALUES (?, ?, ?, ?)")
+            ->execute(['status_change', $new_id, 'success', 'Project created: ' . $project_code]);
+
+        audit_log($pdo, 'create', 'project', $new_id, null, ['project_code' => $project_code, 'project_name' => $project_name]);
+
+        $pdo->commit();
+    } catch (Throwable $e) {
+        $pdo->rollBack();
+        error_log('Project create failed: ' . $e->getMessage());
         set_flash('danger', 'Failed to create project. Please try again.');
         redirect(BASE_URL . '/projects/create.php');
     }
-
-    $pdo->prepare("INSERT INTO logs (log_type, project_id, status, message) VALUES (?, ?, ?, ?)")
-        ->execute(['status_change', $new_id, 'success', 'Project created: ' . $project_code]);
 
     regenerate_csrf_token();
     set_flash('success', 'Project "' . $project_name . '" created. Code: ' . $project_code);
@@ -71,103 +110,353 @@ unset($_SESSION['form_data']);
 
 $page_title = 'Create New Project';
 require_once __DIR__ . '/../helpers/layout_header.php';
+
+$countries = tf_countries();
+asort($countries);
 ?>
 
 <div class="row justify-content-center">
-    <div class="col-12 col-xl-10">
-        <div class="card border-0 shadow-sm">
+    <div class="col-12 col-lg-11 col-xl-10">
+        <div class="card border-0 shadow-sm mb-4">
             <div class="card-header bg-white border-bottom py-3">
-                <h5 class="mb-0 fw-semibold">Project Details</h5>
+                <div class="d-flex align-items-center gap-3">
+                    <div class="text-primary">
+                        <i class="bi bi-folder-plus"></i>
+                    </div>
+                    <div>
+                        <h5 class="mb-0 fw-semibold">Create New Project</h5>
+                        <p class="text-muted small mb-0">Define a new campaign project and configure its targeting, budget, and status.</p>
+                    </div>
+                </div>
+                    <div>
+                        <h5 class="mb-0 fw-semibold">Create New Project</h5>
+                        <p class="text-muted small mb-0">Define a new campaign project and configure its targeting, budget, and status.</p>
+                    </div>
+                </div>
             </div>
             <div class="card-body">
-                <form method="POST" id="projectForm">
+                <form method="POST" id="projectForm" novalidate>
                     <?php echo csrf_field(); ?>
 
-                    <div class="row g-3">
-                        <div class="col-12 col-md-8">
-                            <label for="project_name" class="form-label small fw-semibold text-secondary">Project Name <span class="text-danger">*</span></label>
-                            <input type="text" id="project_name" name="project_name" class="form-control"
-                                   value="<?php echo sanitize($form_data['project_name'] ?? ''); ?>" required>
-                        </div>
-
-                        <div class="col-12 col-md-4">
-                            <label for="client_id" class="form-label small fw-semibold text-secondary">Client <span class="text-danger">*</span></label>
-                            <select id="client_id" name="client_id" class="form-select" required>
-                                <option value="">Select Client</option>
-                                <?php foreach ($clients_list as $c): ?>
-                                <option value="<?php echo $c['id']; ?>" <?php echo ($form_data['client_id'] ?? '') == $c['id'] ? 'selected' : ''; ?>>
-                                    <?php echo sanitize($c['client_name']); ?> (<?php echo sanitize($c['client_code']); ?>)
-                                </option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
+                    <div class="row g-4">
 
                         <div class="col-12">
-                            <label for="client_survey_link" class="form-label small fw-semibold text-secondary">Client Survey / Registration Link <span class="text-danger">*</span></label>
-                            <input type="url" id="client_survey_link" name="client_survey_link" class="form-control"
-                                   value="<?php echo sanitize($form_data['client_survey_link'] ?? ''); ?>" required
-                                   placeholder="https://client.com/survey?...">
-                        </div>
+                            <div class="p-3 rounded-3 border mb-0">
+                                <p class="small fw-semibold text-uppercase text-muted mb-3 tracking-wide">Campaign Identity</p>
+                                <div class="row g-3">
+                                    <div class="col-12 col-md-6">
+                                        <label for="project_name" class="form-label small fw-semibold text-secondary">Project Name <span class="text-danger">*</span></label>
+                                        <div class="input-group">
+                                            <span class="input-group-text bg-white"><i class="bi bi-tag text-secondary"></i></span>
+                                            <input type="text" id="project_name" name="project_name" class="form-control"
+                                                   value="<?php echo sanitize($form_data['project_name'] ?? ''); ?>" required placeholder="e.g., Summer Health Leads">
+                                        </div>
+                                    </div>
 
-                        <div class="col-6 col-md-3">
-                            <label for="client_cpi" class="form-label small fw-semibold text-secondary">Client CPI (Revenue)</label>
-                            <div class="input-group">
-                                <span class="input-group-text">$</span>
-                                <input type="number" id="client_cpi" name="client_cpi" class="form-control"
-                                       value="<?php echo sanitize($form_data['client_cpi'] ?? '0.00'); ?>" step="0.01" min="0">
+                                    <div class="col-12 col-md-6">
+                                        <label for="client_id" class="form-label small fw-semibold text-secondary">Client <span class="text-danger">*</span></label>
+                                        <div class="input-group">
+                                            <span class="input-group-text bg-white"><i class="bi bi-building text-secondary"></i></span>
+                                            <select id="client_id" name="client_id" class="form-select" required>
+                                                <option value="">Select Client</option>
+                                                <?php foreach ($clients_list as $c): ?>
+                                                <option value="<?php echo $c['id']; ?>" <?php echo ($form_data['client_id'] ?? '') == $c['id'] ? 'selected' : ''; ?>>
+                                                    <?php echo sanitize($c['client_name']); ?> (<?php echo sanitize($c['client_code']); ?>)
+                                                </option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-12">
+                                        <label for="client_survey_link" class="form-label small fw-semibold text-secondary">Client Link <span class="text-danger">*</span></label>
+                                        <div class="input-group">
+                                            <span class="input-group-text bg-white"><i class="bi bi-link-45deg text-secondary"></i></span>
+                                            <input type="url" id="client_survey_link" name="client_survey_link" class="form-control"
+                                                   value="<?php echo sanitize($form_data['client_survey_link'] ?? ''); ?>" required
+                                                   placeholder="https://client.com/survey?...">
+                                        </div>
+                                        <div class="form-text">The destination URL where users land after clicking. The <code>click_id</code> parameter is appended automatically.</div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
-                        <div class="col-6 col-md-3">
-                            <label for="vendor_default_cpi" class="form-label small fw-semibold text-secondary">Default Vendor Payout</label>
-                            <div class="input-group">
-                                <span class="input-group-text">$</span>
-                                <input type="number" id="vendor_default_cpi" name="vendor_default_cpi" class="form-control"
-                                       value="<?php echo sanitize($form_data['vendor_default_cpi'] ?? '0.00'); ?>" step="0.01" min="0">
+                        <div class="col-12">
+                            <div class="p-3 rounded-3 border mb-0">
+                                <p class="small fw-semibold text-uppercase text-muted mb-3 tracking-wide">Budget & Quotas</p>
+                                <div class="row g-3">
+                                    <div class="col-6 col-md-3">
+                                        <label for="client_cpi" class="form-label small fw-semibold text-secondary">Payout</label>
+                                        <div class="input-group">
+                                            <span class="input-group-text bg-white">$</span>
+                                            <input type="number" id="client_cpi" name="client_cpi" class="form-control"
+                                                   value="<?php echo sanitize($form_data['client_cpi'] ?? '0.00'); ?>" step="0.01" min="0">
+                                        </div>
+                                    </div>
+
+                                    <div class="col-6 col-md-3">
+                                        <label for="vendor_default_cpi" class="form-label small fw-semibold text-secondary">Default Vendor Payout</label>
+                                        <div class="input-group">
+                                            <span class="input-group-text bg-white">$</span>
+                                            <input type="number" id="vendor_default_cpi" name="vendor_default_cpi" class="form-control"
+                                                   value="<?php echo sanitize($form_data['vendor_default_cpi'] ?? '0.00'); ?>" step="0.01" min="0">
+                                        </div>
+                                    </div>
+
+                                    <div class="col-6 col-md-3">
+                                        <label for="currency" class="form-label small fw-semibold text-secondary">Currency</label>
+                                        <select id="currency" name="currency" class="form-select">
+                                            <?php $cur = $form_data['currency'] ?? 'USD'; foreach (tf_currencies() as $c): ?>
+                                            <option value="<?php echo $c; ?>" <?php echo $cur === $c ? 'selected' : ''; ?>><?php echo $c; ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
+
+                                    <div class="col-6 col-md-3">
+                                        <label for="total_quota" class="form-label small fw-semibold text-secondary">Total Quota</label>
+                                        <input type="number" id="total_quota" name="total_quota" class="form-control"
+                                               value="<?php echo sanitize($form_data['total_quota'] ?? '0'); ?>" min="0">
+                                        <div class="form-text">0 = unlimited</div>
+                                    </div>
+
+                                    <div class="col-6 col-md-3">
+                                        <label for="daily_cap" class="form-label small fw-semibold text-secondary">Daily Cap</label>
+                                        <input type="number" id="daily_cap" name="daily_cap" class="form-control"
+                                               value="<?php echo sanitize($form_data['daily_cap'] ?? '0'); ?>" min="0">
+                                        <div class="form-text">0 = unlimited</div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
-                        <div class="col-6 col-md-3">
-                            <label for="total_quota" class="form-label small fw-semibold text-secondary">Total Quota</label>
-                            <input type="number" id="total_quota" name="total_quota" class="form-control"
-                                   value="<?php echo sanitize($form_data['total_quota'] ?? '0'); ?>" min="0">
-                            <p class="form-text">0 = unlimited</p>
-                        </div>
+                        <div class="col-12">
+                            <div class="p-3 rounded-3 border mb-0">
+                                <p class="small fw-semibold text-uppercase text-muted mb-3 tracking-wide">Campaign Configuration</p>
+                                <div class="row g-3">
+                                    <div class="col-6 col-md-3">
+                                        <label for="campaign_type" class="form-label small fw-semibold text-secondary">Campaign Type</label>
+                                        <select id="campaign_type" name="campaign_type" class="form-select">
+                                            <?php $ct = $form_data['campaign_type'] ?? 'CPL'; foreach (tf_campaign_types() as $key => $label): ?>
+                                            <option value="<?php echo $key; ?>" <?php echo $ct === $key ? 'selected' : ''; ?>><?php echo sanitize($label); ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
 
-                        <div class="col-6 col-md-3">
-                            <label for="country_target" class="form-label small fw-semibold text-secondary">Target Country</label>
-                            <input type="text" id="country_target" name="country_target" class="form-control"
-                                   value="<?php echo sanitize($form_data['country_target'] ?? ''); ?>"
-                                   placeholder="e.g. India, US">
-                        </div>
+                                    <div class="col-6 col-md-3">
+                                        <label for="vertical" class="form-label small fw-semibold text-secondary">Project Type (Vertical)</label>
+                                        <select id="vertical" name="vertical" class="form-select">
+                                            <?php $v = $form_data['vertical'] ?? 'Other'; foreach (tf_verticals() as $vt): ?>
+                                            <option value="<?php echo $vt; ?>" <?php echo $v === $vt ? 'selected' : ''; ?>><?php echo sanitize($vt); ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
 
-                        <div class="col-12 col-md-6">
-                            <label for="start_date" class="form-label small fw-semibold text-secondary">Start Date</label>
-                            <input type="date" id="start_date" name="start_date" class="form-control"
-                                   value="<?php echo sanitize($form_data['start_date'] ?? ''); ?>">
-                        </div>
+                                    <div class="col-6 col-md-3">
+                                        <label for="conversion_type" class="form-label small fw-semibold text-secondary">Conversion Type</label>
+                                        <select id="conversion_type" name="conversion_type" class="form-select">
+                                            <?php $cv = $form_data['conversion_type'] ?? 'SOI'; foreach (tf_conversion_types() as $ct2): ?>
+                                            <option value="<?php echo $ct2; ?>" <?php echo $cv === $ct2 ? 'selected' : ''; ?>><?php echo sanitize($ct2); ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
 
-                        <div class="col-12 col-md-6">
-                            <label for="end_date" class="form-label small fw-semibold text-secondary">End Date</label>
-                            <input type="date" id="end_date" name="end_date" class="form-control"
-                                   value="<?php echo sanitize($form_data['end_date'] ?? ''); ?>">
+                                    <div class="col-6 col-md-3">
+                                        <label for="target_device" class="form-label small fw-semibold text-secondary">Target Device</label>
+                                        <select id="target_device" name="target_device" class="form-select">
+                                            <?php $td = $form_data['target_device'] ?? 'All'; foreach (tf_target_devices() as $dv): ?>
+                                            <option value="<?php echo $dv; ?>" <?php echo $td === $dv ? 'selected' : ''; ?>><?php echo sanitize($dv); ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
+
+                                    <div class="col-6 col-md-3">
+                                        <label for="campaign_status" class="form-label small fw-semibold text-secondary">Campaign Status</label>
+                                        <select id="campaign_status" name="campaign_status" class="form-select">
+                                            <?php $cs = $form_data['campaign_status'] ?? 'live'; foreach (tf_campaign_status() as $key => $label): ?>
+                                            <option value="<?php echo $key; ?>" <?php echo $cs === $key ? 'selected' : ''; ?>><?php echo sanitize($label); ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
+
+                                    <div class="col-6 col-md-3">
+                                        <label for="visibility" class="form-label small fw-semibold text-secondary">Visibility</label>
+                                        <select id="visibility" name="visibility" class="form-select">
+                                            <?php $vis = $form_data['visibility'] ?? 'private'; foreach (tf_visibility() as $key => $label): ?>
+                                            <option value="<?php echo $key; ?>" <?php echo $vis === $key ? 'selected' : ''; ?>><?php echo sanitize($label); ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
                         <div class="col-12">
-                            <label for="description" class="form-label small fw-semibold text-secondary">Description</label>
-                            <textarea id="description" name="description" class="form-control" rows="3"
-                                      placeholder="Campaign brief: audience, vertical, requirements..."><?php echo sanitize($form_data['description'] ?? ''); ?></textarea>
+                            <div class="p-3 rounded-3 border mb-0">
+                                <p class="small fw-semibold text-uppercase text-muted mb-3 tracking-wide">Geography & Schedule</p>
+                                <div class="row g-3">
+                                    <div class="col-12 col-md-4">
+                                        <label for="country_target" class="form-label small fw-semibold text-secondary">Primary Country</label>
+                                        <div class="tf-country-dropdown" data-name="country_target" data-selected="<?php echo sanitize($form_data['country_target'] ?? ''); ?>">
+                                            <button type="button" class="btn btn-outline-secondary w-100 text-start d-flex justify-content-between align-items-center" data-bs-toggle="dropdown" aria-expanded="false">
+                                                <span class="tf-country-dropdown-label">Select Country</span>
+                                                <i class="bi bi-chevron-down ms-2 text-muted"></i>
+                                            </button>
+                                            <div class="dropdown-menu p-2 w-100 shadow-sm border">
+                                                <input type="text" class="form-control form-control-sm mb-2 tf-country-search" placeholder="Search countries…" autocomplete="off">
+                                                <div class="tf-country-list" style="max-height: 220px; overflow-y: auto;">
+                                                    <?php foreach ($countries as $code => $name): ?>
+                                                    <button type="button" class="dropdown-item small py-1" data-value="<?php echo $code; ?>">
+                                                        <span class="tf-country-code text-muted me-2"><?php echo $code; ?></span><?php echo sanitize($name); ?>
+                                                    </button>
+                                                    <?php endforeach; ?>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <input type="hidden" name="country_target" id="country_target" value="<?php echo sanitize($form_data['country_target'] ?? ''); ?>">
+                                    </div>
+
+                                    <div class="col-12 col-md-4">
+                                        <label for="start_date" class="form-label small fw-semibold text-secondary">Start Date</label>
+                                        <input type="date" id="start_date" name="start_date" class="form-control"
+                                               value="<?php echo sanitize($form_data['start_date'] ?? ''); ?>">
+                                    </div>
+
+                                    <div class="col-12 col-md-4">
+                                        <label for="end_date" class="form-label small fw-semibold text-secondary">End Date</label>
+                                        <input type="date" id="end_date" name="end_date" class="form-control"
+                                               value="<?php echo sanitize($form_data['end_date'] ?? ''); ?>">
+                                    </div>
+
+                                    <div class="col-12">
+                                        <label class="form-label small fw-semibold text-secondary">Campaign GEO <span class="text-muted">(searchable multi-select)</span></label>
+                                        <div class="tf-country-dropdown tf-geo-dropdown" data-name="geo_codes" data-separator="," data-multi="1">
+                                            <button type="button" class="btn btn-outline-secondary w-100 text-start d-flex justify-content-between align-items-center" data-bs-toggle="dropdown" aria-expanded="false">
+                                                <span class="tf-country-dropdown-label">Select Countries</span>
+                                                <i class="bi bi-chevron-down ms-2 text-muted"></i>
+                                            </button>
+                                            <div class="dropdown-menu p-2 w-100 shadow-sm border">
+                                                <input type="text" class="form-control form-control-sm mb-2 tf-country-search" placeholder="Search countries…" autocomplete="off">
+                                                <div class="tf-country-list" style="max-height: 220px; overflow-y: auto;">
+                                                    <?php foreach ($countries as $code => $name): ?>
+                                                    <label class="dropdown-item small py-1 d-flex align-items-center gap-2">
+                                                        <input type="checkbox" value="<?php echo $code; ?>" <?php echo in_array($code, (array)($form_data['geo_codes'] ?? []), true) ? 'checked' : ''; ?>>
+                                                        <span class="tf-country-code text-muted me-1"><?php echo $code; ?></span><?php echo sanitize($name); ?>
+                                                    </label>
+                                                    <?php endforeach; ?>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <input type="hidden" name="geo_codes[]" id="geo_codes" value="">
+                                        <div class="form-text">Search and select multiple countries.</div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
+
+                        <div class="col-12">
+                            <div class="p-3 rounded-3 border mb-0">
+                                <p class="small fw-semibold text-uppercase text-muted mb-3 tracking-wide">Additional Information</p>
+                                <div class="row g-3">
+                                    <div class="col-12">
+                                        <label for="description" class="form-label small fw-semibold text-secondary">Description</label>
+                                        <textarea id="description" name="description" class="form-control" rows="3"
+                                                  placeholder="Campaign brief: audience, vertical, requirements..."><?php echo sanitize($form_data['description'] ?? ''); ?></textarea>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                     </div>
 
-                    <div class="d-flex justify-content-end gap-2 pt-3 mt-3 border-top">
-                        <a href="<?php echo BASE_URL; ?>/projects/list.php" class="btn btn-secondary">Cancel</a>
-                        <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i>Create Project</button>
+                    <div class="d-flex justify-content-end gap-2 pt-4 mt-4 border-top">
+                        <a href="<?php echo BASE_URL; ?>/projects/list.php" class="btn btn-outline-secondary px-4">Cancel</a>
+                        <button type="submit" class="btn btn-primary px-4"><i class="bi bi-check-lg"></i> Create Project</button>
                     </div>
                 </form>
             </div>
         </div>
     </div>
 </div>
+
+<script>
+document.querySelectorAll('.tf-country-dropdown').forEach(function(dd) {
+    const search = dd.querySelector('.tf-country-search');
+    const list = dd.querySelector('.tf-country-list');
+    const label = dd.querySelector('.tf-country-dropdown-label');
+    const hidden = dd.querySelector('input[type="hidden"]');
+    const multi = dd.dataset.multi === '1';
+    const separator = dd.dataset.separator || ',';
+
+    function updateLabel() {
+        if (!label) return;
+        if (multi) {
+            const checked = Array.from(list.querySelectorAll('input[type="checkbox"]:checked'));
+            if (checked.length === 0) {
+                label.textContent = 'Select Countries';
+            } else {
+                const names = checked.slice(0, 3).map(cb => {
+                    const text = cb.closest('label').textContent.trim().replace(cb.value, '').trim();
+                    return text;
+                });
+                label.textContent = names.join(', ') + (checked.length > 3 ? ' +' + (checked.length - 3) : '');
+            }
+        } else {
+            const active = list.querySelector('button.is-active');
+            label.textContent = active ? active.textContent.trim() : 'Select Country';
+        }
+    }
+
+    function syncHidden() {
+        if (!hidden) return;
+        if (multi) {
+            const values = Array.from(list.querySelectorAll('input[type="checkbox"]:checked')).map(cb => cb.value);
+            hidden.value = values.join(separator);
+        } else {
+            const active = list.querySelector('button.is-active');
+            hidden.value = active ? active.dataset.value : '';
+        }
+    }
+
+    if (search) {
+        search.addEventListener('input', function(e) {
+            const term = e.target.value.toLowerCase();
+            Array.from(list.children).forEach(function(el) {
+                const text = el.textContent.toLowerCase();
+                el.style.display = (!term || text.includes(term)) ? '' : 'none';
+            });
+        });
+    }
+
+    if (multi) {
+        list.querySelectorAll('input[type="checkbox"]').forEach(function(cb) {
+            cb.addEventListener('change', function() {
+                syncHidden();
+                updateLabel();
+            });
+        });
+        syncHidden();
+    } else {
+        list.querySelectorAll('button').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                list.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                syncHidden();
+                updateLabel();
+            });
+        });
+        const selected = (hidden && hidden.value) ? hidden.value : (dd.dataset.selected || '');
+        if (selected) {
+            const match = list.querySelector('button[data-value="' + selected.replace(/"/g, '\\"') + '"]');
+            if (match) {
+                list.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+                match.classList.add('active');
+                syncHidden();
+                updateLabel();
+            }
+        }
+    }
+});
+</script>
 
 <?php require_once __DIR__ . '/../helpers/layout_footer.php'; ?>

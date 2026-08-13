@@ -13,8 +13,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $contact_person = trim($_POST['contact_person'] ?? '');
     $email = trim($_POST['email'] ?? '');
     $phone = trim($_POST['phone'] ?? '');
+    $skype = trim($_POST['skype'] ?? '');
+    $telegram = trim($_POST['telegram'] ?? '');
     $country = trim($_POST['country'] ?? '');
     $default_currency = trim($_POST['default_currency'] ?? 'USD');
+    $payment_terms = trim($_POST['payment_terms'] ?? '');
+    $billing_address = trim($_POST['billing_address'] ?? '');
     $notes = trim($_POST['notes'] ?? '');
 
     $errors = [];
@@ -34,8 +38,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect(BASE_URL . '/clients/create.php');
     }
 
-    $stmt = $pdo->prepare("INSERT INTO clients (client_name, client_code, contact_person, email, phone, country, default_currency, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-    $stmt->execute([$client_name, $client_code, $contact_person, $email, $phone, $country, $default_currency, $notes]);
+    $stmt = $pdo->prepare("INSERT INTO clients (client_name, client_code, contact_person, email, phone, skype, telegram, country, default_currency, payment_terms, billing_address, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    $stmt->execute([$client_name, $client_code, $contact_person, $email, $phone, $skype, $telegram, $country, $default_currency, $payment_terms, $billing_address, $notes]);
+
+    audit_log($pdo, 'create', 'client', $pdo->lastInsertId(), null, ['client_name' => $client_name]);
 
     regenerate_csrf_token();
     set_flash('success', 'Client "' . $client_name . '" created successfully.');
@@ -92,19 +98,47 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                                    value="<?php echo sanitize($form_data['phone'] ?? ''); ?>">
                         </div>
 
-                        <div class="col-12 col-md-4">
+                        <div class="col-6 col-md-4">
+                            <label for="skype" class="form-label small fw-semibold text-secondary">Skype</label>
+                            <input type="text" id="skype" name="skype" class="form-control"
+                                   value="<?php echo sanitize($form_data['skype'] ?? ''); ?>">
+                        </div>
+
+                        <div class="col-6 col-md-4">
+                            <label for="telegram" class="form-label small fw-semibold text-secondary">Telegram</label>
+                            <input type="text" id="telegram" name="telegram" class="form-control"
+                                   value="<?php echo sanitize($form_data['telegram'] ?? ''); ?>">
+                        </div>
+
+                        <div class="col-12 col-md-6">
                             <label for="country" class="form-label small fw-semibold text-secondary">Country</label>
                             <input type="text" id="country" name="country" class="form-control"
                                    value="<?php echo sanitize($form_data['country'] ?? ''); ?>">
                         </div>
 
-                        <div class="col-12 col-md-4">
+                        <div class="col-6 col-md-3">
                             <label for="default_currency" class="form-label small fw-semibold text-secondary">Default Currency</label>
                             <select id="default_currency" name="default_currency" class="form-select">
-                                <?php foreach (['USD','EUR','GBP','INR','AED','SAR','CAD','AUD'] as $cur): ?>
+                                <?php foreach (tf_currencies() as $cur): ?>
                                 <option value="<?php echo $cur; ?>" <?php echo ($form_data['default_currency'] ?? 'USD') === $cur ? 'selected' : ''; ?>><?php echo $cur; ?></option>
                                 <?php endforeach; ?>
                             </select>
+                        </div>
+
+                        <div class="col-6 col-md-3">
+                            <label for="payment_terms" class="form-label small fw-semibold text-secondary">Payment Terms</label>
+                            <select id="payment_terms" name="payment_terms" class="form-select">
+                                <option value="">Select…</option>
+                                <?php foreach (['Net 15', 'Net 30', 'Net 45', 'Net 60', 'Prepaid', 'COD', 'Custom'] as $term): ?>
+                                <option value="<?php echo $term; ?>" <?php echo ($form_data['payment_terms'] ?? '') === $term ? 'selected' : ''; ?>><?php echo $term; ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+
+                        <div class="col-12">
+                            <label for="billing_address" class="form-label small fw-semibold text-secondary">Billing Address</label>
+                            <textarea id="billing_address" name="billing_address" class="form-control" rows="2"
+                                      placeholder="Street, city, state, postal code, country"><?php echo sanitize($form_data['billing_address'] ?? ''); ?></textarea>
                         </div>
 
                         <div class="col-12">

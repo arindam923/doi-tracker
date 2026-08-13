@@ -1,0 +1,122 @@
+<?php
+require_once __DIR__ . '/../config.php';
+require_role(['super_admin', 'campaign_manager']);
+
+$id = intval($_GET['id'] ?? 0);
+if (!$id) redirect(BASE_URL . '/email/templates.php');
+
+$stmt = $pdo->prepare("SELECT * FROM email_templates WHERE id = ?");
+$stmt->execute([$id]);
+$tpl = $stmt->fetch();
+if (!$tpl) {
+    set_flash('danger', 'Template not found.');
+    redirect(BASE_URL . '/email/templates.php');
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
+        set_flash('danger', 'Invalid form submission.');
+        redirect(BASE_URL . '/email/template_edit.php?id=' . $id);
+    }
+
+    $name = trim($_POST['name'] ?? '');
+    $subject = trim($_POST['subject'] ?? '');
+    $html_body = trim($_POST['html_body'] ?? '');
+    $is_default = !empty($_POST['is_default']) ? 1 : 0;
+
+    $errors = [];
+    if ($name === '') $errors[] = 'Template name is required.';
+    if ($subject === '') $errors[] = 'Subject is required.';
+    if ($html_body === '') $errors[] = 'HTML body is required.';
+
+    if (!empty($errors)) {
+        set_flash('danger', implode(' | ', $errors));
+        redirect(BASE_URL . '/email/template_edit.php?id=' . $id);
+    }
+
+    try {
+        if ($is_default) {
+            $pdo->prepare("UPDATE email_templates SET is_default = 0")->execute();
+        }
+
+        $stmt = $pdo->prepare("UPDATE email_templates SET name=?, subject=?, html_body=?, is_default=?, updated_at=NOW() WHERE id=?");
+        $stmt->execute([$name, $subject, $html_body, $is_default, $id]);
+
+        audit_log($pdo, 'update', 'email_template', $id, null, ['name' => $name]);
+        set_flash('success', 'Template updated.');
+        redirect(BASE_URL . '/email/templates.php');
+    } catch (Throwable $e) {
+        error_log('Template update failed: ' . $e->getMessage());
+        set_flash('danger', 'Failed to update template.');
+        redirect(BASE_URL . '/email/template_edit.php?id=' . $id);
+    }
+}
+
+$page_title = 'Edit Template';
+require_once __DIR__ . '/../helpers/layout_header.php';
+?>
+
+<style>
+  .tf-page .tf-card { background:#ffffff; border:1px solid #e2e8f0; color:#0f172a; }
+  .tf-page .tf-card-header { background:#ffffff; border-bottom:1px solid #e2e8f0; }
+  .tf-page .tf-card-title { color:#0f172a; }
+  .tf-page .tf-card-subtitle { color:#475569; }
+  .tf-page .tf-label { color:#334155; }
+  .tf-page .tf-help { color:#475569; }
+  .tf-page .form-control,
+  .tf-page textarea.form-control,
+  .tf-page .form-select { background:#ffffff; color:#0f172a; border-color:#cbd5e1; }
+  .tf-page .form-check-label { color:#0f172a; }
+  .tf-page .form-actions { border-top-color:#e2e8f0; }
+  .tf-page .btn-secondary { background:#ffffff; color:#0f172a; border-color:#cbd5e1; }
+  .tf-page .alert { color:#0f172a; }
+</style>
+
+<div class="tf-page">
+    <div class="tf-card">
+        <div class="tf-card-header">
+            <div>
+                <h5 class="tf-card-title">Edit Template</h5>
+                <p class="tf-card-subtitle">Update template content and default status.</p>
+            </div>
+        </div>
+        <div class="tf-card-body">
+            <form method="POST" class="tf-form" novalidate>
+                <?php echo csrf_field(); ?>
+                <div class="tf-form-row">
+                    <div class="tf-field col-12">
+                        <label for="name" class="tf-label">Name <span class="tf-required" aria-hidden="true">*</span></label>
+                        <input type="text" id="name" name="name" class="form-control" value="<?php echo sanitize($tpl['name']); ?>" required>
+                    </div>
+                </div>
+                <div class="tf-form-row">
+                    <div class="tf-field col-12">
+                        <label for="subject" class="tf-label">Subject <span class="tf-required" aria-hidden="true">*</span></label>
+                        <input type="text" id="subject" name="subject" class="form-control" value="<?php echo sanitize($tpl['subject']); ?>" required>
+                    </div>
+                </div>
+                <div class="tf-form-row">
+                    <div class="tf-field col-12">
+                        <label for="html_body" class="tf-label">HTML Body <span class="tf-required" aria-hidden="true">*</span></label>
+                        <textarea id="html_body" name="html_body" class="form-control" rows="14" required placeholder="<html>...</html>"><?php echo sanitize($tpl['html_body']); ?></textarea>
+                        <p class="tf-help">Full HTML email. You can use standard merge fields like <code>{{name}}</code>.</p>
+                    </div>
+                </div>
+                <div class="tf-form-row">
+                    <div class="tf-field col-12">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="is_default" name="is_default" value="1" <?php echo $tpl['is_default'] ? 'checked' : ''; ?>>
+                            <label class="form-check-label" for="is_default">Make this the default template</label>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-actions">
+                    <a href="<?php echo BASE_URL; ?>/email/templates.php" class="btn btn-secondary">Cancel</a>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg" aria-hidden="true"></i> Save Template</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<?php require_once __DIR__ . '/../helpers/layout_footer.php'; ?>

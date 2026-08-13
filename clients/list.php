@@ -5,7 +5,7 @@ require_role(['super_admin', 'campaign_manager']);
 $search = trim($_GET['search'] ?? '');
 $status_filter = $_GET['status'] ?? '';
 $page = max(1, intval($_GET['page'] ?? 1));
-$per_page = 50;
+$per_page = 10;
 
 $where = [];
 $params = [];
@@ -98,6 +98,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                     <th>Contact</th>
                     <th>Email</th>
                     <th>Country</th>
+                    <th>Currency</th>
                     <th class="text-end">Projects</th>
                     <th>Status</th>
                     <th class="text-end">Actions</th>
@@ -106,7 +107,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
             <tbody>
                 <?php if (empty($clients)): ?>
                 <tr>
-                    <td colspan="8" class="text-center py-5 text-muted">
+                    <td colspan="9" class="text-center py-5 text-muted">
                         <i class="bi bi-building d-block mb-2" style="font-size: 2.5rem; color: #cbd5e1;"></i>
                         <p class="fw-semibold text-dark mb-1">No clients found</p>
                         <p class="small mb-3">Add your first client to get started.</p>
@@ -121,6 +122,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                     <td><?php echo sanitize($c['contact_person'] ?? '-'); ?></td>
                     <td><?php echo sanitize($c['email'] ?? '-'); ?></td>
                     <td><?php echo sanitize($c['country'] ?? '-'); ?></td>
+                    <td><span class="badge bg-light text-dark border"><?php echo sanitize($c['default_currency'] ?? 'USD'); ?></span></td>
                     <td class="text-end"><span class="badge bg-light"><?php echo $project_counts[$c['id']] ?? 0; ?></span></td>
                     <td><?php echo $c['is_active']
                         ? '<span class="badge bg-success">Active</span>'
@@ -133,6 +135,9 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                             <div class="tf-dropdown-menu" role="menu" hidden>
                                 <a href="<?php echo BASE_URL; ?>/clients/edit.php?id=<?php echo $c['id']; ?>" class="tf-dropdown-item" role="menuitem">
                                     <i class="bi bi-pencil"></i><span>Edit</span>
+                                </a>
+                                <a href="<?php echo BASE_URL; ?>/clients/documents.php?id=<?php echo $c['id']; ?>" class="tf-dropdown-item" role="menuitem">
+                                    <i class="bi bi-file-earmark-text"></i><span>Documents</span>
                                 </a>
                                 <a href="<?php echo BASE_URL; ?>/projects/list.php?client_id=<?php echo $c['id']; ?>" class="tf-dropdown-item" role="menuitem">
                                     <i class="bi bi-folder2"></i><span>View Projects</span>

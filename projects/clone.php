@@ -35,25 +35,25 @@ $pdo->beginTransaction();
 try {
     $stmt = $pdo->prepare("
         INSERT INTO projects (project_code, project_name, client_id, client_survey_link, postback_token,
-            client_cpi, vendor_default_cpi, total_quota, country_target, start_date, end_date, description, created_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            client_cpi, vendor_default_cpi, total_quota, country_target, campaign_type, start_date, end_date, description, created_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ");
     $stmt->execute([
         $new_code, $project['project_name'] . ' (Copy)', $project['client_id'], $project['client_survey_link'],
         $new_token, $project['client_cpi'], $project['vendor_default_cpi'], $project['total_quota'],
-        $project['country_target'], $project['start_date'], $project['end_date'], $project['description'],
+        $project['country_target'], $project['campaign_type'] ?? 'CPL', $project['start_date'], $project['end_date'], $project['description'],
         $_SESSION['user_id']
     ]);
     $new_project_id = $pdo->lastInsertId();
 
-    // Clone vendors
-    $vstmt = $pdo->prepare("SELECT * FROM vendors WHERE project_id = ?");
+    // Clone vendor assignments (vendors are global; only the pivot is per-project)
+    $vstmt = $pdo->prepare("SELECT vendor_id, payout, currency, postback_url, allowed_clicks_limit, daily_cap, status, notes FROM project_vendor WHERE project_id = ?");
     $vstmt->execute([$id]);
     $vendors = $vstmt->fetchAll();
 
     foreach ($vendors as $v) {
-        $pdo->prepare("INSERT INTO vendors (project_id, vendor_name, contact_info, vendor_cpi, postback_url, allowed_clicks_limit, status, notes) VALUES (?, ?, ?, ?, ?, ?, 'active', ?)")
-            ->execute([$new_project_id, $v['vendor_name'], $v['contact_info'], $v['vendor_cpi'], $v['postback_url'], $v['allowed_clicks_limit'], $v['notes']]);
+        $pdo->prepare("INSERT INTO project_vendor (project_id, vendor_id, payout, currency, postback_url, allowed_clicks_limit, daily_cap, status, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+            ->execute([$new_project_id, $v['vendor_id'], $v['payout'], $v['currency'], $v['postback_url'], $v['allowed_clicks_limit'], $v['daily_cap'], $v['status'], $v['notes']]);
     }
 
     $pdo->prepare("INSERT INTO logs (log_type, project_id, status, message) VALUES (?, ?, ?, ?)")

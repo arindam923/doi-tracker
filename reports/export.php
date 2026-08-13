@@ -17,11 +17,11 @@ $type = $_GET['type'] ?? 'conversions'; // clicks or conversions
 
 if ($type === 'clicks') {
     // Export raw clicks
-    $sql = "SELECT cl.click_id, cl.project_id, p.project_code, v.vendor_name, cl.ip_address,
+    $sql = "SELECT cl.click_id, cl.project_id, p.project_code, gv.vendor_name, cl.ip_address,
             cl.device_type, cl.is_converted, cl.clicked_at
             FROM clicks cl
             JOIN projects p ON cl.project_id = p.id
-            JOIN vendors v ON cl.vendor_id = v.id
+            JOIN global_vendors gv ON cl.vendor_id = gv.id
             WHERE cl.clicked_at BETWEEN ? AND DATE_ADD(?, INTERVAL 1 DAY)";
     $params = [$from_date, $to_date];
     if ($project_filter) {
@@ -56,11 +56,11 @@ if ($type === 'clicks') {
 
 } else {
     // Export conversions
-    $sql = "SELECT cv.click_id, p.project_code, v.vendor_name, cv.status,
+    $sql = "SELECT cv.click_id, p.project_code, gv.vendor_name, cv.status,
             cv.client_revenue, cv.vendor_cost, cv.profit, cv.is_manual, cv.converted_at
             FROM conversions cv
             JOIN projects p ON cv.project_id = p.id
-            JOIN vendors v ON cv.vendor_id = v.id
+            JOIN global_vendors gv ON cv.vendor_id = gv.id
             WHERE cv.converted_at BETWEEN ? AND DATE_ADD(?, INTERVAL 1 DAY)";
     $params = [$from_date, $to_date];
     if ($project_filter) {

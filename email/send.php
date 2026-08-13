@@ -15,13 +15,11 @@ $recipient_mode = $_POST['recipient_mode'] ?? 'selected';
 $subject = trim($_POST['subject'] ?? '');
 $body = trim($_POST['body'] ?? '');
 $client_ids = $_POST['client_ids'] ?? [];
+$list_id = intval($_POST['list_id'] ?? 0);
 
-// Resend config
-$resend_api_key = get_setting($pdo, 'resend_api_key');
-$from_address = get_setting($pdo, 'email_from_address', 'noreply@yourdomain.com');
-$from_name = get_setting($pdo, 'email_from_name', 'Ternfluenzy');
-
-if (empty($resend_api_key)) {
+// Resend config is validated at send-time by the cron worker, but we check it
+// exists so users get early feedback.
+if (empty(get_setting($pdo, 'resend_api_key'))) {
     set_flash('danger', 'Resend API key not configured. Go to Settings to set it up.');
     redirect(BASE_URL . '/email/compose.php');
 }
@@ -31,11 +29,19 @@ if (empty($subject) || empty($body)) {
     redirect(BASE_URL . '/email/compose.php');
 }
 
-// Build recipient list
+// ── Build recipient list ──────────────────────────────────────
 $recipients = [];
 
 if ($recipient_mode === 'all') {
     $stmt = $pdo->query("SELECT id, client_name, email FROM clients WHERE is_active = 1 AND email != '' AND email IS NOT NULL");
+    $recipients = $stmt->fetchAll();
+} elseif ($recipient_mode === 'list') {
+    if (!$list_id) {
+        set_flash('danger', 'Please pick an email list.');
+        redirect(BASE_URL . '/email/compose.php');
+    }
+    $stmt = $pdo->prepare("SELECT e.email, e.name AS client_name, NULL AS id FROM email_list_entries e WHERE e.list_id = ? AND e.is_unsubscribed = 0 AND e.email != ''");
+    $stmt->execute([$list_id]);
     $recipients = $stmt->fetchAll();
 } else {
     if (empty($client_ids) || !is_array($client_ids)) {
@@ -53,71 +59,29 @@ if (empty($recipients)) {
     redirect(BASE_URL . '/email/compose.php');
 }
 
-// Send via Resend API
-$sent_count = 0;
-$error_count = 0;
+// ── Queue for the cron worker ─────────────────────────────────
+$batch_id = date('YmdHis') . '-' . bin2hex(random_bytes(4));
+$queued = 0;
 
+$insert = $pdo->prepare("
+    INSERT INTO sent_emails
+        (recipient_email, recipient_name, client_id, subject, body, status, resend_id, error_message, sent_by, batch_id, retry_count, scheduled_for, created_at)
+    VALUES (?, ?, ?, ?, ?, 'queued', NULL, NULL, ?, ?, 0, NOW(), NOW())
+");
+$pdo->beginTransaction();
 foreach ($recipients as $recipient) {
-    $email_data = [
-        'from' => $from_name . ' <' . $from_address . '>',
-        'to' => [$recipient['email']],
-        'subject' => $subject,
-        'text' => $body,
-    ];
-
-    $ch = curl_init('https://api.resend.com/emails');
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-        'Authorization: Bearer ' . $resend_api_key,
-        'Content-Type: application/json',
-    ]);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($email_data));
-    curl_setopt($ch, CURLOPT_TIMEOUT, 15);
-    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
-
-    $response = curl_exec($ch);
-    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $curl_error = curl_error($ch);
-    curl_close($ch);
-
-    $resend_id = null;
-    $status = 'sent';
-    $error_message = null;
-
-    if ($http_code === 200) {
-        $result = json_decode($response, true);
-        $resend_id = $result['id'] ?? null;
-        $sent_count++;
-    } else {
-        $status = 'failed';
-        $error_message = $curl_error ?: 'HTTP ' . $http_code . ': ' . $response;
-        $error_count++;
-    }
-
-    // Log to database
-    $log_stmt = $pdo->prepare("INSERT INTO sent_emails (recipient_email, recipient_name, client_id, subject, body, status, resend_id, error_message, sent_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
-    $log_stmt->execute([
+    $insert->execute([
         $recipient['email'],
-        $recipient['client_name'],
-        $recipient['id'],
+        $recipient['client_name'] ?? null,
+        $recipient['id'] ?? null,
         $subject,
         $body,
-        $status,
-        $resend_id,
-        $error_message,
-        $_SESSION['user_id'],
+        $_SESSION['user_id'] ?? null,
+        $batch_id,
     ]);
+    $queued++;
 }
+$pdo->commit();
 
-$total = count($recipients);
-$message = "Email sent to {$sent_count}/{$total} recipients.";
-if ($error_count > 0) {
-    $message .= " {$error_count} failed. Check email history for details.";
-    set_flash('warning', $message);
-} else {
-    set_flash('success', $message);
-}
-
-redirect(BASE_URL . '/email/history.php');
+set_flash('success', "Email queued for {$queued} recipient(s). A background worker will deliver them shortly.");
+redirect(BASE_URL . '/email/history.php?batch_id=' . $batch_id);

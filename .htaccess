@@ -1,16 +1,20 @@
-# Ternfluenzy Security Rules
+# Track Flow Security Rules
 <IfModule mod_rewrite.c>
     RewriteEngine On
     RewriteBase /doi-tracker/
+
+    # /c/CODE → tracking/redirect.php (Phase 4)
+    RewriteRule ^c/([A-Za-z0-9_-]{4,16})$ tracking/redirect.php?c=$1 [L,QSA]
+    RewriteRule ^go/([A-Za-z0-9_-]{4,16})$ tracking/redirect.php?c=$1 [L,QSA]
 </IfModule>
 
 # Deny direct access to config and helpers
-<FilesMatch "^(config|auth_middleware|functions|csrf)\.php$">
+<FilesMatch "^(config|auth_middleware|functions|csrf|constants|dedupe)\.php$">
     Require all denied
 </FilesMatch>
 
-# Deny direct access to tracking config
-<FilesMatch "^config\.php$">
+# Deny direct access to tracking config and env
+<FilesMatch "^(config|env)\.php$">
     Require all denied
 </FilesMatch>
 
@@ -27,4 +31,6 @@ Options -Indexes
     Header set X-Content-Type-Options "nosniff"
     Header set X-Frame-Options "SAMEORIGIN"
     Header set X-XSS-Protection "1; mode=block"
+    # Content Security Policy — allows CDNs + inline scripts used by Chart.js/Tailwind.
+    Header set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdn.tailwindcss.com https://www.google.com https://chart.googleapis.com https://code.jquery.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net; img-src 'self' data: blob: https://chart.googleapis.com https://www.google.com; connect-src 'self' https://ipapi.co https://api.resend.com; frame-ancestors 'self'; base-uri 'self'; form-action 'self'"
 </IfModule>

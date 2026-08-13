@@ -12,19 +12,28 @@ $nav_items = [
     'management' => [
         ['url' => '/projects/list.php', 'icon' => 'bi-folder2-open', 'label' => 'Projects'],
         ['url' => '/clients/list.php', 'icon' => 'bi-building', 'label' => 'Clients'],
+        ['url' => '/vendors/global.php', 'icon' => 'bi-people', 'label' => 'Vendors'],
     ],
     'analytics' => [
         ['url' => '/reports/overview.php', 'icon' => 'bi-graph-up', 'label' => 'Revenue Report'],
         ['url' => '/reports/traffic_summary.php', 'icon' => 'bi-bar-chart-line', 'label' => 'Traffic Summary'],
+        ['url' => '/reports/scheduled_reports.php', 'icon' => 'bi-clock', 'label' => 'Scheduled Reports'],
+        ['url' => '/clicklogs/list.php', 'icon' => 'bi-cursor', 'label' => 'Click Logs'],
+        ['url' => '/convlogs/list.php', 'icon' => 'bi-check2-square', 'label' => 'Conversion Logs'],
     ],
     'email' => [
         ['url' => '/email/compose.php', 'icon' => 'bi-send', 'label' => 'Send Email'],
+        ['url' => '/email/lists.php', 'icon' => 'bi-list-check', 'label' => 'Email Lists'],
         ['url' => '/email/history.php', 'icon' => 'bi-clock-history', 'label' => 'Email History'],
+        ['url' => '/email/templates.php', 'icon' => 'bi-file-earmark-text', 'label' => 'Templates'],
+        ['url' => '/email/campaigns.php', 'icon' => 'bi-funnel', 'label' => 'Campaigns'],
     ],
     'system' => [
+        ['url' => '/audit/list.php', 'icon' => 'bi-shield-check', 'label' => 'Audit Log', 'roles' => ['super_admin']],
         ['url' => '/logs/view.php', 'icon' => 'bi-journal-text', 'label' => 'Logs'],
         ['url' => '/settings/index.php', 'icon' => 'bi-gear', 'label' => 'Settings', 'roles' => ['super_admin']],
         ['url' => '/settings/users.php', 'icon' => 'bi-people', 'label' => 'Users', 'roles' => ['super_admin']],
+        ['url' => '/settings/vendor_portal_users.php', 'icon' => 'bi-person-badge', 'label' => 'Vendor Portal Users', 'roles' => ['super_admin']],
     ],
 ];
 
@@ -33,9 +42,27 @@ $current_path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 function is_nav_active($url) {
     global $current_path;
     $base = rtrim(parse_url(BASE_URL, PHP_URL_PATH) ?: '', '/');
-    $dir = dirname($base . $url);
-    return strpos($current_path, $dir . '/') !== false || $current_path === $base . $url;
+    $target = $base . $url;
+    if ($current_path === $target) return true;
+    $prefixes = [
+        '/vendors/global.php' => $base . '/vendors/',
+        '/clicklogs/list.php' => $base . '/clicklogs/',
+        '/convlogs/list.php' => $base . '/convlogs/',
+    ];
+    if (isset($prefixes[$url]) && strpos($current_path, $prefixes[$url]) === 0) return true;
+    return false;
 }
+
+$__current_user = current_user();
+$user_name = $__current_user['username'] ?? 'User';
+$user_role = $__current_user['role'] ?? 'user';
+$user_initials = '';
+foreach (explode(' ', $user_name) as $part) {
+    $user_initials .= strtoupper(mb_substr($part, 0, 1));
+    if (mb_strlen($user_initials) >= 2) break;
+}
+$user_initials = $user_initials ?: mb_substr($user_name, 0, 2);
+
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -43,16 +70,21 @@ function is_nav_active($url) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?php echo isset($page_title) ? htmlspecialchars($page_title, ENT_QUOTES, 'UTF-8') . ' — ' : ''; ?><?php echo htmlspecialchars(SITE_NAME, ENT_QUOTES, 'UTF-8'); ?></title>
-    
+    <meta name="description" content="<?php echo htmlspecialchars(SITE_NAME, ENT_QUOTES, 'UTF-8'); ?> — DOI registration and tracking platform.">
+    <meta name="theme-color" content="#4f46e5">
+
     <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
     <!-- Bootstrap Icons -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
 
-    <!-- Bootstrap 5 (loaded before Tailwind so Tailwind utility classes still win for shared class names) -->
+    <!-- Bootstrap 5 -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 
-    <!-- Tailwind CSS CDN (kept for the existing sidebar/topbar markup) -->
+    <!-- Tailwind CSS CDN (utility classes for legacy markup) -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -65,96 +97,45 @@ function is_nav_active($url) {
         }
     </script>
 
-    <link href="<?php echo BASE_URL; ?>/assets/css/app.css" rel="stylesheet">
-    <style>
-        /* Layout-specific minimal styles (sidebar + topbar) */
-        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
-        .sidebar-transition { transition: transform 0.3s ease-in-out; }
-        @media (max-width: 1024px) {
-            .sidebar-mobile-hidden { transform: translateX(-100%); }
-            .sidebar-mobile-show { transform: translateX(0); }
-        }
-        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
-
-        /* ─── Bootstrap theme overrides (keep indigo + Inter + soft badges) ─── */
-        :root, [data-bs-theme="light"] {
-            --bs-primary: #4f46e5;
-            --bs-primary-rgb: 79, 70, 229;
-            --bs-link-color: #4f46e5;
-            --bs-link-color-rgb: 79, 70, 229;
-            --bs-link-hover-color: #4338ca;
-            --bs-link-hover-color-rgb: 67, 56, 202;
-            --bs-border-radius: 0.5rem;
-            --bs-border-radius-sm: 0.375rem;
-            --bs-border-radius-lg: 0.75rem;
-            --bs-body-font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-            --bs-body-font-size: 0.9375rem;
-            --bs-body-color: #0f172a;
-            --bs-body-bg: #f8fafc;
-        }
-        .btn-primary {
-            --bs-btn-bg: #4f46e5;
-            --bs-btn-border-color: #4f46e5;
-            --bs-btn-hover-bg: #4338ca;
-            --bs-btn-hover-border-color: #4338ca;
-            --bs-btn-active-bg: #4338ca;
-            --bs-btn-active-border-color: #4338ca;
-            --bs-btn-disabled-bg: #4f46e5;
-            --bs-btn-disabled-border-color: #4f46e5;
-        }
-        .btn-outline-primary {
-            --bs-btn-color: #4f46e5;
-            --bs-btn-border-color: #4f46e5;
-            --bs-btn-hover-bg: #4f46e5;
-            --bs-btn-hover-border-color: #4f46e5;
-            --bs-btn-active-bg: #4338ca;
-            --bs-btn-active-border-color: #4338ca;
-        }
-        /* Soft badge theme — preserves the look from status_badge()/ccr_color() */
-        .badge.bg-success { background-color: #d1fae5 !important; color: #047857 !important; }
-        .badge.bg-warning { background-color: #fef3c7 !important; color: #b45309 !important; }
-        .badge.bg-danger  { background-color: #fee2e2 !important; color: #b91c1c !important; }
-        .badge.bg-info    { background-color: #dbeafe !important; color: #1e40af !important; }
-        .badge.bg-light   { background-color: #f1f5f9 !important; color: #475569 !important; border-color: #e2e8f0 !important; }
-        .badge.bg-primary { background-color: #e0e7ff !important; color: #4338ca !important; }
-    </style>
+    <!-- Track Flow Design System -->
+    <link href="<?php echo BASE_URL; ?>/assets/css/app.css?v=<?php echo filemtime(__DIR__ . '/../assets/css/app.css'); ?>" rel="stylesheet">
 
     <?php if (isset($extra_head)) echo $extra_head; ?>
 </head>
-<body class="text-slate-800 antialiased min-h-screen flex">
+<body class="text-slate-800 antialiased h-screen flex overflow-hidden">
+
+    <!-- Skip links for accessibility -->
+    <a class="tf-skip-link" href="#main-content">Skip to main content</a>
+    <a class="tf-skip-link" href="#sidebar-nav" style="left: 14rem;">Skip to navigation</a>
 
     <!-- Sidebar -->
-    <aside id="sidebar" class="sidebar-transition sidebar-mobile-hidden fixed lg:static inset-y-0 left-0 z-50 w-64 bg-slate-900 text-slate-300 flex flex-col custom-scrollbar overflow-y-auto shrink-0 shadow-xl lg:shadow-none">
+    <aside id="sidebar" class="tf-sidebar sidebar-transition sidebar-mobile-hidden" role="navigation" aria-label="Main navigation">
         <div class="tf-sidebar-header">
-            <h4 class="tf-sidebar-brand">
-                <i class="bi bi-lightning-charge-fill"></i>
-                <?php echo SITE_NAME; ?>
-            </h4>
-            <small class="tf-sidebar-tagline">DOI Tracking Platform</small>
+            <a href="<?php echo BASE_URL; ?>/dashboard.php" class="tf-sidebar-brand" aria-label="<?php echo htmlspecialchars(SITE_NAME, ENT_QUOTES, 'UTF-8'); ?> home">
+                <div>
+                    <span class="tf-sidebar-brand-text"><?php echo SITE_NAME; ?></span>
+                </div>
+            </a>
         </div>
 
-        <div class="flex-1 py-4">
+        <div class="tf-sidebar-nav-wrap" id="sidebar-nav">
             <?php foreach ($nav_items as $section => $items): ?>
             <div class="tf-sidebar-section">
-                <p class="tf-sidebar-section-title"><?php echo ucfirst($section); ?></p>
-                <nav class="tf-nav">
+                <p class="tf-sidebar-section-title" id="nav-group-<?php echo $section; ?>"><?php echo ucfirst($section); ?></p>
+                <nav class="tf-nav" aria-labelledby="nav-group-<?php echo $section; ?>">
                     <?php foreach ($items as $item): ?>
                         <?php
                         if (isset($item['roles'])) {
-                            $user = current_user();
-                            if (!$user || !in_array($user['role'], $item['roles'])) continue;
+                            if (!$__current_user || !in_array($__current_user['role'], $item['roles'])) continue;
                         }
                         $active = is_nav_active($item['url']);
-                        $linkClass = $active
-                            ? 'tf-nav-link is-active'
-                            : 'tf-nav-link';
+                        $linkClass = $active ? 'tf-nav-link is-active' : 'tf-nav-link';
                         ?>
                         <a href="<?php echo BASE_URL . $item['url']; ?>"
-                           class="<?php echo $linkClass; ?>"<?php if ($active) echo ' aria-current="page"'; ?>>
-                            <i class="bi <?php echo $item['icon']; ?> tf-nav-icon"></i>
-                            <?php echo $item['label']; ?>
+                           class="<?php echo $linkClass; ?>"
+                           <?php if ($active) echo 'aria-current="page"'; ?>>
+                            <i class="bi <?php echo $item['icon']; ?> tf-nav-icon" aria-hidden="true"></i>
+                            <span class="tf-nav-label"><?php echo $item['label']; ?></span>
                         </a>
                     <?php endforeach; ?>
                 </nav>
@@ -162,24 +143,25 @@ function is_nav_active($url) {
             <?php endforeach; ?>
         </div>
 
-        <div class="p-4 border-t border-slate-800 mt-auto">
-            <a href="<?php echo BASE_URL; ?>/auth.php?action=logout" class="tf-nav-link" style="color: #fca5a5;">
-                <i class="bi bi-box-arrow-left tf-nav-icon" style="color: #fca5a5;"></i> Logout
+        <div class="tf-sidebar-footer">
+            <a href="<?php echo BASE_URL; ?>/auth.php?action=logout" class="tf-nav-link tf-nav-link-danger">
+                <i class="bi bi-box-arrow-left tf-nav-icon" aria-hidden="true"></i>
+                <span class="tf-nav-label">Logout</span>
             </a>
         </div>
     </aside>
 
-    <!-- Overlay for mobile -->
-    <div id="sidebar-overlay" class="fixed inset-0 bg-slate-900/50 z-40 hidden lg:hidden" onclick="toggleSidebar()"></div>
+    <!-- Mobile sidebar backdrop -->
+    <div id="sidebar-backdrop" class="tf-sidebar-backdrop" aria-hidden="true" onclick="toggleSidebar()"></div>
 
     <!-- Main Content -->
-    <main class="flex-1 flex flex-col min-w-0 overflow-hidden bg-slate-50 min-h-screen">
+    <main id="main-content" class="tf-main flex-1 flex flex-col min-w-0 overflow-hidden bg-slate-50 h-screen" tabindex="-1">
         <!-- Topbar -->
         <header class="tf-topbar">
             <div class="tf-topbar-inner">
                 <div class="flex items-center gap-4">
-                    <button class="lg:hidden text-slate-500 hover:text-slate-700" onclick="toggleSidebar()" aria-label="Open sidebar">
-                        <i class="bi bi-list text-2xl"></i>
+                    <button type="button" class="lg:hidden text-slate-300 hover:text-white p-2 -ml-2 rounded" onclick="toggleSidebar()" aria-label="Open sidebar" aria-expanded="false" aria-controls="sidebar">
+                        <i class="bi bi-list text-2xl" aria-hidden="true"></i>
                     </button>
                     <?php if (isset($page_title)): ?>
                     <h1 class="tf-topbar-title"><?php echo htmlspecialchars($page_title, ENT_QUOTES, 'UTF-8'); ?></h1>
@@ -191,9 +173,35 @@ function is_nav_active($url) {
                         <?php echo $page_actions; ?>
                     </div>
                     <?php endif; ?>
-                    <div class="tf-user-chip">
-                        <i class="bi bi-person-circle"></i>
-                        <span><?php echo sanitize(current_user()['username'] ?? 'User'); ?></span>
+
+                    <div class="tf-dropdown tf-user-menu">
+                        <button type="button" class="tf-user-chip tf-dropdown-trigger" aria-haspopup="true" aria-expanded="false" aria-label="User menu: <?php echo sanitize($user_name); ?>">
+                            <span class="tf-visually-hidden">User:</span>
+                            <span class="tf-user-avatar" aria-hidden="true"><?php echo sanitize($user_initials); ?></span>
+                            <span><?php echo sanitize($user_name); ?></span>
+                            <i class="bi bi-chevron-down" aria-hidden="true"></i>
+                        </button>
+                        <ul class="tf-dropdown-menu" hidden role="menu">
+                            <li role="none">
+                                <span class="tf-dropdown-item" role="menuitem" tabindex="-1">
+                                    <i class="bi bi-person" aria-hidden="true"></i>
+                                    Role: <?php echo ucfirst(str_replace('_', ' ', $user_role)); ?>
+                                </span>
+                            </li>
+                            <li role="none">
+                                <a href="<?php echo BASE_URL; ?>/settings/index.php" class="tf-dropdown-item" role="menuitem">
+                                    <i class="bi bi-gear" aria-hidden="true"></i>
+                                    Settings
+                                </a>
+                            </li>
+                            <li class="tf-dropdown-divider" role="separator"></li>
+                            <li role="none">
+                                <a href="<?php echo BASE_URL; ?>/auth.php?action=logout" class="tf-dropdown-item is-danger" role="menuitem">
+                                    <i class="bi bi-box-arrow-left" aria-hidden="true"></i>
+                                    Logout
+                                </a>
+                            </li>
+                        </ul>
                     </div>
                 </div>
             </div>
@@ -203,19 +211,20 @@ function is_nav_active($url) {
         <div class="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
             <?php
             $flash = get_flash();
-            if ($flash): 
-                $alertClass = match($flash['type']) {
-                    'success' => 'bg-emerald-50 text-emerald-800 border-emerald-200',
-                    'danger' => 'bg-red-50 text-red-800 border-red-200',
-                    'warning' => 'bg-amber-50 text-amber-800 border-amber-200',
-                    'info' => 'bg-blue-50 text-blue-800 border-blue-200',
-                    default => 'bg-slate-50 text-slate-800 border-slate-200'
-                };
+            if ($flash):
+                $alertClasses = [
+                    'success' => 'alert-success',
+                    'danger' => 'alert-danger',
+                    'warning' => 'alert-warning',
+                    'info' => 'alert-info',
+                ];
+                $alertClass = $alertClasses[$flash['type']] ?? 'alert-info';
+                $liveRegion = $flash['type'] === 'danger' ? 'role="alert" aria-live="assertive"' : 'role="status" aria-live="polite"';
             ?>
-            <div class="mb-6 p-4 rounded-lg border flex justify-between items-start <?php echo $alertClass; ?>" role="alert" id="flash-alert">
-                <div class="text-sm font-medium"><?php echo htmlspecialchars($flash['message'], ENT_QUOTES, 'UTF-8'); ?></div>
-                <button type="button" class="text-current opacity-70 hover:opacity-100" onclick="document.getElementById('flash-alert').remove()">
-                    <i class="bi bi-x-lg"></i>
+            <div class="alert <?php echo $alertClass; ?>" <?php echo $liveRegion; ?> id="flash-alert">
+                <div class="alert-body"><?php echo htmlspecialchars($flash['message'], ENT_QUOTES, 'UTF-8'); ?></div>
+                <button type="button" class="alert-close" aria-label="Dismiss message" onclick="document.getElementById('flash-alert').remove()">
+                    <i class="bi bi-x-lg" aria-hidden="true"></i>
                 </button>
             </div>
             <?php endif; ?>

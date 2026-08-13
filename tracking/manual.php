@@ -13,9 +13,11 @@ if (!$project) {
     redirect(BASE_URL . '/projects/list.php');
 }
 
-$vendors = $pdo->prepare("SELECT * FROM vendors WHERE project_id = ? ORDER BY vendor_name");
+$vendors = $pdo->prepare("SELECT pv.vendor_id AS id, gv.vendor_name, pv.payout AS vendor_cpi FROM project_vendor pv JOIN global_vendors gv ON gv.id = pv.vendor_id WHERE pv.project_id = ? ORDER BY gv.vendor_name");
 $vendors->execute([$project_id]);
 $vendors = $vendors->fetchAll();
+
+$currency = $project['currency'] ?? 'USD';
 
 // ─── Handle POST ───
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -27,6 +29,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $vendor_id = intval($_POST['vendor_id'] ?? 0);
     $reason = trim($_POST['reason'] ?? '');
     $custom_click_id = trim($_POST['click_id'] ?? '');
+    $sale_amount = floatval($_POST['sale_amount'] ?? 0);
+    $transaction_id = trim($_POST['transaction_id'] ?? '');
+    $sub1 = substr(trim($_POST['sub1'] ?? ''), 0, 200);
+    $sub2 = substr(trim($_POST['sub2'] ?? ''), 0, 200);
 
     if (!$vendor_id || empty($reason)) {
         set_flash('danger', 'Vendor and reason are required.');
@@ -49,7 +55,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    $vstmt = $pdo->prepare("SELECT vendor_cpi FROM vendors WHERE id = ? AND project_id = ?");
+    $vstmt = $pdo->prepare("SELECT pv.payout AS vendor_cpi FROM project_vendor pv WHERE pv.vendor_id = ? AND pv.project_id = ?");
     $vstmt->execute([$vendor_id, $project_id]);
     $vendor = $vstmt->fetch();
 
@@ -70,8 +76,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo->prepare("UPDATE clicks SET is_converted = 1 WHERE click_id = ?")->execute([$click_id]);
     }
 
-    $pdo->prepare("INSERT INTO conversions (click_id, project_id, vendor_id, status, client_revenue, vendor_cost, profit, is_manual) VALUES (?, ?, ?, 'complete', ?, ?, ?, 1)")
-        ->execute([$click_id, $project_id, $vendor_id, $revenue, $cost, $profit]);
+    $pdo->prepare("INSERT INTO conversions (click_id, project_id, vendor_id, status, client_revenue, sale_amount, currency, vendor_cost, payout, profit, transaction_id, is_manual, sub1, sub2) VALUES (?, ?, ?, 'complete', ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)")
+        ->execute([$click_id, $project_id, $vendor_id, $revenue, $sale_amount, $currency, $cost, $cost, $profit, $transaction_id, $sub1, $sub2]);
 
     $pdo->prepare("UPDATE projects SET completes_count = completes_count + 1 WHERE id = ?")->execute([$project_id]);
 
@@ -82,7 +88,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($new_count >= $project['total_quota']) {
             $pdo->prepare("UPDATE projects SET status = 'hold' WHERE id = ?")->execute([$project_id]);
-            $pdo->prepare("UPDATE vendors SET status = 'paused' WHERE project_id = ? AND status = 'active'")->execute([$project_id]);
+            $pdo->prepare("UPDATE project_vendor SET status = 'hold' WHERE project_id = ? AND status = 'active'")->execute([$project_id]);
         }
     }
 
@@ -139,6 +145,28 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                     <textarea id="reason" name="reason" class="form-control" rows="3"
                               placeholder="Why is this being recorded manually?" required></textarea>
                 </div>
+
+                <details class="mb-3">
+                    <summary class="small fw-semibold text-secondary">Optional postback fields</summary>
+                    <div class="row g-2 mt-2">
+                        <div class="col-6">
+                            <label for="sale_amount" class="form-label small">Sale Amount</label>
+                            <input type="number" id="sale_amount" name="sale_amount" class="form-control" step="0.01" min="0">
+                        </div>
+                        <div class="col-6">
+                            <label for="transaction_id" class="form-label small">Transaction ID</label>
+                            <input type="text" id="transaction_id" name="transaction_id" class="form-control">
+                        </div>
+                        <div class="col-6">
+                            <label for="sub1" class="form-label small">Sub 1</label>
+                            <input type="text" id="sub1" name="sub1" class="form-control">
+                        </div>
+                        <div class="col-6">
+                            <label for="sub2" class="form-label small">Sub 2</label>
+                            <input type="text" id="sub2" name="sub2" class="form-control">
+                        </div>
+                    </div>
+                </details>
 
                 <div class="form-actions">
                     <a href="<?php echo BASE_URL; ?>/projects/detail.php?id=<?php echo $project_id; ?>" class="btn btn-secondary">Cancel</a>

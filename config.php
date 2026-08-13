@@ -1,18 +1,26 @@
 <?php
+
+$__env_candidates = [__DIR__ . '/env.php', __DIR__ . '/../env.php'];
+foreach ($__env_candidates as $__env) {
+    if (is_file($__env)) {
+        require_once $__env;
+        break;
+    }
+}
+
 // ─── Database Configuration ───
-define('DB_HOST', 'sql101.infinityfree.com');
-define('DB_NAME', 'if0_42533255_bhbhbh');
-define('DB_USER', 'if0_42533255');
-define('DB_PASS', 'vamaC9JgzFRljk');
+foreach (['DB_HOST', 'DB_NAME', 'DB_USER', 'DB_PASS', 'ENCRYPTION_KEY'] as $__required) {
+    if (!defined($__required) || constant($__required) === '') {
+        http_response_code(500);
+        error_log('Track Flow configuration missing required constant: ' . $__required);
+        exit('System configuration error.');
+    }
+}
 
 // ─── Site Configuration ───
-define('BASE_URL', 'https://djcsdcd.ct.ws');
-define('SITE_NAME', 'Ternfluenzy');
+if (!defined('BASE_URL')) define('BASE_URL', 'https://arindam.freepage.cc');
+define('SITE_NAME', 'Track Flow');
 define('SESSION_TIMEOUT_HOURS', 8);
-define('ENCRYPTION_KEY', '1bee453ee7dbde0a971b17254cd94d2eeb212f7347ecaf59b9cef5b5ac92b324');
-if (ENCRYPTION_KEY === 'change_this_to_a_random_32_char_string_in_production' && $_SERVER['SERVER_NAME'] !== 'localhost') {
-    error_log('WARNING: Default ENCRYPTION_KEY in use. Generate a unique key for production.');
-}
 
 // ─── Error Reporting ───
 error_reporting(E_ALL);
@@ -32,7 +40,7 @@ try {
         ]
     );
 } catch (PDOException $e) {
-    error_log('Ternfluenzy DB connection failed: ' . $e->getMessage());
+    error_log('Track Flow DB connection failed: ' . $e->getMessage());
     die('System error. Please try again later.');
 }
 
@@ -40,12 +48,14 @@ try {
 ini_set('session.gc_maxlifetime', SESSION_TIMEOUT_HOURS * 3600);
 ini_set('session.gc_probability', 1);
 ini_set('session.gc_divisor', 100);
+$__secure_cookie = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+    || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
 session_name('ternfluenzy_session');
 session_set_cookie_params([
     'lifetime' => SESSION_TIMEOUT_HOURS * 3600,
     'path' => '/',
     'httponly' => true,
-    'secure' => true,
+    'secure' => $__secure_cookie,
     'samesite' => 'Lax',
 ]);
 session_start();
@@ -60,3 +70,4 @@ if (!isset($_SESSION['_last_regen']) || time() - $_SESSION['_last_regen'] > 1800
 require_once __DIR__ . '/helpers/functions.php';
 require_once __DIR__ . '/helpers/csrf.php';
 require_once __DIR__ . '/helpers/auth_middleware.php';
+require_once __DIR__ . '/helpers/constants.php';

@@ -8,7 +8,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect(BASE_URL . '/settings/index.php');
     }
 
-    $keys = ['site_name', 'default_currency', 'session_timeout_hours', 'smtp_enabled', 'smtp_host', 'smtp_port', 'smtp_user', 'resend_api_key', 'email_from_address', 'email_from_name'];
+    $keys = ['site_name', 'default_currency', 'session_timeout_hours', 'smtp_enabled', 'smtp_host', 'smtp_port', 'smtp_user', 'resend_api_key', 'email_from_address', 'email_from_name', 'ip_enrichment_enabled', 'global_postback_enabled', 'vendor_login_enabled', 'global_postback_url', 'strict_target_device', 'email_rate_per_minute'];
     foreach ($keys as $key) {
         if (isset($_POST[$key])) {
             set_setting($pdo, $key, trim($_POST[$key]));
@@ -48,7 +48,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                         <div class="col-12 col-md-6">
                             <label for="site_name" class="form-label small fw-semibold text-secondary">Site Name</label>
                             <input type="text" id="site_name" name="site_name" class="form-control"
-                                   value="<?php echo sanitize($settings['site_name'] ?? 'Ternfluenzy'); ?>">
+                                   value="<?php echo sanitize($settings['site_name'] ?? 'Track Flow'); ?>">
                         </div>
 
                         <div class="col-12 col-md-3">
@@ -90,8 +90,64 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                         <div class="col-12 col-md-3">
                             <label for="email_from_name" class="form-label small fw-semibold text-secondary">From Name</label>
                             <input type="text" id="email_from_name" name="email_from_name" class="form-control"
-                                   value="<?php echo sanitize($settings['email_from_name'] ?? 'Ternfluenzy'); ?>"
-                                   placeholder="Ternfluenzy">
+                                   value="<?php echo sanitize($settings['email_from_name'] ?? 'Track Flow'); ?>"
+                                   placeholder="Track Flow">
+                        </div>
+                    </div>
+
+                    <hr class="my-4">
+
+                    <h6 class="fw-semibold mb-3">Tracking & Integrations</h6>
+
+                    <div class="row g-3">
+                        <div class="col-12 col-md-4">
+                            <label for="ip_enrichment_enabled" class="form-label small fw-semibold text-secondary">IP Geo / ISP Enrichment</label>
+                            <select id="ip_enrichment_enabled" name="ip_enrichment_enabled" class="form-select">
+                                <option value="0" <?php echo ($settings['ip_enrichment_enabled'] ?? '1') === '0' ? 'selected' : ''; ?>>Disabled</option>
+                                <option value="1" <?php echo ($settings['ip_enrichment_enabled'] ?? '1') === '1' ? 'selected' : ''; ?>>Enabled (ipapi.co, cached 24h)</option>
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-4">
+                            <label for="strict_target_device" class="form-label small fw-semibold text-secondary">Target Device Policy</label>
+                            <select id="strict_target_device" name="strict_target_device" class="form-select">
+                                <option value="0" <?php echo ($settings['strict_target_device'] ?? '0') === '0' ? 'selected' : ''; ?>>Log-only mismatch (allow all)</option>
+                                <option value="1" <?php echo ($settings['strict_target_device'] ?? '0') === '1' ? 'selected' : ''; ?>>Block mismatches (strict)</option>
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-4">
+                            <label for="email_rate_per_minute" class="form-label small fw-semibold text-secondary">Email Send Rate (per minute)</label>
+                            <input type="number" id="email_rate_per_minute" name="email_rate_per_minute" class="form-control"
+                                   value="<?php echo (int)($settings['email_rate_per_minute'] ?? 50); ?>" min="1" max="1000">
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mt-1">
+                        <div class="col-12 col-md-6">
+                            <label for="global_postback_enabled" class="form-label small fw-semibold text-secondary">Global Postback</label>
+                            <select id="global_postback_enabled" name="global_postback_enabled" class="form-select">
+                                <option value="0" <?php echo ($settings['global_postback_enabled'] ?? '0') === '0' ? 'selected' : ''; ?>>Disabled</option>
+                                <option value="1" <?php echo ($settings['global_postback_enabled'] ?? '0') === '1' ? 'selected' : ''; ?>>Enabled (fire for every conversion)</option>
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label for="vendor_login_enabled" class="form-label small fw-semibold text-secondary">Vendor Portal</label>
+                            <select id="vendor_login_enabled" name="vendor_login_enabled" class="form-select">
+                                <option value="0" <?php echo ($settings['vendor_login_enabled'] ?? '0') === '0' ? 'selected' : ''; ?>>Closed</option>
+                                <option value="1" <?php echo ($settings['vendor_login_enabled'] ?? '0') === '1' ? 'selected' : ''; ?>>Open (vendor self-service)</option>
+                            </select>
+                            <p class="form-text mb-0">Vendor login URL: <a href="<?php echo BASE_URL; ?>/vendor_portal/auth.php" target="_blank" rel="noopener"><?php echo BASE_URL; ?>/vendor_portal/auth.php</a></p>
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mt-1">
+                        <div class="col-12">
+                            <label for="global_postback_url" class="form-label small fw-semibold text-secondary">Global Postback URL</label>
+                            <input type="url" id="global_postback_url" name="global_postback_url" class="form-control font-monospace small"
+                                   value="<?php echo sanitize($settings['global_postback_url'] ?? ''); ?>"
+                                   placeholder="https://example.com/pb?click={click_id}&status={status}&payout={payout}&conversion={conversion_id}&sale={sale_amount}&currency={currency}">
+                            <p class="form-text mb-0">
+                                Macros: <code>{click_id}</code>, <code>{status}</code>, <code>{payout}</code>, <code>{conversion_id}</code>, <code>{sale_amount}</code>, <code>{currency}</code>
+                            </p>
                         </div>
                     </div>
 

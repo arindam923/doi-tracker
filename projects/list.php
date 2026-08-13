@@ -6,8 +6,9 @@ require_role(['super_admin', 'campaign_manager']);
 $search = trim($_GET['search'] ?? '');
 $status_filter = $_GET['status'] ?? '';
 $client_filter = intval($_GET['client_id'] ?? 0);
+$campaign_type_filter = $_GET['campaign_type'] ?? '';
 $page = max(1, intval($_GET['page'] ?? 1));
-$per_page = 50;
+$per_page = 10;
 
 $where = [];
 $params = [];
@@ -17,13 +18,17 @@ if ($search) {
     $params[] = "%$search%";
     $params[] = "%$search%";
 }
-if ($status_filter && in_array($status_filter, ['live','hold','closed'])) {
+if ($status_filter && in_array($status_filter, ['live','hold','closed','archived'])) {
     $where[] = "p.status = ?";
     $params[] = $status_filter;
 }
 if ($client_filter) {
     $where[] = "p.client_id = ?";
     $params[] = $client_filter;
+}
+if ($campaign_type_filter && in_array($campaign_type_filter, ['CPL','CPC','CPA'], true)) {
+    $where[] = "p.campaign_type = ?";
+    $params[] = $campaign_type_filter;
 }
 
 $where_sql = $where ? 'WHERE ' . implode(' AND ', $where) : '';
@@ -50,7 +55,7 @@ $clients_list = $pdo->query("SELECT id, client_name FROM clients WHERE is_active
 $project_vendor_map = [];
 if (!empty($projects)) {
     $placeholders = implode(',', array_fill(0, count($projects), '?'));
-    $vstmt = $pdo->prepare("SELECT * FROM vendors WHERE project_id IN ($placeholders) ORDER BY vendor_name");
+    $vstmt = $pdo->prepare("SELECT pv.project_id, pv.vendor_id AS id, gv.vendor_name, pv.status FROM project_vendor pv JOIN global_vendors gv ON gv.id = pv.vendor_id WHERE pv.project_id IN ($placeholders) ORDER BY gv.vendor_name");
     $vstmt->execute(array_column($projects, 'id'));
     while ($v = $vstmt->fetch()) {
         $project_vendor_map[$v['project_id']][] = $v;
@@ -81,18 +86,28 @@ require_once __DIR__ . '/../helpers/layout_header.php';
 <div class="card border-0 shadow-sm mb-4">
     <form method="GET" class="card-body">
         <div class="row g-3 align-items-end">
-            <div class="col-12 col-md-4">
+            <div class="col-12 col-md-3">
                 <label for="search" class="form-label small fw-semibold text-secondary">Search</label>
                 <input type="text" id="search" name="search" class="form-control" placeholder="Search by code or name..."
                        value="<?php echo sanitize($search); ?>">
             </div>
-            <div class="col-6 col-md-3">
+            <div class="col-6 col-md-2">
                 <label for="status" class="form-label small fw-semibold text-secondary">Status</label>
                 <select id="status" name="status" class="form-select">
                     <option value="">All Status</option>
-                    <option value="live" <?php echo $status_filter === 'live' ? 'selected' : ''; ?>>Live</option>
-                    <option value="hold" <?php echo $status_filter === 'hold' ? 'selected' : ''; ?>>Hold</option>
-                    <option value="closed" <?php echo $status_filter === 'closed' ? 'selected' : ''; ?>>Closed</option>
+                                    <option value="live" <?php echo $status_filter === 'live' ? 'selected' : ''; ?>>Live</option>
+                                    <option value="hold" <?php echo $status_filter === 'hold' ? 'selected' : ''; ?>>Hold</option>
+                                    <option value="closed" <?php echo $status_filter === 'closed' ? 'selected' : ''; ?>>Closed</option>
+                                    <option value="archived" <?php echo $status_filter === 'archived' ? 'selected' : ''; ?>>Archived</option>
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label for="campaign_type" class="form-label small fw-semibold text-secondary">Campaign Type</label>
+                <select id="campaign_type" name="campaign_type" class="form-select">
+                    <option value="">All Types</option>
+                    <option value="CPL" <?php echo $campaign_type_filter === 'CPL' ? 'selected' : ''; ?>>CPL</option>
+                    <option value="CPC" <?php echo $campaign_type_filter === 'CPC' ? 'selected' : ''; ?>>CPC</option>
+                    <option value="CPA" <?php echo $campaign_type_filter === 'CPA' ? 'selected' : ''; ?>>CPA</option>
                 </select>
             </div>
             <div class="col-6 col-md-3">
@@ -143,15 +158,18 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                 <?php else: ?>
                 <?php foreach ($projects as $p): ?>
                 <?php $ccr = calc_ccr($p['completes_count'], $p['clicks_count']); ?>
-                <tr>
-                    <td><code class="project-code"><?php echo sanitize($p['project_code']); ?></code></td>
+                <tr id="projectRow<?php echo $p['id']; ?>">
+                    <td>
+                        <code class="project-code"><?php echo sanitize($p['project_code']); ?></code>
+                        <div class="mt-1"><span class="badge bg-primary" style="font-size: .65rem;"><?php echo sanitize($p['campaign_type'] ?? 'CPL'); ?></span></div>
+                    </td>
                     <td>
                         <a href="<?php echo BASE_URL; ?>/projects/detail.php?id=<?php echo $p['id']; ?>" class="project-name">
                             <?php echo sanitize($p['project_name']); ?>
                         </a>
                     </td>
                     <td><?php echo sanitize($p['client_name'] ?? '-'); ?></td>
-                    <td><?php echo status_badge($p['status']); ?></td>
+                    <td class="status-cell"><?php echo status_badge($p['status']); ?></td>
                     <td>
                         <?php if ($p['total_quota'] > 0):
                             $pct = min(100, ($p['completes_count'] / $p['total_quota']) * 100);
@@ -199,6 +217,9 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                                 <a href="<?php echo BASE_URL; ?>/reports/overview.php?project_id=<?php echo $p['id']; ?>" class="tf-dropdown-item" role="menuitem">
                                     <i class="bi bi-graph-up"></i><span>Report</span>
                                 </a>
+                                <a href="<?php echo BASE_URL; ?>/projects/export.php?id=<?php echo $p['id']; ?>" class="tf-dropdown-item" role="menuitem">
+                                    <i class="bi bi-file-earmark-excel"></i><span>Export Traffic (XLSX)</span>
+                                </a>
                                 <div class="tf-dropdown-divider"></div>
                                 <form method="POST" action="<?php echo BASE_URL; ?>/projects/delete.php">
                                     <?php echo csrf_field(); ?>
@@ -207,88 +228,6 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                                         <i class="bi bi-trash"></i><span>Delete</span>
                                     </button>
                                 </form>
-                            </div>
-                        </div>
-
-                        <!-- Status Modal -->
-                        <div id="statusModal<?php echo $p['id']; ?>" class="tf-modal is-sm" hidden role="dialog" aria-modal="true" aria-labelledby="statusModal<?php echo $p['id']; ?>-title">
-                            <div class="tf-modal-backdrop" data-tf-modal-close></div>
-                            <div class="tf-modal-dialog">
-                                <form method="POST" action="<?php echo BASE_URL; ?>/projects/status.php">
-                                    <input type="hidden" name="project_id" value="<?php echo $p['id']; ?>">
-                                    <?php echo csrf_field(); ?>
-                                    <div class="tf-modal-header">
-                                        <h3 id="statusModal<?php echo $p['id']; ?>-title" class="tf-modal-title">Change Status</h3>
-                                        <button type="button" class="tf-modal-close" data-tf-modal-close aria-label="Close"><i class="bi bi-x-lg"></i></button>
-                                    </div>
-                                    <div class="tf-modal-body">
-                                        <div class="mb-3">
-                                            <label for="new_status_<?php echo $p['id']; ?>" class="form-label small fw-semibold text-secondary">New Status</label>
-                                            <select id="new_status_<?php echo $p['id']; ?>" name="new_status" class="form-select">
-                                                <option value="live" <?php echo $p['status'] === 'live' ? 'selected' : ''; ?>>🟢 Live</option>
-                                                <option value="hold" <?php echo $p['status'] === 'hold' ? 'selected' : ''; ?>>🟡 Hold</option>
-                                                <option value="closed" <?php echo $p['status'] === 'closed' ? 'selected' : ''; ?>>🔴 Closed</option>
-                                            </select>
-                                        </div>
-                                    </div>
-                                    <div class="tf-modal-footer">
-                                        <button type="button" class="btn btn-secondary" data-tf-modal-close>Cancel</button>
-                                        <button type="submit" class="btn btn-primary">Update</button>
-                                    </div>
-                                </form>
-                            </div>
-                        </div>
-
-                        <!-- Links Modal -->
-                        <?php
-                        $client_postback = BASE_URL . '/tracking/postback.php?click_id={click_id}&status=1&token=' . $p['postback_token'];
-                        $project_vendors = $project_vendor_map[$p['id']] ?? [];
-                        ?>
-                        <div id="linksModal<?php echo $p['id']; ?>" class="tf-modal" hidden role="dialog" aria-modal="true" aria-labelledby="linksModal<?php echo $p['id']; ?>-title">
-                            <div class="tf-modal-backdrop" data-tf-modal-close></div>
-                            <div class="tf-modal-dialog">
-                                <div class="tf-modal-header">
-                                    <h3 id="linksModal<?php echo $p['id']; ?>-title" class="tf-modal-title">Project Links — <?php echo sanitize($p['project_name']); ?></h3>
-                                    <button type="button" class="tf-modal-close" data-tf-modal-close aria-label="Close"><i class="bi bi-x-lg"></i></button>
-                                </div>
-                                <div class="tf-modal-body">
-                                    <div class="mb-3">
-                                        <label class="form-label small fw-semibold text-secondary">Client Postback URL</label>
-                                        <div class="input-group">
-                                            <input type="text" class="form-control" style="font-family: ui-monospace, monospace; font-size: .85em;" readonly value="<?php echo sanitize($client_postback); ?>">
-                                            <button class="btn btn-secondary" data-copy="<?php echo sanitize($client_postback); ?>" aria-label="Copy"><i class="bi bi-clipboard"></i></button>
-                                        </div>
-                                    </div>
-                                    <div class="mb-3">
-                                        <label class="form-label small fw-semibold text-secondary">Postback Token</label>
-                                        <div class="input-group">
-                                            <input type="text" class="form-control" style="font-family: ui-monospace, monospace; font-size: .85em;" readonly value="<?php echo sanitize($p['postback_token']); ?>">
-                                            <button class="btn btn-secondary" data-copy="<?php echo sanitize($p['postback_token']); ?>" aria-label="Copy"><i class="bi bi-clipboard"></i></button>
-                                        </div>
-                                    </div>
-
-                                    <?php if ($project_vendors): ?>
-                                    <hr>
-                                    <h6 class="fw-semibold mb-3">Vendor Tracking Links</h6>
-                                    <?php foreach ($project_vendors as $v):
-                                        $vendor_url = BASE_URL . '/tracking/click.php?project_id=' . $p['id'] . '&vendor_id=' . $v['id'];
-                                    ?>
-                                    <div class="mb-3">
-                                        <label class="form-label small fw-semibold text-secondary d-flex align-items-center gap-2">
-                                            <span><?php echo sanitize($v['vendor_name']); ?></span>
-                                            <?php echo status_badge($v['status']); ?>
-                                        </label>
-                                        <div class="input-group">
-                                            <input type="text" class="form-control" style="font-family: ui-monospace, monospace; font-size: .85em;" readonly value="<?php echo sanitize($vendor_url); ?>">
-                                            <button class="btn btn-secondary" data-copy="<?php echo sanitize($vendor_url); ?>" aria-label="Copy"><i class="bi bi-clipboard"></i></button>
-                                        </div>
-                                    </div>
-                                    <?php endforeach; ?>
-                                    <?php endif; ?>
-                                </div>
-                                <div class="tf-modal-footer">
-                                    <button type="button" class="btn btn-secondary" data-tf-modal-close>Close</button>
-                                </div>
                             </div>
                         </div>
                     </td>
@@ -300,7 +239,173 @@ require_once __DIR__ . '/../helpers/layout_header.php';
     </div>
 </div>
 
+<!-- Project Modals -->
+<?php if (!empty($projects)): ?>
+<?php foreach ($projects as $p): ?>
+<!-- Status Modal -->
+<div id="statusModal<?php echo $p['id']; ?>" class="tf-modal is-sm" hidden role="dialog" aria-modal="true" aria-labelledby="statusModal<?php echo $p['id']; ?>-title">
+    <div class="tf-modal-backdrop" data-tf-modal-close></div>
+    <div class="tf-modal-dialog">
+        <form method="POST" action="<?php echo BASE_URL; ?>/projects/status.php" class="status-form" data-project-id="<?php echo $p['id']; ?>">
+            <input type="hidden" name="project_id" value="<?php echo $p['id']; ?>">
+            <?php echo csrf_field(); ?>
+            <div class="tf-modal-header">
+                <h3 id="statusModal<?php echo $p['id']; ?>-title" class="tf-modal-title">Change Status</h3>
+                <button type="button" class="tf-modal-close" data-tf-modal-close aria-label="Close"><i class="bi bi-x-lg"></i></button>
+            </div>
+            <div class="tf-modal-body">
+                <div class="mb-3">
+                    <label for="new_status_<?php echo $p['id']; ?>" class="form-label small fw-semibold text-secondary">New Status</label>
+                    <select id="new_status_<?php echo $p['id']; ?>" name="new_status" class="form-select">
+                        <option value="live" <?php echo $p['status'] === 'live' ? 'selected' : ''; ?>>🟢 Live</option>
+                        <option value="hold" <?php echo $p['status'] === 'hold' ? 'selected' : ''; ?>>🟡 Hold</option>
+                        <option value="closed" <?php echo $p['status'] === 'closed' ? 'selected' : ''; ?>>🔴 Closed</option>
+                        <option value="archived" <?php echo $p['status'] === 'archived' ? 'selected' : ''; ?>>📦 Archived</option>
+                    </select>
+                </div>
+            </div>
+            <div class="tf-modal-footer">
+                <button type="button" class="btn btn-secondary" data-tf-modal-close>Cancel</button>
+                <button type="submit" class="btn btn-primary">Update</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Links Modal -->
+<?php
+$client_postback = BASE_URL . '/tracking/postback.php?click_id={click_id}&status=1&token=' . $p['postback_token'];
+$project_vendors = $project_vendor_map[$p['id']] ?? [];
+?>
+<div id="linksModal<?php echo $p['id']; ?>" class="tf-modal" hidden role="dialog" aria-modal="true" aria-labelledby="linksModal<?php echo $p['id']; ?>-title">
+    <div class="tf-modal-backdrop" data-tf-modal-close></div>
+    <div class="tf-modal-dialog">
+        <div class="tf-modal-header">
+            <h3 id="linksModal<?php echo $p['id']; ?>-title" class="tf-modal-title">Project Links — <?php echo sanitize($p['project_name']); ?></h3>
+            <button type="button" class="tf-modal-close" data-tf-modal-close aria-label="Close"><i class="bi bi-x-lg"></i></button>
+        </div>
+        <div class="tf-modal-body">
+            <div class="mb-3">
+                <label class="form-label small fw-semibold text-secondary d-flex align-items-center gap-2">
+                    <span>Client Postback URL</span>
+                    <i class="bi bi-info-circle text-muted" data-bs-toggle="tooltip" data-bs-placement="top" title="This postback URL is unique per project — the token segment identifies the campaign."></i>
+                </label>
+                <div class="input-group">
+                    <input type="text" class="form-control" style="font-family: ui-monospace, monospace; font-size: .85em;" readonly value="<?php echo sanitize($client_postback); ?>">
+                    <button class="btn btn-secondary" data-copy="<?php echo sanitize($client_postback); ?>" aria-label="Copy"><i class="bi bi-clipboard"></i></button>
+                </div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label small fw-semibold text-secondary">Postback Token</label>
+                <div class="input-group">
+                    <input type="text" class="form-control" style="font-family: ui-monospace, monospace; font-size: .85em;" readonly value="<?php echo sanitize($p['postback_token']); ?>">
+                    <button class="btn btn-secondary" data-copy="<?php echo sanitize($p['postback_token']); ?>" aria-label="Copy"><i class="bi bi-clipboard"></i></button>
+                </div>
+            </div>
+
+            <?php if ($project_vendors): ?>
+            <hr>
+            <h6 class="fw-semibold mb-3">Vendor Test Links</h6>
+            <?php foreach ($project_vendors as $v):
+                $vendor_url = BASE_URL . '/tracking/click.php?project_id=' . $p['id'] . '&vendor_id=' . $v['id'];
+            ?>
+            <div class="mb-3">
+                <label class="form-label small fw-semibold text-secondary d-flex align-items-center gap-2">
+                    <span><?php echo sanitize($v['vendor_name']); ?></span>
+                    <?php echo status_badge($v['status']); ?>
+                </label>
+                <div class="input-group">
+                    <input type="text" class="form-control" style="font-family: ui-monospace, monospace; font-size: .85em;" readonly value="<?php echo sanitize($vendor_url); ?>">
+                    <button class="btn btn-secondary" data-copy="<?php echo sanitize($vendor_url); ?>" aria-label="Copy"><i class="bi bi-clipboard"></i></button>
+                </div>
+            </div>
+            <?php endforeach; ?>
+            <?php endif; ?>
+        </div>
+        <div class="tf-modal-footer">
+            <button type="button" class="btn btn-secondary" data-tf-modal-close>Close</button>
+        </div>
+    </div>
+</div>
+<?php endforeach; ?>
+<?php endif; ?>
+
 <?php
 echo render_pagination($pagination, BASE_URL . '/projects/list.php');
+
+$extra_js = <<<EOT
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // ── Status modal AJAX submit (Item #9: stay on list page) ──
+    document.querySelectorAll('form.status-form').forEach(function(form) {
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const projectId = form.dataset.projectId;
+            const btn = form.querySelector('button[type="submit"]');
+            const originalText = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Updating…';
+
+            const formData = new FormData(form);
+            fetch(form.action, {
+                method: 'POST',
+                body: formData,
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    // Close the modal
+                    const modal = form.closest('.tf-modal');
+                    if (modal) modal.hidden = true;
+                    // Update the status badge in the row
+                    const row = document.getElementById('projectRow' + projectId);
+                    if (row) {
+                        const badgeCell = row.querySelector('.status-cell');
+                        if (badgeCell) {
+                            const newStatus = form.querySelector('select[name="new_status"]').value;
+                            const colorMap = { live: 'success', hold: 'warning', closed: 'danger', archived: 'light' };
+                            const cls = colorMap[newStatus] || 'light';
+                            badgeCell.innerHTML = '<span class="badge bg-' + cls + '">' + newStatus.charAt(0).toUpperCase() + newStatus.slice(1) + '</span>';
+                        }
+                    }
+                    // Show inline success notice at top
+                    showInlineFlash('success', data.message);
+                } else {
+                    showInlineFlash('danger', data.message);
+                }
+            })
+            .catch(() => {
+                showInlineFlash('danger', 'Failed to update status. Please try again.');
+            })
+            .finally(() => {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            });
+        });
+    });
+
+    function showInlineFlash(type, msg) {
+        const colors = {
+            success: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+            danger:  'bg-red-50 text-red-800 border-red-200',
+            warning: 'bg-amber-50 text-amber-800 border-amber-200',
+            info:    'bg-blue-50 text-blue-800 border-blue-200'
+        };
+        const existing = document.getElementById('inline-flash');
+        if (existing) existing.remove();
+        const div = document.createElement('div');
+        div.id = 'inline-flash';
+        div.className = 'mb-4 p-3 rounded-lg border flex justify-between items-start ' + (colors[type] || colors.info);
+        div.innerHTML = '<div class="text-sm font-medium">' + msg + '</div>'
+            + '<button type="button" class="text-current opacity-70 hover:opacity-100" onclick="this.parentElement.remove()"><i class="bi bi-x-lg"></i></button>';
+        const content = document.querySelector('main .flex-1');
+        if (content) content.insertBefore(div, content.firstChild);
+        setTimeout(() => { if (div.parentElement) div.remove(); }, 4000);
+    }
+});
+</script>
+EOT;
+
 require_once __DIR__ . '/../helpers/layout_footer.php';
 ?>

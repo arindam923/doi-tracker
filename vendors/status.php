@@ -11,26 +11,27 @@ if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
     redirect(BASE_URL . '/projects/list.php');
 }
 
-$id = intval($_POST['id'] ?? 0);
+$project_id = intval($_POST['project_id'] ?? 0);
+$vendor_id = intval($_POST['vendor_id'] ?? 0);
 $action = $_POST['action'] ?? '';
 
-if (!$id || !in_array($action, ['active', 'paused', 'closed'])) {
+if (!$project_id || !$vendor_id || !in_array($action, ['active', 'hold', 'closed'], true)) {
     redirect(BASE_URL . '/projects/list.php');
 }
 
-$stmt = $pdo->prepare("SELECT * FROM vendors WHERE id = ?");
-$stmt->execute([$id]);
-$vendor = $stmt->fetch();
-if (!$vendor) {
-    set_flash('danger', 'Vendor not found.');
+$stmt = $pdo->prepare("SELECT pv.*, gv.vendor_name FROM project_vendor pv JOIN global_vendors gv ON gv.id = pv.vendor_id WHERE pv.project_id = ? AND pv.vendor_id = ?");
+$stmt->execute([$project_id, $vendor_id]);
+$pv = $stmt->fetch();
+if (!$pv) {
+    set_flash('danger', 'Vendor not found on this project.');
     redirect(BASE_URL . '/projects/list.php');
 }
 
-$old_status = $vendor['status'];
-$pdo->prepare("UPDATE vendors SET status = ? WHERE id = ?")->execute([$action, $id]);
+$old_status = $pv['status'];
+$pdo->prepare("UPDATE project_vendor SET status = ? WHERE project_id = ? AND vendor_id = ?")->execute([$action, $project_id, $vendor_id]);
 
 $pdo->prepare("INSERT INTO logs (log_type, project_id, vendor_id, status, message) VALUES (?, ?, ?, ?, ?)")
-    ->execute(['vendor_change', $vendor['project_id'], $id, 'success', "Vendor status changed: {$old_status} → {$action}"]);
+    ->execute(['vendor_change', $project_id, $vendor_id, 'success', "Vendor status changed: {$old_status} → {$action}"]);
 
 set_flash('success', 'Vendor status changed to ' . ucfirst($action) . '.');
-redirect(BASE_URL . '/vendors/list.php?project_id=' . $vendor['project_id']);
+redirect(BASE_URL . '/projects/detail.php?id=' . $project_id);

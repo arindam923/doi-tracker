@@ -14,16 +14,20 @@ $export = isset($_GET['export']) && $_GET['export'] === 'csv';
 $page = $export ? 1 : max(1, intval($_GET['page'] ?? 1));
 $per_page = $export ? 0 : 50;
 $status_filter = $_GET['status'] ?? '';
+$batch_filter = trim($_GET['batch_id'] ?? '');
 $date_from = sanitize($_GET['from'] ?? '');
 $date_to = sanitize($_GET['to'] ?? '');
 
 $where = [];
 $params = [];
 
-if ($status_filter === 'sent') {
-    $where[] = "e.status = 'sent'";
-} elseif ($status_filter === 'failed') {
-    $where[] = "e.status = 'failed'";
+if (in_array($status_filter, ['sent', 'failed', 'queued', 'retrying'], true)) {
+    $where[] = "e.status = ?";
+    $params[] = $status_filter;
+}
+if ($batch_filter !== '') {
+    $where[] = "e.batch_id = ?";
+    $params[] = $batch_filter;
 }
 if ($date_from && preg_match('/^\d{4}-\d{2}-\d{2}$/', $date_from)) {
     $where[] = "e.created_at >= ?";
@@ -101,6 +105,8 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                 <label for="status" class="form-label small fw-semibold text-secondary">Status</label>
                 <select id="status" name="status" class="form-select">
                     <option value="">All Status</option>
+                    <option value="queued" <?php echo $status_filter === 'queued' ? 'selected' : ''; ?>>Queued</option>
+                    <option value="retrying" <?php echo $status_filter === 'retrying' ? 'selected' : ''; ?>>Retrying</option>
                     <option value="sent" <?php echo $status_filter === 'sent' ? 'selected' : ''; ?>>Sent</option>
                     <option value="failed" <?php echo $status_filter === 'failed' ? 'selected' : ''; ?>>Failed</option>
                 </select>
@@ -113,6 +119,10 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                 <label for="to" class="form-label small fw-semibold text-secondary">To Date</label>
                 <input type="date" id="to" name="to" class="form-control" value="<?php echo $date_to; ?>">
             </div>
+            <div class="col-12 col-md-3">
+                <label for="batch_id" class="form-label small fw-semibold text-secondary">Batch ID</label>
+                <input type="text" id="batch_id" name="batch_id" class="form-control" value="<?php echo sanitize($batch_filter); ?>" placeholder="YYYYMMDDHHMMSS-xxxx">
+            </div>
             <div class="col-12 col-md-3 d-flex justify-content-end gap-2">
                 <a href="<?php echo BASE_URL; ?>/email/history.php" class="btn btn-outline-secondary btn-sm">Clear</a>
                 <button type="submit" class="btn btn-primary flex-fill"><i class="bi bi-funnel"></i>Filter</button>
@@ -120,7 +130,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
         </div>
     </form>
     <div class="card-footer bg-white border-top d-flex justify-content-end py-2">
-        <a href="<?php echo BASE_URL; ?>/email/history.php?export=csv<?php echo $status_filter ? '&status=' . urlencode($status_filter) : ''; ?><?php echo $date_from ? '&from=' . urlencode($date_from) : ''; ?><?php echo $date_to ? '&to=' . urlencode($date_to) : ''; ?>" class="btn btn-outline-success btn-sm">
+        <a href="<?php echo BASE_URL; ?>/email/history.php?export=csv<?php echo $status_filter ? '&status=' . urlencode($status_filter) : ''; ?><?php echo $batch_filter ? '&batch_id=' . urlencode($batch_filter) : ''; ?><?php echo $date_from ? '&from=' . urlencode($date_from) : ''; ?><?php echo $date_to ? '&to=' . urlencode($date_to) : ''; ?>" class="btn btn-outline-success btn-sm">
             <i class="bi bi-download"></i>Export CSV
         </a>
     </div>
@@ -160,6 +170,10 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                     <td>
                         <?php if ($e['status'] === 'sent'): ?>
                         <span class="badge bg-success">Sent</span>
+                        <?php elseif ($e['status'] === 'queued'): ?>
+                        <span class="badge bg-light text-dark border">Queued</span>
+                        <?php elseif ($e['status'] === 'retrying'): ?>
+                        <span class="badge bg-warning" title="<?php echo sanitize($e['error_message'] ?? ''); ?>">Retrying</span>
                         <?php else: ?>
                         <span class="badge bg-danger" title="<?php echo sanitize($e['error_message'] ?? ''); ?>">Failed</span>
                         <?php endif; ?>
