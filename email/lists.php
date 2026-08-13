@@ -153,7 +153,7 @@ $lists = $pdo->query("
 $email_vendors = $pdo->query("SELECT id, vendor_name, vendor_code FROM global_vendors WHERE traffic_type = 'Email' ORDER BY vendor_name")->fetchAll();
 
 $page_title = 'Email Lists';
-$page_actions = '<a href="' . BASE_URL . '/email/compose.php" class="btn btn-outline-primary btn-sm"><i class="bi bi-send"></i>Compose Email</a>';
+$page_actions = '<a href="' . BASE_URL . '/email/campaigns.php" class="btn btn-outline-primary btn-sm"><i class="bi bi-funnel"></i>Campaigns</a>';
 require_once __DIR__ . '/../helpers/layout_header.php';
 ?>
 

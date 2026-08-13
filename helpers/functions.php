@@ -551,6 +551,67 @@ function tf_is_tracking_admin()
     return in_array($_SESSION['role'] ?? '', ['super_admin', 'campaign_manager'], true);
 }
 
+function tf_not_test_sql($alias)
+{
+    return ' AND COALESCE(' . $alias . '.is_test, 0) = 0';
+}
+
+function tf_request_subs()
+{
+    $subs = [];
+    foreach (['sub1', 'sub2', 'sub3', 'sub4', 'sub5'] as $key) {
+        $value = trim((string)($_GET[$key] ?? ''));
+        $subs[$key] = $value !== '' ? substr($value, 0, 200) : '';
+    }
+    return $subs;
+}
+
+/** @return array{0:string,1:array} */
+function tf_sub_sql($alias, $subs = null)
+{
+    $subs = $subs ?? tf_request_subs();
+    $sql = '';
+    $params = [];
+    foreach ($subs as $key => $value) {
+        if ($value === '') {
+            continue;
+        }
+        $sql .= ' AND ' . $alias . '.' . $key . ' = ?';
+        $params[] = $value;
+    }
+    return [$sql, $params];
+}
+
+/**
+ * Stream an Excel-compatible SpreadsheetML workbook (opens in Excel without Composer).
+ */
+function tf_output_excel($filename, $headers, $rows)
+{
+    $xml_escape = static function ($value) {
+        return htmlspecialchars((string)$value, ENT_XML1 | ENT_QUOTES, 'UTF-8');
+    };
+    header('Content-Type: application/vnd.ms-excel; charset=utf-8');
+    header('Content-Disposition: attachment; filename="' . $filename . '"');
+    echo '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
+    echo '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">';
+    echo '<Worksheet ss:Name="Export"><Table>';
+    echo '<Row>';
+    foreach ($headers as $header) {
+        echo '<Cell><Data ss:Type="String">' . $xml_escape($header) . '</Data></Cell>';
+    }
+    echo '</Row>';
+    foreach ($rows as $row) {
+        echo '<Row>';
+        foreach ($row as $cell) {
+            $numeric = is_numeric($cell) && !is_string($cell);
+            $type = $numeric ? 'Number' : 'String';
+            echo '<Cell><Data ss:Type="' . $type . '">' . $xml_escape($cell) . '</Data></Cell>';
+        }
+        echo '</Row>';
+    }
+    echo '</Table></Worksheet></Workbook>';
+}
+
 function tf_request_value($key, $default = '')
 {
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && array_key_exists($key, $_POST)) {

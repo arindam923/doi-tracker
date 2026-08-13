@@ -26,5 +26,6 @@ tf_test_assert(tf_request_value('missing', 'x') === 'x', 'missing keys use the d
 $postback = file_get_contents(__DIR__ . '/../tracking/postback.php');
 tf_test_assert(str_contains($postback, 'tf_request_value'), 'postback.php must accept GET and POST via tf_request_value');
 tf_test_assert(str_contains($postback, 'OK:DUPLICATE_TXN'), 'duplicate transaction_id must be rejected');
+tf_test_assert(str_contains($postback, 'is_test'), 'test clicks must create flagged conversions');
 
 echo "postback tests passed\n";

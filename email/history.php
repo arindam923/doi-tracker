@@ -82,7 +82,7 @@ if ($export) {
 }
 
 $page_title = 'Email History';
-$page_actions = '<a href="' . BASE_URL . '/email/compose.php" class="btn btn-primary btn-sm"><i class="bi bi-send"></i>Compose Email</a>';
+$page_actions = '<a href="' . BASE_URL . '/email/campaigns.php" class="btn btn-primary btn-sm"><i class="bi bi-funnel"></i>Campaigns</a>';
 require_once __DIR__ . '/../helpers/layout_header.php';
 ?>
 
@@ -155,7 +155,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                     <td colspan="6" class="text-center py-5 text-muted">
                         <i class="bi bi-envelope d-block mb-2" style="font-size: 2.5rem; color: #cbd5e1;"></i>
                         <p class="fw-semibold text-dark mb-1">No emails sent yet</p>
-                        <a href="<?php echo BASE_URL; ?>/email/compose.php">Send your first email</a>
+                        <a href="<?php echo BASE_URL; ?>/email/campaigns.php">Create your first campaign</a>
                     </td>
                 </tr>
                 <?php else: ?>

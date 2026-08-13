@@ -6,6 +6,7 @@ $search = trim($_GET['search'] ?? '');
 $project_filter = intval($_GET['project_id'] ?? 0);
 $vendor_filter = intval($_GET['vendor_id'] ?? 0);
 $status_filter = $_GET['approval_status'] ?? '';
+$subs = tf_request_subs();
 $from_date = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['from'] ?? '') ? $_GET['from'] : date('Y-m-d', strtotime('-30 days'));
 $to_date   = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['to'] ?? '') ? $_GET['to'] : date('Y-m-d');
 $page = max(1, intval($_GET['page'] ?? 1));
@@ -22,6 +23,13 @@ if ($project_filter) { $where[] = "cv.project_id = ?"; $params[] = $project_filt
 if ($vendor_filter) { $where[] = "cv.vendor_id = ?"; $params[] = $vendor_filter; }
 if (in_array($status_filter, ['pending', 'approved', 'rejected'], true)) {
     $where[] = "cv.approval_status = ?"; $params[] = $status_filter;
+}
+foreach ($subs as $key => $value) {
+    if ($value === '') {
+        continue;
+    }
+    $where[] = "cv.$key = ?";
+    $params[] = $value;
 }
 
 $where_sql = 'WHERE ' . implode(' AND ', $where);
@@ -49,7 +57,8 @@ $projects_list = $pdo->query("SELECT id, project_code, project_name FROM project
 $vendors_list = $pdo->query("SELECT gv.id, gv.vendor_name, p.project_code FROM project_vendor pv JOIN global_vendors gv ON gv.id = pv.vendor_id JOIN projects p ON p.id = pv.project_id ORDER BY p.project_code, gv.vendor_name")->fetchAll();
 
 $page_title = 'Conversion Logs';
-$page_actions = '<a href="' . BASE_URL . '/convlogs/export.php?' . http_build_query($_GET) . '" class="btn btn-outline-success btn-sm"><i class="bi bi-download"></i>Export CSV</a>';
+$export_qs = http_build_query($_GET);
+$page_actions = '<div class="d-flex gap-2"><a href="' . BASE_URL . '/convlogs/export.php?' . $export_qs . '" class="btn btn-outline-success btn-sm"><i class="bi bi-download"></i>CSV</a><a href="' . BASE_URL . '/convlogs/export.php?' . $export_qs . '&format=excel" class="btn btn-success btn-sm"><i class="bi bi-file-earmark-excel"></i>Excel</a></div>';
 require_once __DIR__ . '/../helpers/layout_header.php';
 ?>
 
@@ -101,6 +110,12 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                 <label class="form-label small fw-semibold text-secondary">Click / Txn ID</label>
                 <input type="text" name="search" class="form-control form-control-sm" value="<?php echo sanitize($search); ?>">
             </div>
+            <?php foreach (['sub1','sub2','sub3','sub4','sub5'] as $sub_key): ?>
+            <div class="col-6 col-md-1">
+                <label class="form-label small fw-semibold text-secondary"><?php echo strtoupper($sub_key); ?></label>
+                <input type="text" name="<?php echo $sub_key; ?>" class="form-control form-control-sm" value="<?php echo sanitize($subs[$sub_key]); ?>">
+            </div>
+            <?php endforeach; ?>
             <div class="col-12 mt-2 d-flex gap-2">
                 <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-funnel"></i>Apply</button>
                 <a href="<?php echo BASE_URL; ?>/convlogs/list.php" class="btn btn-outline-secondary btn-sm">Reset</a>
@@ -173,6 +188,9 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                         <?php endif; ?>
                     </td>
                     <td>
+                        <?php if (!empty($cv['is_test'])): ?>
+                        <span class="badge bg-info">TEST</span>
+                        <?php endif; ?>
                         <?php if ($cv['is_manual']): ?>
                         <span class="badge bg-info">Manual</span>
                         <?php else: ?>

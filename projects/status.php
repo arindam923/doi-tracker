@@ -15,10 +15,10 @@ if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
 $is_ajax = !empty($_SERVER['HTTP_X_REQUESTED_WITH'])
     && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
 
-function json_or_redirect($is_ajax, $success, $message, $redirect_url = null) {
+function json_or_redirect($is_ajax, $success, $message, $redirect_url = null, $extra = []) {
     if ($is_ajax) {
         header('Content-Type: application/json');
-        echo json_encode(['success' => $success, 'message' => $message]);
+        echo json_encode(array_merge(['success' => $success, 'message' => $message], $extra));
         exit;
     }
     set_flash($success ? 'success' : 'danger', $message);
@@ -67,7 +67,13 @@ audit_log($pdo, 'status_change', 'project', $project_id,
     ['status' => $new_status, 'campaign_status' => $campaign_status]);
 
 if ($is_ajax) {
-    json_or_redirect(true, true, 'Campaign status changed to ' . (tf_campaign_status()[$campaign_status] ?? $campaign_status) . '.', null);
+    $campaign_label = tf_campaign_status()[$campaign_status] ?? $campaign_status;
+    json_or_redirect(true, true, 'Campaign status changed to ' . $campaign_label . '.', null, [
+        'campaign_status' => $campaign_status,
+        'campaign_status_label' => $campaign_label,
+        'status' => $new_status,
+        'status_html' => status_badge($new_status),
+    ]);
 }
 
 set_flash('success', 'Campaign status changed to ' . (tf_campaign_status()[$campaign_status] ?? $campaign_status) . '.');

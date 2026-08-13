@@ -22,11 +22,10 @@ $nav_items = [
         ['url' => '/convlogs/list.php', 'icon' => 'bi-check2-square', 'label' => 'Conversion Logs'],
     ],
     'email' => [
-        ['url' => '/email/compose.php', 'icon' => 'bi-send', 'label' => 'Send Email'],
-        ['url' => '/email/lists.php', 'icon' => 'bi-list-check', 'label' => 'Email Lists'],
-        ['url' => '/email/history.php', 'icon' => 'bi-clock-history', 'label' => 'Email History'],
-        ['url' => '/email/templates.php', 'icon' => 'bi-file-earmark-text', 'label' => 'Templates'],
         ['url' => '/email/campaigns.php', 'icon' => 'bi-funnel', 'label' => 'Campaigns'],
+        ['url' => '/email/lists.php', 'icon' => 'bi-list-check', 'label' => 'Email Lists'],
+        ['url' => '/email/templates.php', 'icon' => 'bi-file-earmark-text', 'label' => 'Templates'],
+        ['url' => '/email/history.php', 'icon' => 'bi-clock-history', 'label' => 'Email History'],
     ],
     'system' => [
         ['url' => '/audit/list.php', 'icon' => 'bi-shield-check', 'label' => 'Audit Log', 'roles' => ['super_admin']],

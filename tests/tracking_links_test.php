@@ -36,4 +36,8 @@ tf_test_assert(str_contains($redirect, 'require __DIR__ . \'/click.php\''), 'red
 $click = file_get_contents(__DIR__ . '/../tracking/click.php');
 tf_test_assert(str_contains($click, 'tf_is_tracking_admin'), 'public click.php must gate diagnostic IDs');
 
+$test_link = file_get_contents(__DIR__ . '/../tracking/test.php');
+tf_test_assert(str_contains($test_link, 'is_test'), 'test.php must record a flagged test click');
+tf_test_assert(str_contains($test_link, 'click_id='), 'test.php must pass click_id to the client landing page');
+
 echo "tracking links tests passed\n";

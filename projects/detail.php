@@ -33,11 +33,11 @@ $vendors = $vstmt->fetchAll();
 $vendor_stats = [];
 $vs_stmt = $pdo->prepare("
     SELECT pv.vendor_id,
-        (SELECT COUNT(*) FROM clicks WHERE vendor_id = pv.vendor_id AND project_id = pv.project_id) AS clicks,
-        (SELECT COUNT(*) FROM conversions WHERE vendor_id = pv.vendor_id AND project_id = pv.project_id AND status = 'complete') AS cnt,
-        (SELECT COALESCE(SUM(client_revenue),0) FROM conversions WHERE vendor_id = pv.vendor_id AND project_id = pv.project_id AND status = 'complete') AS rev,
-        (SELECT COALESCE(SUM(vendor_cost),0)    FROM conversions WHERE vendor_id = pv.vendor_id AND project_id = pv.project_id AND status = 'complete') AS cost,
-        (SELECT COALESCE(SUM(profit),0)         FROM conversions WHERE vendor_id = pv.vendor_id AND project_id = pv.project_id AND status = 'complete') AS profit
+        (SELECT COUNT(*) FROM clicks WHERE vendor_id = pv.vendor_id AND project_id = pv.project_id AND COALESCE(is_test, 0) = 0) AS clicks,
+        (SELECT COUNT(*) FROM conversions WHERE vendor_id = pv.vendor_id AND project_id = pv.project_id AND status = 'complete' AND COALESCE(is_test, 0) = 0) AS cnt,
+        (SELECT COALESCE(SUM(client_revenue),0) FROM conversions WHERE vendor_id = pv.vendor_id AND project_id = pv.project_id AND status = 'complete' AND COALESCE(is_test, 0) = 0) AS rev,
+        (SELECT COALESCE(SUM(vendor_cost),0)    FROM conversions WHERE vendor_id = pv.vendor_id AND project_id = pv.project_id AND status = 'complete' AND COALESCE(is_test, 0) = 0) AS cost,
+        (SELECT COALESCE(SUM(profit),0)         FROM conversions WHERE vendor_id = pv.vendor_id AND project_id = pv.project_id AND status = 'complete' AND COALESCE(is_test, 0) = 0) AS profit
     FROM project_vendor pv
     WHERE pv.project_id = ?
 ");
@@ -55,11 +55,11 @@ while ($row = $vs_stmt->fetch()) {
 // Chart data
 $chart_click_data = [];
 $chart_conv_data = [];
-$cc_stmt = $pdo->prepare("SELECT DATE(clicked_at) as d, COUNT(*) as cnt FROM clicks WHERE project_id = ? AND clicked_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY) GROUP BY DATE(clicked_at)");
+$cc_stmt = $pdo->prepare("SELECT DATE(clicked_at) as d, COUNT(*) as cnt FROM clicks WHERE project_id = ? AND COALESCE(is_test, 0) = 0 AND clicked_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY) GROUP BY DATE(clicked_at)");
 $cc_stmt->execute([$id]);
 while ($row = $cc_stmt->fetch()) { $chart_click_data[$row['d']] = $row['cnt']; }
 
-$ccv_stmt = $pdo->prepare("SELECT DATE(converted_at) as d, COUNT(*) as cnt FROM conversions WHERE project_id = ? AND status = 'complete' AND converted_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY) GROUP BY DATE(converted_at)");
+$ccv_stmt = $pdo->prepare("SELECT DATE(converted_at) as d, COUNT(*) as cnt FROM conversions WHERE project_id = ? AND status = 'complete' AND COALESCE(is_test, 0) = 0 AND converted_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY) GROUP BY DATE(converted_at)");
 $ccv_stmt->execute([$id]);
 while ($row = $ccv_stmt->fetch()) { $chart_conv_data[$row['d']] = $row['cnt']; }
 
@@ -101,7 +101,7 @@ $available_vendors = $av_stmt->fetchAll();
 $ccr = calc_ccr($project['completes_count'], $project['clicks_count']);
 $currency = $project['currency'] ?? ($project['default_currency'] ?? 'USD');
 
-$rev_stmt = $pdo->prepare("SELECT COALESCE(SUM(client_revenue),0) as rev, COALESCE(SUM(vendor_cost),0) as cost, COALESCE(SUM(profit),0) as profit FROM conversions WHERE project_id = ? AND status = 'complete'");
+$rev_stmt = $pdo->prepare("SELECT COALESCE(SUM(client_revenue),0) as rev, COALESCE(SUM(vendor_cost),0) as cost, COALESCE(SUM(profit),0) as profit FROM conversions WHERE project_id = ? AND status = 'complete' AND COALESCE(is_test, 0) = 0");
 $rev_stmt->execute([$id]);
 $rev_data = $rev_stmt->fetch();
 $total_revenue = $rev_data['rev'];
@@ -113,6 +113,7 @@ $client_postback = BASE_URL . '/tracking/postback.php?click_id={click_id}&status
 
 $page_actions = '
 <div class="d-flex align-items-center gap-2 flex-wrap">
+    <button type="button" class="btn btn-outline-secondary btn-sm" data-tf-modal-open="statusModal' . $id . '"><i class="bi bi-toggle2-left"></i>Change Status</button>
     <a href="' . BASE_URL . '/projects/export.php?id=' . $id . '" class="btn btn-success btn-sm"><i class="bi bi-file-earmark-excel"></i>Export Traffic</a>
     <a href="' . BASE_URL . '/tracking/manual.php?project_id=' . $id . '" class="btn btn-warning btn-sm"><i class="bi bi-plus-circle"></i>Manual Conversion</a>
     <a href="' . BASE_URL . '/projects/edit.php?id=' . $id . '" class="btn btn-outline-primary btn-sm"><i class="bi bi-pencil"></i>Edit</a>
@@ -144,12 +145,10 @@ require_once __DIR__ . '/../helpers/layout_header.php';
 <!-- Project Info Cards -->
 <div class="row g-3 mb-4">
     <div class="col-6 col-md-4 col-xl-2">
-        <div class="card border-0 shadow-sm h-100 stat-tile">
+        <div class="card border-0 shadow-sm h-100 stat-tile" id="projectStatusTile">
             <div class="stat-label">Status</div>
-            <div><?php echo status_badge($project['status']); ?></div>
-            <?php if (!empty($project['campaign_status']) && $project['campaign_status'] !== $project['status']): ?>
-            <div class="small text-muted mt-1"><?php echo sanitize(tf_campaign_status()[$project['campaign_status']] ?? $project['campaign_status']); ?></div>
-            <?php endif; ?>
+            <div id="projectStatusBadge"><?php echo status_badge($project['status']); ?></div>
+            <div class="small text-muted mt-1" id="projectCampaignStatus"><?php echo sanitize(tf_campaign_status()[$project['campaign_status'] ?? $project['status']] ?? ($project['campaign_status'] ?? $project['status'])); ?></div>
         </div>
     </div>
     <div class="col-6 col-md-4 col-xl-2">
@@ -489,6 +488,33 @@ $ec_stats = $ec->fetch();
 </div>
 <?php endif; ?>
 
+<div id="statusModal<?php echo $id; ?>" class="tf-modal is-sm" hidden role="dialog" aria-modal="true" aria-labelledby="statusModal<?php echo $id; ?>-title">
+    <div class="tf-modal-backdrop" data-tf-modal-close></div>
+    <div class="tf-modal-dialog">
+        <form method="POST" action="<?php echo BASE_URL; ?>/projects/status.php" class="status-form" data-project-id="<?php echo $id; ?>">
+            <input type="hidden" name="project_id" value="<?php echo $id; ?>">
+            <?php echo csrf_field(); ?>
+            <div class="tf-modal-header">
+                <h3 id="statusModal<?php echo $id; ?>-title" class="tf-modal-title">Change Status</h3>
+                <button type="button" class="tf-modal-close" data-tf-modal-close aria-label="Close"><i class="bi bi-x-lg"></i></button>
+            </div>
+            <div class="tf-modal-body">
+                <label for="new_status_<?php echo $id; ?>" class="form-label small fw-semibold text-secondary">New Status</label>
+                <select id="new_status_<?php echo $id; ?>" name="new_status" class="form-select">
+                    <?php $current_campaign_status = $project['campaign_status'] ?? $project['status']; ?>
+                    <?php foreach (tf_campaign_status() as $status_key => $status_label): ?>
+                    <option value="<?php echo sanitize($status_key); ?>" <?php echo $current_campaign_status === $status_key ? 'selected' : ''; ?>><?php echo sanitize($status_label); ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="tf-modal-footer">
+                <button type="button" class="btn btn-secondary" data-tf-modal-close>Cancel</button>
+                <button type="submit" class="btn btn-primary">Update</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <?php
 $cl_json = json_encode($chart_labels);
 $cc_json = json_encode($chart_clicks);
@@ -514,6 +540,40 @@ new Chart(document.getElementById('projectChart'), {
         plugins: { legend: { position: 'top', align: 'end' } },
         scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
     }
+});
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('form.status-form').forEach(function(form) {
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const btn = form.querySelector('button[type="submit"]');
+            const originalText = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = 'Updating…';
+            fetch(form.action, {
+                method: 'POST',
+                body: new FormData(form),
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (!data.success) {
+                    alert(data.message || 'Failed to update status.');
+                    return;
+                }
+                const modal = form.closest('.tf-modal');
+                if (modal) modal.hidden = true;
+                const badge = document.getElementById('projectStatusBadge');
+                if (badge && data.status_html) badge.innerHTML = data.status_html;
+                const campaign = document.getElementById('projectCampaignStatus');
+                if (campaign && data.campaign_status_label) campaign.textContent = data.campaign_status_label;
+            })
+            .catch(() => alert('Failed to update status. Please try again.'))
+            .finally(() => {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            });
+        });
+    });
 });
 </script>
 EOT;

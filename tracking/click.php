@@ -165,7 +165,7 @@ try {
 
     $is_duplicate_ip = 0;
     if ($ip_address) {
-        $dup = $pdo->prepare("SELECT id FROM clicks WHERE project_id = ? AND ip_address = ? AND clicked_at > DATE_SUB(NOW(), INTERVAL 24 HOUR) LIMIT 1");
+        $dup = $pdo->prepare("SELECT id FROM clicks WHERE project_id = ? AND ip_address = ? AND COALESCE(is_test, 0) = 0 AND clicked_at > DATE_SUB(NOW(), INTERVAL 24 HOUR) LIMIT 1");
         $dup->execute([$project_id, $ip_address]);
         if ($dup->fetch()) $is_duplicate_ip = 1;
     }

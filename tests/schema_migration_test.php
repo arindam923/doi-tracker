@@ -20,5 +20,7 @@ tf_test_assert(str_contains($sql, "tf_remap_vendor_ids_if_table('email_campaigns
 tf_test_assert(str_contains($sql, "tf_remap_vendor_ids_if_table('logs')"), 'logs vendor_id must be remapped');
 tf_test_assert(str_contains($sql, 'vendor_portal_show_network_economics'), 'portal economics setting must be seeded');
 tf_test_assert(str_contains($sql, 'uk_campaign_entry'), 'send uniqueness must include campaign+entry');
+tf_test_assert(str_contains($sql, "'clicks', 'is_test'"), 'clicks.is_test must be added');
+tf_test_assert(str_contains($sql, "'conversions', 'is_test'"), 'conversions.is_test must be added');
 
 echo "schema migration tests passed\n";

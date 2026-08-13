@@ -10,6 +10,8 @@ $device_filter = trim($_GET['device'] ?? '');
 $browser_filter = trim($_GET['browser'] ?? '');
 $isp_filter = trim($_GET['isp'] ?? '');
 $click_id_filter = trim($_GET['click_id'] ?? '');
+$os_filter = trim($_GET['os'] ?? '');
+$subs = tf_request_subs();
 $from_date = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['from'] ?? '') ? $_GET['from'] : date('Y-m-d', strtotime('-7 days'));
 $to_date   = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['to'] ?? '') ? $_GET['to'] : date('Y-m-d');
 $page = max(1, intval($_GET['page'] ?? 1));
@@ -50,6 +52,17 @@ if ($click_id_filter) {
     $where[] = "c.click_id = ?";
     $params[] = $click_id_filter;
 }
+if ($os_filter !== '') {
+    $where[] = "c.os LIKE ?";
+    $params[] = '%' . $os_filter . '%';
+}
+foreach ($subs as $key => $value) {
+    if ($value === '') {
+        continue;
+    }
+    $where[] = "c.$key = ?";
+    $params[] = $value;
+}
 
 $where_sql = 'WHERE ' . implode(' AND ', $where);
 
@@ -75,7 +88,8 @@ $vendors_list = $pdo->query("SELECT gv.id, gv.vendor_name, p.project_code FROM p
 $projects_list = $pdo->query("SELECT id, project_code, project_name FROM projects ORDER BY project_name")->fetchAll();
 
 $page_title = 'Click Logs';
-$page_actions = '<a href="' . BASE_URL . '/clicklogs/export.php?' . http_build_query($_GET) . '" class="btn btn-outline-success btn-sm"><i class="bi bi-download"></i>Export CSV</a>';
+$export_qs = http_build_query($_GET);
+$page_actions = '<div class="d-flex gap-2"><a href="' . BASE_URL . '/clicklogs/export.php?' . $export_qs . '" class="btn btn-outline-success btn-sm"><i class="bi bi-download"></i>CSV</a><a href="' . BASE_URL . '/clicklogs/export.php?' . $export_qs . '&format=excel" class="btn btn-success btn-sm"><i class="bi bi-file-earmark-excel"></i>Excel</a></div>';
 require_once __DIR__ . '/../helpers/layout_header.php';
 ?>
 
@@ -132,6 +146,10 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                 <input type="text" name="browser" class="form-control form-control-sm" value="<?php echo sanitize($browser_filter); ?>" placeholder="Chrome">
             </div>
             <div class="col-6 col-md-1">
+                <label class="form-label small fw-semibold text-secondary">OS</label>
+                <input type="text" name="os" class="form-control form-control-sm" value="<?php echo sanitize($os_filter); ?>" placeholder="iOS">
+            </div>
+            <div class="col-6 col-md-1">
                 <label class="form-label small fw-semibold text-secondary">ISP</label>
                 <input type="text" name="isp" class="form-control form-control-sm" value="<?php echo sanitize($isp_filter); ?>" placeholder="Comcast">
             </div>
@@ -143,6 +161,12 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                 <label class="form-label small fw-semibold text-secondary">Click ID</label>
                 <input type="text" name="click_id" class="form-control form-control-sm" value="<?php echo sanitize($click_id_filter); ?>">
             </div>
+            <?php foreach (['sub1','sub2','sub3','sub4','sub5'] as $sub_key): ?>
+            <div class="col-6 col-md-1">
+                <label class="form-label small fw-semibold text-secondary"><?php echo strtoupper($sub_key); ?></label>
+                <input type="text" name="<?php echo $sub_key; ?>" class="form-control form-control-sm" value="<?php echo sanitize($subs[$sub_key]); ?>">
+            </div>
+            <?php endforeach; ?>
             <div class="col-12 col-md-12 mt-2 d-flex gap-2">
                 <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-funnel"></i>Apply Filters</button>
                 <a href="<?php echo BASE_URL; ?>/clicklogs/list.php" class="btn btn-outline-secondary btn-sm">Reset</a>
@@ -193,6 +217,9 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                         <span class="badge bg-success">Converted</span>
                         <?php else: ?>
                         <span class="badge bg-light text-dark border">Pending</span>
+                        <?php endif; ?>
+                        <?php if (!empty($c['is_test'])): ?>
+                        <span class="badge bg-info">TEST</span>
                         <?php endif; ?>
                         <?php if ($c['is_duplicate_ip']): ?>
                         <span class="badge bg-warning" title="Duplicate IP in last 24h">DUP</span>

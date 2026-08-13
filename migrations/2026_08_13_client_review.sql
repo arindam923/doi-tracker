@@ -501,7 +501,8 @@ INSERT IGNORE INTO short_links (code, project_id, vendor_id)
 SELECT LEFT(SHA2(CONCAT('link:', pv.project_id, ':', pv.vendor_id), 256), 12), pv.project_id, pv.vendor_id
 FROM project_vendor pv;
 
-CALL tf_add_column_if_missing('email_campaigns', 'list_id', 'INT NULL');
+CALL tf_add_column_if_missing('clicks', 'is_test', 'TINYINT NOT NULL DEFAULT 0');
+CALL tf_add_column_if_missing('conversions', 'is_test', 'TINYINT NOT NULL DEFAULT 0');
 CALL tf_add_index_if_missing('email_campaign_sends', 'uk_campaign_entry', 'UNIQUE KEY `uk_campaign_entry` (`campaign_id`, `entry_id`)');
 
 INSERT INTO settings (setting_key, setting_value) VALUES

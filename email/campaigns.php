@@ -35,10 +35,7 @@ $stmt = $pdo->prepare("
     SELECT ec.*, p.project_code, p.project_name, gv.vendor_name,
            (SELECT COUNT(*) FROM email_campaign_sends WHERE campaign_id = ec.id) AS total_sends,
            (SELECT COUNT(*) FROM email_campaign_sends WHERE campaign_id = ec.id AND status = 'sent') AS sent_count,
-           (SELECT COUNT(*) FROM email_campaign_sends WHERE campaign_id = ec.id AND status = 'opened') AS opened_count,
-           (SELECT COUNT(*) FROM email_campaign_sends WHERE campaign_id = ec.id AND status = 'clicked') AS clicked_count,
            (SELECT COUNT(*) FROM email_campaign_sends WHERE campaign_id = ec.id AND status = 'converted') AS converted_count,
-           (SELECT COUNT(*) FROM email_campaign_sends WHERE campaign_id = ec.id AND status = 'bounced') AS bounced_count,
            (SELECT COUNT(*) FROM email_campaign_sends WHERE campaign_id = ec.id AND status = 'failed') AS failed_count
     FROM email_campaigns ec
     JOIN projects p ON ec.project_id = p.id
@@ -102,6 +99,8 @@ require_once __DIR__ . '/../helpers/layout_header.php';
     </form>
 </div>
 
+<p class="small text-muted mb-3">Open, click, and bounce rates are unavailable until an email provider webhook is connected. Sent, converted, and failed counts come from our own send log.</p>
+
 <div class="card border-0 shadow-sm">
     <div class="card-header bg-white border-bottom py-3"><h5 class="mb-0 fw-semibold"><?php echo number_format($total); ?> campaigns</h5></div>
     <div class="table-responsive">
@@ -113,17 +112,14 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                     <th>Campaign</th>
                     <th>Status</th>
                     <th class="text-end">Sends</th>
-                    <th class="text-end">Opens</th>
-                    <th class="text-end">Clicks</th>
                     <th class="text-end">Conv</th>
-                    <th class="text-end">Bounce</th>
                     <th class="text-end">Failed</th>
                     <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
                 <?php if (empty($campaigns)): ?>
-                    <tr><td colspan="11" class="text-center py-5 text-muted">No campaigns match your filters.</td></tr>
+                    <tr><td colspan="8" class="text-center py-5 text-muted">No campaigns match your filters.</td></tr>
                 <?php else: foreach ($campaigns as $c): ?>
                     <tr>
                         <td><a href="<?php echo BASE_URL; ?>/projects/detail.php?id=<?php echo (int)$c['project_id']; ?>"><code><?php echo sanitize($c['project_code']); ?></code></a></td>
@@ -131,10 +127,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                         <td class="fw-semibold"><?php echo sanitize($c['name']); ?></td>
                         <td><?php echo status_badge($c['status']); ?></td>
                         <td class="text-end"><?php echo number_format((int)($c['total_sends'] ?? 0)); ?></td>
-                        <td class="text-end"><?php echo number_format((int)($c['opened_count'] ?? 0)); ?></td>
-                        <td class="text-end"><?php echo number_format((int)($c['clicked_count'] ?? 0)); ?></td>
                         <td class="text-end"><?php echo number_format((int)($c['converted_count'] ?? 0)); ?></td>
-                        <td class="text-end"><?php echo number_format((int)($c['bounced_count'] ?? 0)); ?></td>
                         <td class="text-end"><?php echo number_format((int)($c['failed_count'] ?? 0)); ?></td>
                         <td>
                             <a href="<?php echo BASE_URL; ?>/email/campaign_detail.php?id=<?php echo (int)$c['id']; ?>" class="btn btn-outline-secondary btn-sm"><i class="bi bi-eye"></i></a>

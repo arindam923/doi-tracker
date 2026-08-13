@@ -64,8 +64,12 @@ if ($all_time) {
     $to_date   = date('Y-m-d');
 }
 
-$where_date = "AND c.converted_at BETWEEN ? AND DATE_ADD(?, INTERVAL 1 DAY)";
+$where_date = "AND c.converted_at BETWEEN ? AND DATE_ADD(?, INTERVAL 1 DAY)" . tf_not_test_sql('c');
 $params_date = [$from_date, $to_date];
+$subs = tf_request_subs();
+[$sub_sql, $sub_params] = tf_sub_sql('c', $subs);
+$where_date .= $sub_sql;
+$params_date = array_merge($params_date, $sub_params);
 
 $sql = "SELECT COUNT(*) as cnt, COALESCE(SUM(client_revenue),0) as revenue, COALESCE(SUM(vendor_cost),0) as cost, COALESCE(SUM(profit),0) as profit FROM conversions c WHERE c.status = 'complete' $where_date";
 $totals_params = $params_date;
@@ -93,10 +97,10 @@ $rej = $pdo->prepare($rejected_sql);
 $rej->execute($rej_params);
 $totals['rejected'] = (int)$rej->fetch()['cnt'];
 
-$sql = "SELECT COUNT(*) as cnt FROM clicks WHERE clicked_at BETWEEN ? AND DATE_ADD(?, INTERVAL 1 DAY)";
-$params_clicks = [$from_date, $to_date];
+$sql = "SELECT COUNT(*) as cnt FROM clicks c WHERE c.clicked_at BETWEEN ? AND DATE_ADD(?, INTERVAL 1 DAY)" . tf_not_test_sql('c') . $sub_sql;
+$params_clicks = array_merge([$from_date, $to_date], $sub_params);
 if ($project_filter) {
-    $sql .= " AND project_id = ?";
+    $sql .= " AND c.project_id = ?";
     $params_clicks[] = $project_filter;
 }
 $stmt = $pdo->prepare($sql);
@@ -210,9 +214,9 @@ while ($current <= $end) {
     $d = date('Y-m-d', $current);
     $chart_labels[] = date('M d', $current);
 
-    $sql = "SELECT COALESCE(SUM(client_revenue),0) as rev, COALESCE(SUM(vendor_cost),0) as cost FROM conversions WHERE status = 'complete' AND DATE(converted_at) = ?";
-    $params_d = [$d];
-    if ($project_filter) { $sql .= " AND project_id = ?"; $params_d[] = $project_filter; }
+    $sql = "SELECT COALESCE(SUM(c.client_revenue),0) as rev, COALESCE(SUM(c.vendor_cost),0) as cost FROM conversions c WHERE c.status = 'complete' AND DATE(c.converted_at) = ?" . tf_not_test_sql('c') . $sub_sql;
+    $params_d = array_merge([$d], $sub_params);
+    if ($project_filter) { $sql .= " AND c.project_id = ?"; $params_d[] = $project_filter; }
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params_d);
     $row = $stmt->fetch() ?: ['rev' => 0, 'cost' => 0];
@@ -528,6 +532,12 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                     <?php endforeach; ?>
                 </select>
             </div>
+            <?php foreach (['sub1','sub2','sub3','sub4','sub5'] as $sub_key): ?>
+            <div class="col-6 col-lg-1">
+                <label for="<?php echo $sub_key; ?>" class="form-label"><?php echo strtoupper($sub_key); ?></label>
+                <input type="text" id="<?php echo $sub_key; ?>" name="<?php echo $sub_key; ?>" class="form-control" value="<?php echo sanitize($subs[$sub_key]); ?>">
+            </div>
+            <?php endforeach; ?>
             <div class="col-12 col-lg-2">
                 <label for="all_time_toggle" class="form-label d-none d-lg-block">&nbsp;</label>
                 <div class="form-switch-card <?php echo $all_time ? 'is-active' : ''; ?>">

@@ -12,25 +12,52 @@ $stmt = $pdo->prepare("SELECT COUNT(*) as cnt FROM projects WHERE status = 'live
 $stmt->execute();
 $active_projects = (int)$stmt->fetch()['cnt'];
 
-$stmt = $pdo->prepare("SELECT COUNT(*) as cnt FROM clicks WHERE DATE(clicked_at) = ?");
+$stmt = $pdo->prepare("SELECT COUNT(*) as cnt FROM clicks WHERE DATE(clicked_at) = ?" . tf_not_test_sql('clicks'));
 $stmt->execute([$today]);
 $clicks_today = (int)$stmt->fetch()['cnt'];
 
-$stmt = $pdo->prepare("SELECT COUNT(*) as cnt FROM conversions WHERE DATE(converted_at) = ? AND status = 'complete'");
+$stmt = $pdo->prepare("SELECT COUNT(*) as cnt FROM conversions WHERE DATE(converted_at) = ? AND status = 'complete'" . tf_not_test_sql('conversions'));
 $stmt->execute([$today]);
 $completes_today = (int)$stmt->fetch()['cnt'];
 
-$stmt = $pdo->prepare("SELECT COALESCE(SUM(client_revenue), 0) as total FROM conversions WHERE DATE(converted_at) = ? AND status = 'complete'");
+$stmt = $pdo->prepare("SELECT COALESCE(SUM(client_revenue), 0) as total FROM conversions WHERE DATE(converted_at) = ? AND status = 'complete'" . tf_not_test_sql('conversions'));
 $stmt->execute([$today]);
 $revenue_today = (float)$stmt->fetch()['total'];
 
-$stmt = $pdo->prepare("SELECT COALESCE(SUM(vendor_cost), 0) as total FROM conversions WHERE DATE(converted_at) = ? AND status = 'complete'");
+$stmt = $pdo->prepare("SELECT COALESCE(SUM(vendor_cost), 0) as total FROM conversions WHERE DATE(converted_at) = ? AND status = 'complete'" . tf_not_test_sql('conversions'));
 $stmt->execute([$today]);
 $cost_today = (float)$stmt->fetch()['total'];
 
 $profit_today = $revenue_today - $cost_today;
 $profit_margin = $revenue_today > 0 ? round(($profit_today / $revenue_today) * 100, 1) : 0;
+$roi_today = $cost_today > 0 ? round(($profit_today / $cost_today) * 100, 1) : 0;
 $ccr_today = calc_ccr($completes_today, $clicks_today);
+
+$stmt = $pdo->prepare("SELECT COUNT(*) as cnt FROM global_vendors WHERE vendor_status = 'approved'");
+$stmt->execute();
+$active_vendors = (int)$stmt->fetch()['cnt'];
+
+$top_campaigns = $pdo->query("
+    SELECT p.id, p.project_code, p.project_name,
+           COUNT(c.id) AS completes,
+           COALESCE(SUM(c.profit), 0) AS profit
+    FROM conversions c
+    JOIN projects p ON p.id = c.project_id
+    WHERE c.status = 'complete' AND COALESCE(c.is_test, 0) = 0 AND c.converted_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+    GROUP BY p.id
+    ORDER BY completes DESC
+    LIMIT 5
+")->fetchAll();
+
+$recent_conversions = $pdo->query("
+    SELECT c.click_id, c.converted_at, c.client_revenue, c.profit, p.project_code, gv.vendor_name
+    FROM conversions c
+    JOIN projects p ON p.id = c.project_id
+    JOIN global_vendors gv ON gv.id = c.vendor_id
+    WHERE c.status = 'complete' AND COALESCE(c.is_test, 0) = 0
+    ORDER BY c.converted_at DESC
+    LIMIT 8
+")->fetchAll();
 
 // ─── Recent Projects ───
 $stmt = $pdo->prepare("
@@ -47,11 +74,11 @@ $recent_projects = $stmt->fetchAll();
 $chart_click_data = [];
 $chart_conv_data = [];
 
-$cc_stmt = $pdo->prepare("SELECT DATE(clicked_at) as d, COUNT(*) as cnt FROM clicks WHERE clicked_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY) GROUP BY DATE(clicked_at)");
+$cc_stmt = $pdo->prepare("SELECT DATE(clicked_at) as d, COUNT(*) as cnt FROM clicks WHERE clicked_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY) AND COALESCE(is_test, 0) = 0 GROUP BY DATE(clicked_at)");
 $cc_stmt->execute();
 while ($row = $cc_stmt->fetch()) { $chart_click_data[$row['d']] = (int)$row['cnt']; }
 
-$ccv_stmt = $pdo->prepare("SELECT DATE(converted_at) as d, COUNT(*) as cnt FROM conversions WHERE status = 'complete' AND converted_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY) GROUP BY DATE(converted_at)");
+$ccv_stmt = $pdo->prepare("SELECT DATE(converted_at) as d, COUNT(*) as cnt FROM conversions WHERE status = 'complete' AND COALESCE(is_test, 0) = 0 AND converted_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY) GROUP BY DATE(converted_at)");
 $ccv_stmt->execute();
 while ($row = $ccv_stmt->fetch()) { $chart_conv_data[$row['d']] = (int)$row['cnt']; }
 
@@ -92,6 +119,10 @@ require_once __DIR__ . '/helpers/layout_header.php';
             <div>
                 <div style="font-size: .7rem; text-transform: uppercase; letter-spacing: .08em; opacity: .75; font-weight: 700;">Revenue</div>
                 <div style="font-size: 1.75rem; font-weight: 800; line-height: 1.1; margin-top: .25rem;"><?php echo format_currency($revenue_today); ?></div>
+            </div>
+            <div>
+                <div style="font-size: .7rem; text-transform: uppercase; letter-spacing: .08em; opacity: .75; font-weight: 700;">ROI</div>
+                <div style="font-size: 1.75rem; font-weight: 800; line-height: 1.1; margin-top: .25rem;"><?php echo $roi_today; ?>%</div>
             </div>
             <div>
                 <div style="font-size: .7rem; text-transform: uppercase; letter-spacing: .08em; opacity: .75; font-weight: 700;">Cost</div>
@@ -155,6 +186,15 @@ require_once __DIR__ . '/helpers/layout_header.php';
                 <p class="tf-stat-value is-currency is-negative"><?php echo format_currency($cost_today); ?></p>
             </div>
             <div class="tf-stat-icon is-red" aria-hidden="true"><i class="bi bi-arrow-down-circle-fill"></i></div>
+        </article>
+    </div>
+    <div class="col-6 col-lg-4 col-xl-2">
+        <article class="tf-stat">
+            <div class="tf-stat-body">
+                <p class="tf-stat-label">Active Vendors</p>
+                <p class="tf-stat-value"><?php echo number_format($active_vendors); ?></p>
+            </div>
+            <div class="tf-stat-icon is-indigo" aria-hidden="true"><i class="bi bi-people-fill"></i></div>
         </article>
     </div>
 </div>
@@ -228,6 +268,73 @@ require_once __DIR__ . '/helpers/layout_header.php';
                             </div>
                             <div class="flex-shrink-0">
                                 <?php echo status_badge($p['status']); ?>
+                            </div>
+                        </li>
+                        <?php endforeach; ?>
+                    </ul>
+                <?php endif; ?>
+            </div>
+        </section>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-12 col-xl-6">
+        <section class="tf-card h-100" aria-labelledby="top-campaigns-title">
+            <div class="tf-card-header">
+                <div>
+                    <h5 id="top-campaigns-title" class="tf-card-title">Top Campaigns</h5>
+                    <p class="tf-card-subtitle">Completes over the last 7 days</p>
+                </div>
+                <a href="<?php echo BASE_URL; ?>/reports/overview.php" class="btn btn-sm btn-outline-primary">Reports</a>
+            </div>
+            <div class="tf-card-body is-flush">
+                <?php if (empty($top_campaigns)): ?>
+                    <div class="tf-empty"><p class="mb-0">No conversions in the last 7 days.</p></div>
+                <?php else: ?>
+                    <ul class="list-unstyled mb-0">
+                        <?php foreach ($top_campaigns as $campaign): ?>
+                        <li class="project-row">
+                            <div class="min-w-0 flex-grow-1">
+                                <a href="<?php echo BASE_URL; ?>/projects/detail.php?id=<?php echo (int)$campaign['id']; ?>" class="project-name d-block text-truncate">
+                                    <?php echo sanitize($campaign['project_name']); ?>
+                                </a>
+                                <div class="project-code"><?php echo sanitize($campaign['project_code']); ?></div>
+                            </div>
+                            <div class="text-end flex-shrink-0">
+                                <div class="fw-semibold"><?php echo number_format((int)$campaign['completes']); ?></div>
+                                <div class="small text-muted"><?php echo format_currency($campaign['profit']); ?></div>
+                            </div>
+                        </li>
+                        <?php endforeach; ?>
+                    </ul>
+                <?php endif; ?>
+            </div>
+        </section>
+    </div>
+    <div class="col-12 col-xl-6">
+        <section class="tf-card h-100" aria-labelledby="recent-conversions-title">
+            <div class="tf-card-header">
+                <div>
+                    <h5 id="recent-conversions-title" class="tf-card-title">Recent Conversions</h5>
+                    <p class="tf-card-subtitle">Live postbacks, tests excluded</p>
+                </div>
+                <a href="<?php echo BASE_URL; ?>/convlogs/list.php" class="btn btn-sm btn-outline-primary">View All</a>
+            </div>
+            <div class="tf-card-body is-flush">
+                <?php if (empty($recent_conversions)): ?>
+                    <div class="tf-empty"><p class="mb-0">No conversions yet.</p></div>
+                <?php else: ?>
+                    <ul class="list-unstyled mb-0">
+                        <?php foreach ($recent_conversions as $conversion): ?>
+                        <li class="project-row">
+                            <div class="min-w-0 flex-grow-1">
+                                <div class="project-name"><?php echo sanitize($conversion['project_code']); ?></div>
+                                <div class="small text-muted"><?php echo sanitize($conversion['vendor_name']); ?> · <code><?php echo sanitize(substr($conversion['click_id'], 0, 10)); ?></code></div>
+                            </div>
+                            <div class="text-end flex-shrink-0">
+                                <div class="fw-semibold"><?php echo format_currency($conversion['client_revenue']); ?></div>
+                                <div class="small text-muted"><?php echo sanitize($conversion['converted_at']); ?></div>
                             </div>
                         </li>
                         <?php endforeach; ?>

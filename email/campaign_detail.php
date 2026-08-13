@@ -83,12 +83,12 @@ require_once __DIR__ . '/../helpers/layout_header.php';
 <div class="row g-3 mb-4">
     <div class="col-6 col-md-3"><div class="kpi-card"><div class="kpi-label">Total</div><div class="kpi-value"><?php echo number_format((int)($stats['total'] ?? 0)); ?></div></div></div>
     <div class="col-6 col-md-3"><div class="kpi-card"><div class="kpi-label">Sent</div><div class="kpi-value"><?php echo number_format((int)($stats['sent'] ?? 0)); ?></div></div></div>
-    <div class="col-6 col-md-3"><div class="kpi-card"><div class="kpi-label">Opened</div><div class="kpi-value"><?php echo number_format((int)($stats['opened'] ?? 0)); ?></div></div></div>
-    <div class="col-6 col-md-3"><div class="kpi-card"><div class="kpi-label">Clicked</div><div class="kpi-value"><?php echo number_format((int)($stats['clicked'] ?? 0)); ?></div></div></div>
     <div class="col-6 col-md-3"><div class="kpi-card"><div class="kpi-label">Converted</div><div class="kpi-value"><?php echo number_format((int)($stats['converted'] ?? 0)); ?></div></div></div>
-    <div class="col-6 col-md-3"><div class="kpi-card"><div class="kpi-label">Bounced</div><div class="kpi-value"><?php echo number_format((int)($stats['bounced'] ?? 0)); ?></div></div></div>
     <div class="col-6 col-md-3"><div class="kpi-card"><div class="kpi-label">Failed</div><div class="kpi-value"><?php echo number_format((int)($stats['failed'] ?? 0)); ?></div></div></div>
     <div class="col-6 col-md-3"><div class="kpi-card"><div class="kpi-label">Skipped</div><div class="kpi-value"><?php echo number_format((int)($stats['skipped'] ?? 0)); ?></div></div></div>
+    <div class="col-6 col-md-3"><div class="kpi-card"><div class="kpi-label">Delivered</div><div class="kpi-value text-muted" style="font-size:1rem;">Unavailable</div><div class="small text-muted">No provider webhooks</div></div></div>
+    <div class="col-6 col-md-3"><div class="kpi-card"><div class="kpi-label">Opened</div><div class="kpi-value text-muted" style="font-size:1rem;">Unavailable</div><div class="small text-muted">No provider webhooks</div></div></div>
+    <div class="col-6 col-md-3"><div class="kpi-card"><div class="kpi-label">Clicked / Bounce</div><div class="kpi-value text-muted" style="font-size:1rem;">Unavailable</div><div class="small text-muted">No provider webhooks</div></div></div>
 </div>
 
 <div class="card border-0 shadow-sm mb-4">
@@ -115,22 +115,20 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                     <th>Country</th>
                     <th>Status</th>
                     <th>Sent At</th>
-                    <th>Opened</th>
-                    <th>Clicked</th>
+                    <th>Opened / Clicked</th>
                     <th>Converted</th>
                 </tr>
             </thead>
             <tbody>
                 <?php if (empty($sends)): ?>
-                    <tr><td colspan="7" class="text-center py-5 text-muted">No send records yet.</td></tr>
+                    <tr><td colspan="6" class="text-center py-5 text-muted">No send records yet.</td></tr>
                 <?php else: foreach ($sends as $s): ?>
                     <tr>
                         <td><?php echo sanitize($s['recipient_name'] ? $s['recipient_name'] . ' <' . $s['recipient_email'] . '>' : $s['recipient_email']); ?></td>
                         <td><?php echo sanitize($s['country'] ?? '-'); ?></td>
                         <td><?php echo status_badge($s['status']); ?></td>
                         <td class="text-muted small"><?php echo sanitize($s['sent_at'] ?? '-'); ?></td>
-                        <td><?php echo $s['opened_at'] ? '<i class="bi bi-check2 text-success"></i>' : '-'; ?></td>
-                        <td><?php echo $s['clicked_at'] ? '<i class="bi bi-check2 text-success"></i>' : '-'; ?></td>
+                        <td class="small text-muted">Unavailable</td>
                         <td><?php echo $s['converted_at'] ? '<i class="bi bi-check2 text-success"></i>' : '-'; ?></td>
                     </tr>
                 <?php endforeach; endif; ?>

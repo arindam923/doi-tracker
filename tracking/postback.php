@@ -64,6 +64,8 @@ if (!$rl_click['allowed']) {
     die('Too many requests for this click');
 }
 
+$is_test = 0;
+
 try {
     $pdo->beginTransaction();
 
@@ -172,31 +174,36 @@ try {
     $now = date('Y-m-d H:i:s');
     $time_diff_seconds = max(0, strtotime($now) - strtotime($click_time));
 
+    $is_test = (int)($click['is_test'] ?? 0);
+
     $stmt = $pdo->prepare("
         INSERT INTO conversions (click_id, project_id, vendor_id, status, client_revenue, sale_amount, currency,
-            vendor_cost, payout, profit, transaction_id, click_time, time_diff_seconds, sub1, sub2, sub3, sub4, sub5)
-        VALUES (?, ?, ?, 'complete', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            vendor_cost, payout, profit, transaction_id, click_time, time_diff_seconds, is_test, sub1, sub2, sub3, sub4, sub5)
+        VALUES (?, ?, ?, 'complete', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ");
-    $stmt->execute([$click_id, $project_id, $vendor_id, $revenue, $sale_amount, $currency, $cost, $payout, $profit, $transaction_id, $click_time, $time_diff_seconds, $sub1, $sub2, $sub3, $sub4, $sub5]);
+    $stmt->execute([$click_id, $project_id, $vendor_id, $revenue, $sale_amount, $currency, $cost, $payout, $profit, $transaction_id, $click_time, $time_diff_seconds, $is_test, $sub1, $sub2, $sub3, $sub4, $sub5]);
 
     $pdo->prepare("UPDATE clicks SET is_converted = 1 WHERE click_id = ?")->execute([$click_id]);
-    $pdo->prepare("UPDATE projects SET completes_count = completes_count + 1 WHERE id = ?")->execute([$project_id]);
 
-    if ($project['total_quota'] > 0) {
-        $count_stmt = $pdo->prepare("SELECT completes_count FROM projects WHERE id = ?");
-        $count_stmt->execute([$project_id]);
-        $new_count = $count_stmt->fetch()['completes_count'];
+    if (!$is_test) {
+        $pdo->prepare("UPDATE projects SET completes_count = completes_count + 1 WHERE id = ?")->execute([$project_id]);
 
-        if ($new_count >= $project['total_quota']) {
-            $pdo->prepare("UPDATE projects SET status = 'hold' WHERE id = ?")->execute([$project_id]);
-            $pdo->prepare("UPDATE project_vendor SET status = 'hold' WHERE project_id = ? AND status = 'active'")->execute([$project_id]);
+        if ($project['total_quota'] > 0) {
+            $count_stmt = $pdo->prepare("SELECT completes_count FROM projects WHERE id = ?");
+            $count_stmt->execute([$project_id]);
+            $new_count = $count_stmt->fetch()['completes_count'];
 
-            $pdo->prepare("INSERT INTO logs (log_type, project_id, status, message) VALUES (?, ?, ?, ?)")
-                ->execute(['status_change', $project_id, 'success', 'Auto-held: quota reached (' . $new_count . '/' . $project['total_quota'] . ')']);
+            if ($new_count >= $project['total_quota']) {
+                $pdo->prepare("UPDATE projects SET status = 'hold' WHERE id = ?")->execute([$project_id]);
+                $pdo->prepare("UPDATE project_vendor SET status = 'hold' WHERE project_id = ? AND status = 'active'")->execute([$project_id]);
+
+                $pdo->prepare("INSERT INTO logs (log_type, project_id, status, message) VALUES (?, ?, ?, ?)")
+                    ->execute(['status_change', $project_id, 'success', 'Auto-held: quota reached (' . $new_count . '/' . $project['total_quota'] . ')']);
+            }
         }
     }
 
-    log_postback($pdo, $project_id, $vendor_id, $click_id, 'success', 'Conversion recorded', $payload, $ip_address, 'OK:RECORDED');
+    log_postback($pdo, $project_id, $vendor_id, $click_id, 'success', $is_test ? 'Test conversion recorded' : 'Conversion recorded', $payload, $ip_address, $is_test ? 'OK:TEST' : 'OK:RECORDED');
 
     $pdo->commit();
 } catch (Exception $e) {
@@ -206,9 +213,9 @@ try {
     die('System error');
 }
 
-// Fire vendor postback with macro expansion
+// Fire vendor postback with macro expansion (skip test traffic)
 $vendor_postback_status = 'no_url';
-if (!empty($vendor['postback_url'])) {
+if (!$is_test && !empty($vendor['postback_url'])) {
     $vendor_url = $vendor['postback_url'];
     $macros = [
         '{click_id}' => $click_id,
@@ -248,7 +255,7 @@ if (!empty($vendor['postback_url'])) {
 $global_enabled = get_setting($pdo, 'global_postback_enabled', '0') === '1';
 $global_url     = trim(get_setting($pdo, 'global_postback_url', ''));
 $global_status  = 'disabled';
-if ($global_enabled && $global_url !== '') {
+if (!$is_test && $global_enabled && $global_url !== '') {
     $macros = [
         '{click_id}' => $click_id,
         '{status}' => $status,

@@ -14,6 +14,7 @@ $from_date = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['from'] ?? '') ? $_GET['f
 $to_date   = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['to'] ?? '') ? $_GET['to'] : date('Y-m-d');
 $project_filter = intval($_GET['project_id'] ?? 0);
 $type = $_GET['type'] ?? 'conversions'; // clicks or conversions
+[$sub_sql, $sub_params] = tf_sub_sql($type === 'clicks' ? 'cl' : 'cv');
 
 if ($type === 'clicks') {
     // Export raw clicks
@@ -22,8 +23,8 @@ if ($type === 'clicks') {
             FROM clicks cl
             JOIN projects p ON cl.project_id = p.id
             JOIN global_vendors gv ON cl.vendor_id = gv.id
-            WHERE cl.clicked_at BETWEEN ? AND DATE_ADD(?, INTERVAL 1 DAY)";
-    $params = [$from_date, $to_date];
+            WHERE cl.clicked_at BETWEEN ? AND DATE_ADD(?, INTERVAL 1 DAY)" . tf_not_test_sql('cl') . $sub_sql;
+    $params = array_merge([$from_date, $to_date], $sub_params);
     if ($project_filter) {
         $sql .= " AND cl.project_id = ?";
         $params[] = $project_filter;
@@ -61,8 +62,8 @@ if ($type === 'clicks') {
             FROM conversions cv
             JOIN projects p ON cv.project_id = p.id
             JOIN global_vendors gv ON cv.vendor_id = gv.id
-            WHERE cv.converted_at BETWEEN ? AND DATE_ADD(?, INTERVAL 1 DAY)";
-    $params = [$from_date, $to_date];
+            WHERE cv.converted_at BETWEEN ? AND DATE_ADD(?, INTERVAL 1 DAY)" . tf_not_test_sql('cv') . $sub_sql;
+    $params = array_merge([$from_date, $to_date], $sub_params);
     if ($project_filter) {
         $sql .= " AND cv.project_id = ?";
         $params[] = $project_filter;
