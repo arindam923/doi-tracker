@@ -45,17 +45,12 @@ $users_opt = $pdo->query("SELECT id, username FROM users ORDER BY username")->fe
 $page_title = 'Audit Log';
 require_once __DIR__ . '/../helpers/layout_header.php';
 ?>
-<style>
-    .table-audit thead th { font-size: .7rem; letter-spacing: .06em; text-transform: uppercase; color: #64748b; font-weight: 600; background: #f8fafc; }
-    .table-audit tbody td { vertical-align: middle; padding: .85rem 1rem; }
-    .audit-badge { font-size: .68rem; letter-spacing: .02em; font-weight: 600; padding: .25rem .5rem; border-radius: 9999px; }
-</style>
 
-<div class="card border-0 shadow-sm mb-4">
+<div class="tf-card mb-4">
     <form method="GET" class="card-body">
         <div class="row g-2 align-items-end">
             <div class="col-12 col-md-2">
-                <label class="form-label small fw-semibold text-secondary">Actor</label>
+                <label class="tf-label">Actor</label>
                 <select name="actor_id" class="form-select form-select-sm">
                     <option value="">All</option>
                     <?php foreach ($users_opt as $u): ?>
@@ -64,7 +59,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                 </select>
             </div>
             <div class="col-6 col-md-2">
-                <label class="form-label small fw-semibold text-secondary">Action</label>
+                <label class="tf-label">Action</label>
                 <select name="action" class="form-select form-select-sm">
                     <option value="">All</option>
                     <?php foreach ($action_options as $a): ?>
@@ -73,7 +68,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                 </select>
             </div>
             <div class="col-6 col-md-2">
-                <label class="form-label small fw-semibold text-secondary">Entity Type</label>
+                <label class="tf-label">Entity Type</label>
                 <select name="entity_type" class="form-select form-select-sm">
                     <option value="">All</option>
                     <option value="project" <?php echo $entity_type_filter === 'project' ? 'selected' : ''; ?>>Project</option>
@@ -85,27 +80,27 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                 </select>
             </div>
             <div class="col-6 col-md-2">
-                <label class="form-label small fw-semibold text-secondary">Entity ID</label>
+                <label class="tf-label">Entity ID</label>
                 <input type="text" name="entity_id" class="form-control form-control-sm" value="<?php echo sanitize($entity_id_filter); ?>">
             </div>
             <div class="col-6 col-md-2">
-                <label class="form-label small fw-semibold text-secondary">From</label>
+                <label class="tf-label">From</label>
                 <input type="date" name="from" class="form-control form-control-sm" value="<?php echo sanitize($from_date); ?>">
             </div>
             <div class="col-6 col-md-1">
-                <label class="form-label small fw-semibold text-secondary">To</label>
+                <label class="tf-label">To</label>
                 <input type="date" name="to" class="form-control form-control-sm" value="<?php echo sanitize($to_date); ?>">
             </div>
             <div class="col-12 col-md-1 d-flex gap-2">
                 <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-funnel"></i></button>
-                <a href="<?php echo BASE_URL; ?>/audit/list.php" class="btn btn-outline-secondary btn-sm" title="Reset"><i class="bi bi-arrow-counterclockwise"></i></a>
+                <a href="<?php echo BASE_URL; ?>/audit/list.php" class="btn btn-outline-secondary btn-sm btn-icon" aria-label="Reset filters"><i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i></a>
             </div>
         </div>
     </form>
 </div>
 
-<div class="card border-0 shadow-sm">
-    <div class="card-header bg-white border-bottom py-3">
+<div class="tf-card">
+    <div class="tf-card-header">
         <h5 class="mb-0 fw-semibold"><?php echo number_format($total); ?> audit entries</h5>
     </div>
     <div class="table-responsive">
@@ -138,7 +133,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
             </tbody>
         </table>
     </div>
-    <div class="card-footer bg-white py-3"><?php echo render_pagination($pagination, BASE_URL . '/audit/list.php?' . http_build_query($_GET)); ?></div>
+    <div class="tf-card-footer"><?php echo render_pagination($pagination, BASE_URL . '/audit/list.php?' . http_build_query($_GET)); ?></div>
 </div>
 
 <?php require_once __DIR__ . '/../helpers/layout_footer.php'; ?>

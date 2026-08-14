@@ -145,14 +145,10 @@ $page_actions = '<a href="' . BASE_URL . '/reports/scheduled_reports.php?action=
 require_once __DIR__ . '/../helpers/layout_header.php';
 ?>
 
-<style>
-    .table-sr thead th { font-size: .7rem; letter-spacing: .06em; text-transform: uppercase; color: #64748b; font-weight: 600; background: #f8fafc; }
-    .table-sr tbody td { vertical-align: middle; padding: .85rem 1rem; }
-</style>
 
 <?php if ($action === 'new' || ($action === 'edit' && $edit_data)): ?>
-<div class="card border-0 shadow-sm mb-4">
-    <div class="card-header bg-white border-bottom py-3">
+<div class="tf-card mb-4">
+    <div class="tf-card-header">
         <h5 class="mb-0 fw-semibold"><?php echo $edit_data ? 'Edit' : 'New'; ?> Scheduled Report</h5>
     </div>
     <div class="card-body">
@@ -164,19 +160,19 @@ require_once __DIR__ . '/../helpers/layout_header.php';
             <?php endif; ?>
             <div class="row g-3">
                 <div class="col-12">
-                    <label class="form-label small fw-semibold text-secondary">Title <span class="text-danger">*</span></label>
+                    <label class="tf-label">Title <span class="text-danger">*</span></label>
                     <input type="text" name="title" class="form-control" required maxlength="255"
                            value="<?php echo sanitize($edit_data['title'] ?? ''); ?>" placeholder="Weekly Revenue Summary">
                 </div>
                 <div class="col-6 col-md-3">
-                    <label class="form-label small fw-semibold text-secondary">Report Type</label>
+                    <label class="tf-label">Report Type</label>
                     <select name="report_type" class="form-select">
                         <option value="overview" <?php echo ($edit_data['report_type'] ?? '') === 'overview' ? 'selected' : ''; ?>>Revenue Report</option>
                         <option value="traffic_summary" <?php echo ($edit_data['report_type'] ?? '') === 'traffic_summary' ? 'selected' : ''; ?>>Traffic Summary</option>
                     </select>
                 </div>
                 <div class="col-6 col-md-3">
-                    <label class="form-label small fw-semibold text-secondary">Group By</label>
+                    <label class="tf-label">Group By</label>
                     <select name="group_by" class="form-select">
                         <?php foreach (['project'=>'Project','vendor'=>'Vendor','client'=>'Client','country'=>'Country','device'=>'Device'] as $val => $lbl): ?>
                         <option value="<?php echo $val; ?>" <?php echo ($edit_data['group_by'] ?? 'project') === $val ? 'selected' : ''; ?>><?php echo sanitize($lbl); ?></option>
@@ -184,7 +180,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                     </select>
                 </div>
                 <div class="col-6 col-md-3">
-                    <label class="form-label small fw-semibold text-secondary">Frequency</label>
+                    <label class="tf-label">Frequency</label>
                     <select name="frequency" class="form-select">
                         <option value="daily" <?php echo ($edit_data['frequency'] ?? 'daily') === 'daily' ? 'selected' : ''; ?>>Daily</option>
                         <option value="weekly" <?php echo ($edit_data['frequency'] ?? 'daily') === 'weekly' ? 'selected' : ''; ?>>Weekly</option>
@@ -193,14 +189,14 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                     </select>
                 </div>
                 <div class="col-6 col-md-3" id="customCronGroup" style="<?php echo ($edit_data['frequency'] ?? '') === 'custom_cron' ? '' : 'display:none;'; ?>">
-                    <label class="form-label small fw-semibold text-secondary">Cron Expression</label>
+                    <label class="tf-label">Cron Expression</label>
                     <input type="text" name="custom_cron" class="form-control font-monospace small"
                            value="<?php echo sanitize($edit_data['custom_cron'] ?? ''); ?>"
                            placeholder="0 9 * * 1">
                     <p class="form-text mb-0">5-field cron (min hour dom month dow)</p>
                 </div>
                 <div class="col-12">
-                    <label class="form-label small fw-semibold text-secondary">Project Filter</label>
+                    <label class="tf-label">Project Filter</label>
                     <select name="project_id" class="form-select">
                         <option value="">All Projects</option>
                         <?php foreach ($projects_list as $p): ?>
@@ -213,7 +209,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                     </select>
                 </div>
                 <div class="col-12">
-                    <label class="form-label small fw-semibold text-secondary">Recipients (CSV) <span class="text-danger">*</span></label>
+                    <label class="tf-label">Recipients (CSV) <span class="text-danger">*</span></label>
                     <input type="text" name="recipients_csv" class="form-control font-monospace small" required
                            value="<?php echo sanitize($edit_data['recipients_csv'] ?? ''); ?>"
                            placeholder="alice@example.com, bob@example.com">
@@ -228,7 +224,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                     </div>
                 </div>
                 <div class="col-12">
-                    <label class="form-label small fw-semibold text-secondary">Last Run</label>
+                    <label class="tf-label">Last Run</label>
                     <div class="text-secondary small"><?php echo $edit_data['last_run_at'] ? sanitize(date('M j, Y H:i', strtotime($edit_data['last_run_at']))) : '<span class="text-muted">Never</span>'; ?></div>
                 </div>
                 <?php endif; ?>
@@ -251,7 +247,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
 </script>
 <?php else: ?>
 
-<div class="card border-0 shadow-sm">
+<div class="tf-card">
     <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
         <h5 class="mb-0 fw-semibold"><?php echo number_format($total); ?> scheduled report(s)</h5>
         <a href="<?php echo BASE_URL; ?>/reports/scheduled_reports.php?action=new" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg"></i>Schedule Report</a>
@@ -312,7 +308,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
         </table>
     </div>
     <?php if ($total > $per_page): ?>
-    <div class="card-footer bg-white py-3">
+    <div class="tf-card-footer">
         <?php echo render_pagination($pagination, BASE_URL . '/reports/scheduled_reports.php'); ?>
     </div>
     <?php endif; ?>

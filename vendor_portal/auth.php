@@ -147,12 +147,12 @@ $has_error = $flash && ($flash['type'] === 'danger' || $flash['type'] === 'warni
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Vendor portal sign in for <?php echo htmlspecialchars(SITE_NAME, ENT_QUOTES, 'UTF-8'); ?>">
-    <meta name="theme-color" content="#4f46e5">
+    <meta name="theme-color" content="#0f766e">
     <title>Vendor Portal — Sign In — <?php echo htmlspecialchars(SITE_NAME, ENT_QUOTES, 'UTF-8'); ?></title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="<?php echo BASE_URL; ?>/assets/css/app.css?v=<?php echo filemtime(__DIR__ . '/../assets/css/app.css'); ?>" rel="stylesheet">
@@ -161,11 +161,8 @@ $has_error = $flash && ($flash['type'] === 'danger' || $flash['type'] === 'warni
 
     <a class="tf-skip-link" href="#vendor-login-form">Skip to sign in form</a>
 
-    <main class="tf-login-page" style="background: linear-gradient(135deg, #0f0a2e 0%, #1e1b4b 50%, #312e81 100%);">
-        <div class="login-blob is-indigo" style="top: -12rem; right: -12rem; width: 28rem; height: 28rem; opacity: .22;" aria-hidden="true"></div>
-        <div class="login-blob is-emerald" style="bottom: -14rem; left: -14rem; width: 30rem; height: 30rem; opacity: .18;" aria-hidden="true"></div>
-
-        <div class="tf-login-card" style="max-width: 28rem;" role="region" aria-labelledby="vendor-login-heading">
+    <main class="tf-login-page">
+        <div class="tf-login-card" role="region" aria-labelledby="vendor-login-heading">
             <div class="tf-login-header">
                 <div class="tf-login-logo" aria-hidden="true">
                     <i class="bi bi-graph-up-arrow"></i>

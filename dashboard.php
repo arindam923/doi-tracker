@@ -75,7 +75,7 @@ require_once __DIR__ . '/helpers/layout_header.php';
 
 <!-- Hero Header -->
 <section class="tf-hero" aria-labelledby="dashboard-greeting">
-    <div class="d-flex justify-content-between align-items-start flex-wrap gap-4 position-relative" style="z-index: 1;">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-4 tf-hero-content">
         <div>
             <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
                 <span class="tf-hero-pill"><span class="dot" aria-hidden="true"></span>Today</span>
@@ -84,18 +84,18 @@ require_once __DIR__ . '/helpers/layout_header.php';
             <h1 id="dashboard-greeting" class="tf-hero-title"><?php echo $greeting; ?>, <?php echo sanitize($first_name); ?></h1>
             <p class="tf-hero-subtitle">Here's what's happening with your campaigns today</p>
         </div>
-        <div class="d-flex gap-4 flex-wrap">
+        <div class="tf-hero-metrics">
             <div>
-                <div style="font-size: .7rem; text-transform: uppercase; letter-spacing: .08em; opacity: .75; font-weight: 700;">Net Profit</div>
-                <div style="font-size: 1.75rem; font-weight: 800; line-height: 1.1; margin-top: .25rem;"><?php echo format_currency($profit_today); ?></div>
+                <div class="tf-hero-metric-label">Net Profit</div>
+                <div class="tf-hero-metric-value is-accent"><?php echo format_currency($profit_today); ?></div>
             </div>
             <div>
-                <div style="font-size: .7rem; text-transform: uppercase; letter-spacing: .08em; opacity: .75; font-weight: 700;">Revenue</div>
-                <div style="font-size: 1.75rem; font-weight: 800; line-height: 1.1; margin-top: .25rem;"><?php echo format_currency($revenue_today); ?></div>
+                <div class="tf-hero-metric-label">Revenue</div>
+                <div class="tf-hero-metric-value"><?php echo format_currency($revenue_today); ?></div>
             </div>
             <div>
-                <div style="font-size: .7rem; text-transform: uppercase; letter-spacing: .08em; opacity: .75; font-weight: 700;">Cost</div>
-                <div style="font-size: 1.75rem; font-weight: 800; line-height: 1.1; margin-top: .25rem;"><?php echo format_currency($cost_today); ?></div>
+                <div class="tf-hero-metric-label">Cost</div>
+                <div class="tf-hero-metric-value"><?php echo format_currency($cost_today); ?></div>
             </div>
         </div>
     </div>
@@ -183,10 +183,9 @@ require_once __DIR__ . '/helpers/layout_header.php';
                     </div>
                 </div>
             </div>
-            <div class="card-body p-4">
-                <div style="height: 360px; position: relative;">
-                    <canvas id="dashboardChart" role="img" aria-label="Bar chart showing clicks and conversions over the last 7 days"></canvas>
-                </div>
+            <div class="tf-chart-body" style="height: 360px;">
+                <p class="tf-visually-hidden">Last 7 days: <?php echo (int)array_sum($chart_clicks); ?> clicks and <?php echo (int)array_sum($chart_conversions); ?> conversions.</p>
+                <canvas id="dashboardChart" role="img" aria-label="Chart showing clicks and conversions over the last 7 days"></canvas>
             </div>
         </section>
     </div>
@@ -238,78 +237,6 @@ require_once __DIR__ . '/helpers/layout_header.php';
     </div>
 </div>
 
-<style>
-    .project-row {
-        display: flex;
-        align-items: center;
-        gap: .75rem;
-        padding: .875rem 1.25rem;
-        border-bottom: 1px solid var(--tf-border);
-        transition: background-color var(--tf-transition-fast);
-    }
-    .project-row:last-child { border-bottom: 0; }
-    .project-row:hover { background-color: var(--tf-surface-muted); }
-    .project-row .proj-icon {
-        width: 2.25rem;
-        height: 2.25rem;
-        border-radius: var(--tf-radius-sm);
-        background: linear-gradient(135deg, var(--tf-primary-50), var(--tf-primary-100));
-        color: var(--tf-primary-700);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 1rem;
-        flex-shrink: 0;
-    }
-    .project-row .project-name {
-        color: var(--tf-text);
-        font-weight: 700;
-        font-size: 0.875rem;
-        text-decoration: none;
-        line-height: 1.3;
-    }
-    .project-row .project-name:hover { color: var(--tf-primary-600); text-decoration: none; }
-    .project-row .project-name:focus-visible { outline-offset: 2px; }
-    .project-row .client-name { color: var(--tf-muted); font-size: 0.75rem; font-weight: 500; }
-    @media (prefers-color-scheme: dark) {
-        .project-row .proj-icon { background: rgba(99, 102, 241, 0.15); color: #a5b4fc; }
-    }
-
-    .tf-empty-action {
-        display: inline-flex;
-        align-items: center;
-        gap: .5rem;
-        padding: .6rem 1.25rem;
-        background: linear-gradient(135deg, var(--tf-primary-600), var(--tf-primary-700));
-        color: #fff;
-        border-radius: var(--tf-radius-full);
-        font-weight: 600;
-        font-size: 0.875rem;
-        text-decoration: none;
-        box-shadow: 0 6px 20px -4px rgba(79, 70, 229, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.18);
-        transition: transform var(--tf-transition-fast), box-shadow var(--tf-transition-fast), background-color var(--tf-transition-fast);
-    }
-    .tf-empty-action:hover {
-        color: #fff;
-        text-decoration: none;
-        transform: translateY(-1px);
-        box-shadow: 0 10px 24px -4px rgba(79, 70, 229, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.18);
-        background: linear-gradient(135deg, var(--tf-primary-700), var(--tf-primary-800));
-    }
-    .tf-create-icon {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 1.35rem;
-        height: 1.35rem;
-        border-radius: var(--tf-radius-full);
-        background: rgba(255, 255, 255, 0.22);
-        font-size: 1rem;
-        font-weight: 700;
-        line-height: 1;
-        flex-shrink: 0;
-    }
-</style>
 
 <?php
 $chart_labels_json = json_encode($chart_labels);
@@ -329,8 +256,8 @@ const convData = {$chart_conv_json};
 const clicksBar = (ctx) => {
     const c = ctx.chart.ctx;
     const g = c.createLinearGradient(0, 0, 0, 320);
-    g.addColorStop(0, 'rgba(99, 102, 241, .95)');
-    g.addColorStop(1, 'rgba(99, 102, 241, .55)');
+    g.addColorStop(0, 'rgba(20, 184, 166, .95)');
+    g.addColorStop(1, 'rgba(20, 184, 166, .55)');
     return g;
 };
 const convBar = (ctx) => {
@@ -343,8 +270,8 @@ const convBar = (ctx) => {
 const clicksLine = (ctx) => {
     const c = ctx.chart.ctx;
     const g = c.createLinearGradient(0, 0, 0, 320);
-    g.addColorStop(0, 'rgba(99, 102, 241, .28)');
-    g.addColorStop(1, 'rgba(99, 102, 241, 0)');
+    g.addColorStop(0, 'rgba(20, 184, 166, .28)');
+    g.addColorStop(1, 'rgba(20, 184, 166, 0)');
     return g;
 };
 const convLine = (ctx) => {
@@ -357,11 +284,11 @@ const convLine = (ctx) => {
 
 const buildDatasets = (view) => view === 'bar'
     ? [
-        { label: 'Clicks', data: clicksData, backgroundColor: clicksBar, hoverBackgroundColor: '#4f46e5', borderRadius: { topLeft: 6, topRight: 6 }, borderSkipped: false, barPercentage: 0.65, categoryPercentage: 0.7 },
+        { label: 'Clicks', data: clicksData, backgroundColor: clicksBar, hoverBackgroundColor: '#0f766e', borderRadius: { topLeft: 6, topRight: 6 }, borderSkipped: false, barPercentage: 0.65, categoryPercentage: 0.7 },
         { label: 'Conversions', data: convData, backgroundColor: convBar, hoverBackgroundColor: '#059669', borderRadius: { topLeft: 6, topRight: 6 }, borderSkipped: false, barPercentage: 0.65, categoryPercentage: 0.7 }
       ]
     : [
-        { label: 'Clicks', data: clicksData, borderColor: '#6366f1', backgroundColor: clicksLine, fill: true, tension: 0.4, pointRadius: 0, pointHoverRadius: 5, pointHoverBackgroundColor: '#6366f1', pointHoverBorderColor: '#fff', pointHoverBorderWidth: 2, borderWidth: 2.5 },
+        { label: 'Clicks', data: clicksData, borderColor: '#14b8a6', backgroundColor: clicksLine, fill: true, tension: 0.4, pointRadius: 0, pointHoverRadius: 5, pointHoverBackgroundColor: '#14b8a6', pointHoverBorderColor: '#fff', pointHoverBorderWidth: 2, borderWidth: 2.5 },
         { label: 'Conversions', data: convData, borderColor: '#10b981', backgroundColor: convLine, fill: true, tension: 0.4, pointRadius: 0, pointHoverRadius: 5, pointHoverBackgroundColor: '#10b981', pointHoverBorderColor: '#fff', pointHoverBorderWidth: 2, borderWidth: 2.5 }
       ];
 
@@ -380,7 +307,7 @@ const baseOptions = {
             bodyFont: { size: 13 },
             padding: { top: 10, right: 12, bottom: 10, left: 12 },
             cornerRadius: 10,
-            borderColor: 'rgba(99, 102, 241, .35)',
+            borderColor: 'rgba(20, 184, 166, .35)',
             borderWidth: 1,
             displayColors: true,
             boxWidth: 8, boxHeight: 8, usePointStyle: true, boxPadding: 4

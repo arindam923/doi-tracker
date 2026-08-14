@@ -55,12 +55,6 @@ $page_title = 'Campaign Detail';
 require_once __DIR__ . '/../helpers/layout_header.php';
 ?>
 
-<style>
-    .campaign-hero { background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: #fff; border-radius: 1rem; padding: 1.25rem; margin-bottom: 1.25rem; }
-    .kpi-card { border: 1px solid #e2e8f0; border-radius: .875rem; background: #fff; padding: 1rem; }
-    .kpi-card .kpi-label { font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; color: #64748b; font-weight: 600; }
-    .kpi-card .kpi-value { font-size: 1.25rem; font-weight: 700; color: #0f172a; }
-</style>
 
 <div class="campaign-hero">
     <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
@@ -91,8 +85,8 @@ require_once __DIR__ . '/../helpers/layout_header.php';
     <div class="col-6 col-md-3"><div class="kpi-card"><div class="kpi-label">Skipped</div><div class="kpi-value"><?php echo number_format((int)($stats['skipped'] ?? 0)); ?></div></div></div>
 </div>
 
-<div class="card border-0 shadow-sm mb-4">
-    <div class="card-header bg-white border-bottom py-3"><h5 class="mb-0 fw-semibold">Configuration</h5></div>
+<div class="tf-card mb-4">
+    <div class="tf-card-header"><h5 class="mb-0 fw-semibold">Configuration</h5></div>
     <div class="card-body">
         <div class="row g-3">
             <div class="col-6 col-md-3"><strong>Status</strong><div><?php echo status_badge($campaign['status']); ?></div></div>
@@ -103,8 +97,8 @@ require_once __DIR__ . '/../helpers/layout_header.php';
     </div>
 </div>
 
-<div class="card border-0 shadow-sm">
-    <div class="card-header bg-white border-bottom py-3">
+<div class="tf-card">
+    <div class="tf-card-header">
         <h5 class="mb-0 fw-semibold">Recipients</h5>
     </div>
     <div class="table-responsive">
@@ -137,7 +131,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
             </tbody>
         </table>
     </div>
-    <div class="card-footer bg-white py-3"><?php echo render_pagination($pagination, BASE_URL . '/email/campaign_detail.php?id=' . $id . '&' . http_build_query($_GET)); ?></div>
+    <div class="tf-card-footer"><?php echo render_pagination($pagination, BASE_URL . '/email/campaign_detail.php?id=' . $id . '&' . http_build_query($_GET)); ?></div>
 </div>
 
 <?php require_once __DIR__ . '/../helpers/layout_footer.php'; ?>

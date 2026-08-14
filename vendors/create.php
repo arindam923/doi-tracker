@@ -152,8 +152,8 @@ require_once __DIR__ . '/../helpers/layout_header.php';
 
 <div class="row justify-content-center">
     <div class="col-12 col-lg-10">
-        <div class="card border-0 shadow-sm">
-            <div class="card-header bg-white border-bottom py-3">
+        <div class="tf-card">
+            <div class="tf-card-header">
                 <h5 class="mb-0 fw-semibold">
                     Add Vendor
                     <?php if ($project): ?>to: <?php echo sanitize($project['project_name']); ?><?php endif; ?>
@@ -165,24 +165,24 @@ require_once __DIR__ . '/../helpers/layout_header.php';
 
                     <div class="row g-3">
                         <div class="col-12 col-md-8">
-                            <label for="vendor_name" class="form-label small fw-semibold text-secondary">Vendor Name <span class="text-danger">*</span></label>
+                            <label for="vendor_name" class="tf-label">Vendor Name <span class="text-danger">*</span></label>
                             <input type="text" id="vendor_name" name="vendor_name" class="form-control"
                                    value="<?php echo sanitize($form_data['vendor_name'] ?? ''); ?>" required>
                         </div>
 
                         <div class="col-12 col-md-4">
-                            <label class="form-label small fw-semibold text-secondary">Vendor Code</label>
+                            <label class="tf-label">Vendor Code</label>
                             <input type="text" class="form-control" value="(auto-generated)" disabled>
                         </div>
 
                         <div class="col-12 col-md-8">
-                            <label for="company_name" class="form-label small fw-semibold text-secondary">Company Name</label>
+                            <label for="company_name" class="tf-label">Company Name</label>
                             <input type="text" id="company_name" name="company_name" class="form-control"
                                    value="<?php echo sanitize($form_data['company_name'] ?? ''); ?>">
                         </div>
 
                         <div class="col-6 col-md-4">
-                            <label for="traffic_type" class="form-label small fw-semibold text-secondary">Traffic Type</label>
+                            <label for="traffic_type" class="tf-label">Traffic Type</label>
                             <select id="traffic_type" name="traffic_type" class="form-select">
                                 <?php $tt = $form_data['traffic_type'] ?? 'Other'; foreach (tf_traffic_types() as $t): ?>
                                 <option value="<?php echo $t; ?>" <?php echo $tt === $t ? 'selected' : ''; ?>><?php echo sanitize($t); ?></option>
@@ -191,7 +191,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                         </div>
 
                         <div class="col-6 col-md-4">
-                            <label for="vendor_status" class="form-label small fw-semibold text-secondary">Vendor Status</label>
+                            <label for="vendor_status" class="tf-label">Vendor Status</label>
                             <select id="vendor_status" name="vendor_status" class="form-select">
                                 <?php $vs = $form_data['vendor_status'] ?? 'approved'; foreach (tf_vendor_statuses() as $key => $label): ?>
                                 <option value="<?php echo $key; ?>" <?php echo $vs === $key ? 'selected' : ''; ?>><?php echo sanitize($label); ?></option>
@@ -200,37 +200,37 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                         </div>
 
                         <div class="col-6 col-md-4">
-                            <label for="contact_person" class="form-label small fw-semibold text-secondary">Contact Person</label>
+                            <label for="contact_person" class="tf-label">Contact Person</label>
                             <input type="text" id="contact_person" name="contact_person" class="form-control"
                                    value="<?php echo sanitize($form_data['contact_person'] ?? ''); ?>">
                         </div>
 
                         <div class="col-12 col-md-6">
-                            <label for="email" class="form-label small fw-semibold text-secondary">Email</label>
+                            <label for="email" class="tf-label">Email</label>
                             <input type="email" id="email" name="email" class="form-control"
                                    value="<?php echo sanitize($form_data['email'] ?? ''); ?>">
                         </div>
 
                         <div class="col-12 col-md-6">
-                            <label for="phone" class="form-label small fw-semibold text-secondary">Phone</label>
+                            <label for="phone" class="tf-label">Phone</label>
                             <input type="text" id="phone" name="phone" class="form-control"
                                    value="<?php echo sanitize($form_data['phone'] ?? ''); ?>">
                         </div>
 
                         <div class="col-6 col-md-4">
-                            <label for="telegram" class="form-label small fw-semibold text-secondary">Telegram</label>
+                            <label for="telegram" class="tf-label">Telegram</label>
                             <input type="text" id="telegram" name="telegram" class="form-control"
                                    value="<?php echo sanitize($form_data['telegram'] ?? ''); ?>">
                         </div>
 
                         <div class="col-6 col-md-4">
-                            <label for="skype" class="form-label small fw-semibold text-secondary">Skype</label>
+                            <label for="skype" class="tf-label">Skype</label>
                             <input type="text" id="skype" name="skype" class="form-control"
                                    value="<?php echo sanitize($form_data['skype'] ?? ''); ?>">
                         </div>
 
                         <div class="col-6 col-md-4">
-                            <label for="currency" class="form-label small fw-semibold text-secondary">Currency</label>
+                            <label for="currency" class="tf-label">Currency</label>
                             <select id="currency" name="currency" class="form-select">
                                 <?php $cur = $form_data['currency'] ?? $default_currency; foreach (tf_currencies() as $c): ?>
                                 <option value="<?php echo $c; ?>" <?php echo $cur === $c ? 'selected' : ''; ?>><?php echo $c; ?></option>
@@ -239,14 +239,14 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                         </div>
 
                         <div class="col-6 col-md-6">
-                            <label for="default_payout" class="form-label small fw-semibold text-secondary">Default Payout (per conversion)</label>
+                            <label for="default_payout" class="tf-label">Default Payout (per conversion)</label>
                             <input type="number" id="default_payout" name="default_payout" class="form-control"
                                    value="<?php echo sanitize($form_data['default_payout'] ?? '0.00'); ?>" step="0.01" min="0">
                             <p class="form-text mb-0 small">Used as the default when this vendor is attached to a project.</p>
                         </div>
 
                         <div class="col-6 col-md-6">
-                            <label for="daily_cap" class="form-label small fw-semibold text-secondary">Daily Cap</label>
+                            <label for="daily_cap" class="tf-label">Daily Cap</label>
                             <input type="number" id="daily_cap" name="daily_cap" class="form-control"
                                    value="<?php echo sanitize($form_data['daily_cap'] ?? '0'); ?>" min="0">
                             <p class="form-text mb-0 small">0 = unlimited</p>
@@ -258,18 +258,18 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                             <p class="small fw-semibold text-uppercase text-muted mb-2">Project Settings (<?php echo sanitize($project['project_name']); ?>)</p>
                         </div>
                         <div class="col-6 col-md-4">
-                            <label for="payout" class="form-label small fw-semibold text-secondary">Project Payout</label>
+                            <label for="payout" class="tf-label">Project Payout</label>
                             <input type="number" id="payout" name="payout" class="form-control"
                                    value="<?php echo sanitize($form_data['payout'] ?? ($project['vendor_default_cpi'] ?? '0.00')); ?>" step="0.01" min="0">
                         </div>
                         <div class="col-6 col-md-4">
-                            <label for="allowed_clicks_limit" class="form-label small fw-semibold text-secondary">Total Click Limit</label>
+                            <label for="allowed_clicks_limit" class="tf-label">Total Click Limit</label>
                             <input type="number" id="allowed_clicks_limit" name="allowed_clicks_limit" class="form-control"
                                    value="<?php echo sanitize($form_data['allowed_clicks_limit'] ?? '0'); ?>" min="0">
                             <p class="form-text mb-0 small">0 = unlimited</p>
                         </div>
                         <div class="col-12 col-md-4">
-                            <label for="postback_url" class="form-label small fw-semibold text-secondary">Vendor Postback URL</label>
+                            <label for="postback_url" class="tf-label">Vendor Postback URL</label>
                             <input type="url" id="postback_url" name="postback_url" class="form-control"
                                    value="<?php echo sanitize($form_data['postback_url'] ?? ''); ?>"
                                    placeholder="https://vendor.com/postback?click_id={click_id}&status=1&payout={payout}">
@@ -278,7 +278,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                         <?php endif; ?>
 
                         <div class="col-12">
-                            <label for="notes" class="form-label small fw-semibold text-secondary">Notes</label>
+                            <label for="notes" class="tf-label">Notes</label>
                             <textarea id="notes" name="notes" class="form-control" rows="2"><?php echo sanitize($form_data['notes'] ?? ''); ?></textarea>
                         </div>
                     </div>

@@ -53,25 +53,20 @@ $page_actions = '<a href="' . BASE_URL . '/convlogs/export.php?' . http_build_qu
 require_once __DIR__ . '/../helpers/layout_header.php';
 ?>
 
-<style>
-    .table-conv thead th { font-size: .7rem; letter-spacing: .06em; text-transform: uppercase; color: #64748b; font-weight: 600; background: #f8fafc; }
-    .table-conv tbody td { vertical-align: middle; padding: .65rem .75rem; font-size: .8125rem; }
-    .table-conv code { background: #f1f5f9; color: #475569; padding: .125rem .375rem; border-radius: 4px; font-size: .75rem; }
-</style>
 
-<div class="card border-0 shadow-sm mb-4">
+<div class="tf-card mb-4">
     <form method="GET" class="card-body">
         <div class="row g-2 align-items-end">
             <div class="col-6 col-md-2">
-                <label class="form-label small fw-semibold text-secondary">From</label>
+                <label class="tf-label">From</label>
                 <input type="date" name="from" class="form-control form-control-sm" value="<?php echo $from_date; ?>">
             </div>
             <div class="col-6 col-md-2">
-                <label class="form-label small fw-semibold text-secondary">To</label>
+                <label class="tf-label">To</label>
                 <input type="date" name="to" class="form-control form-control-sm" value="<?php echo $to_date; ?>">
             </div>
             <div class="col-6 col-md-2">
-                <label class="form-label small fw-semibold text-secondary">Project</label>
+                <label class="tf-label">Project</label>
                 <select name="project_id" class="form-select form-select-sm">
                     <option value="">All</option>
                     <?php foreach ($projects_list as $p): ?>
@@ -80,7 +75,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                 </select>
             </div>
             <div class="col-6 col-md-2">
-                <label class="form-label small fw-semibold text-secondary">Vendor</label>
+                <label class="tf-label">Vendor</label>
                 <select name="vendor_id" class="form-select form-select-sm">
                     <option value="">All</option>
                     <?php foreach ($vendors_list as $v): ?>
@@ -89,7 +84,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                 </select>
             </div>
             <div class="col-6 col-md-2">
-                <label class="form-label small fw-semibold text-secondary">Approval</label>
+                <label class="tf-label">Approval</label>
                 <select name="approval_status" class="form-select form-select-sm">
                     <option value="">All</option>
                     <option value="approved" <?php echo $status_filter === 'approved' ? 'selected' : ''; ?>>Approved</option>
@@ -98,7 +93,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                 </select>
             </div>
             <div class="col-6 col-md-2">
-                <label class="form-label small fw-semibold text-secondary">Click / Txn ID</label>
+                <label class="tf-label">Click / Txn ID</label>
                 <input type="text" name="search" class="form-control form-control-sm" value="<?php echo sanitize($search); ?>">
             </div>
             <div class="col-12 mt-2 d-flex gap-2">
@@ -109,8 +104,8 @@ require_once __DIR__ . '/../helpers/layout_header.php';
     </form>
 </div>
 
-<div class="card border-0 shadow-sm">
-    <div class="card-header bg-white border-bottom py-3">
+<div class="tf-card">
+    <div class="tf-card-header">
         <h5 class="mb-0 fw-semibold"><?php echo number_format($total); ?> conversions</h5>
     </div>
     <div class="table-responsive">
@@ -184,7 +179,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
             </tbody>
         </table>
     </div>
-    <div class="card-footer bg-white py-3"><?php echo render_pagination($pagination, BASE_URL . '/convlogs/list.php?' . http_build_query($_GET)); ?></div>
+    <div class="tf-card-footer"><?php echo render_pagination($pagination, BASE_URL . '/convlogs/list.php?' . http_build_query($_GET)); ?></div>
 </div>
 
 <?php require_once __DIR__ . '/../helpers/layout_footer.php'; ?>

@@ -35,19 +35,19 @@ if (isset($_GET['action']) && $_GET['action'] === 'change_password') {
     ?>
     <div class="row justify-content-center">
         <div class="col-12 col-md-7 col-lg-5">
-            <div class="card border-0 shadow-sm">
-                <div class="card-header bg-white border-bottom py-3">
+            <div class="tf-card">
+                <div class="tf-card-header">
                     <h5 class="mb-0 fw-semibold">Change Your Password</h5>
                 </div>
                 <div class="card-body">
                     <form method="POST">
                         <?php echo csrf_field(); ?>
                         <div class="mb-3">
-                            <label for="new_password" class="form-label small fw-semibold text-secondary">New Password</label>
+                            <label for="new_password" class="tf-label">New Password</label>
                             <input type="password" id="new_password" name="new_password" class="form-control" minlength="8" required>
                         </div>
                         <div class="mb-3">
-                            <label for="confirm_password" class="form-label small fw-semibold text-secondary">Confirm Password</label>
+                            <label for="confirm_password" class="tf-label">Confirm Password</label>
                             <input type="password" id="confirm_password" name="confirm_password" class="form-control" minlength="8" required>
                         </div>
                         <button type="submit" class="btn btn-primary w-100">Change Password</button>
@@ -133,12 +133,8 @@ $page_actions = '<button class="btn btn-primary btn-sm" data-tf-modal-open="user
 require_once __DIR__ . '/../helpers/layout_header.php';
 ?>
 
-<style>
-    .table-users thead th { font-size: .7rem; letter-spacing: .06em; text-transform: uppercase; color: #64748b; font-weight: 600; background: #f8fafc; }
-    .table-users tbody td { vertical-align: middle; padding: .85rem 1rem; }
-</style>
 
-<div class="card border-0 shadow-sm">
+<div class="tf-card">
     <div class="table-responsive">
         <table class="table table-hover table-users align-middle mb-0">
             <thead>
@@ -164,8 +160,8 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                     <td><?php echo $u['last_login'] ? time_ago($u['last_login']) : '<span class="text-muted">Never</span>'; ?></td>
                     <td><?php echo time_ago($u['created_at']); ?></td>
                     <td>
-                        <button class="btn btn-outline-primary btn-sm" data-edit-user='<?php echo htmlspecialchars(json_encode($u), ENT_QUOTES, 'UTF-8'); ?>' aria-label="Edit user">
-                            <i class="bi bi-pencil"></i>
+                        <button class="btn btn-outline-primary btn-sm btn-icon" data-edit-user='<?php echo htmlspecialchars(json_encode($u), ENT_QUOTES, 'UTF-8'); ?>' aria-label="Edit user">
+                            <i class="bi bi-pencil" aria-hidden="true"></i>
                         </button>
                     </td>
                 </tr>
@@ -188,20 +184,20 @@ require_once __DIR__ . '/../helpers/layout_header.php';
             </div>
             <div class="tf-modal-body">
                 <div class="mb-3">
-                    <label for="username" class="form-label small fw-semibold text-secondary">Username <span class="text-danger">*</span></label>
+                    <label for="username" class="tf-label">Username <span class="text-danger">*</span></label>
                     <input type="text" id="username" name="username" class="form-control" required>
                 </div>
                 <div class="mb-3">
-                    <label for="email" class="form-label small fw-semibold text-secondary">Email</label>
+                    <label for="email" class="tf-label">Email</label>
                     <input type="email" id="email" name="email" class="form-control">
                 </div>
                 <div class="mb-3">
-                    <label for="password" class="form-label small fw-semibold text-secondary" id="password_label">Password <span class="text-danger">*</span></label>
+                    <label for="password" class="tf-label" id="password_label">Password <span class="text-danger">*</span></label>
                     <input type="password" id="password" name="password" class="form-control" minlength="8">
                     <p class="form-text" id="password_help">Min 8 characters</p>
                 </div>
                 <div class="mb-3">
-                    <label for="role" class="form-label small fw-semibold text-secondary">Role</label>
+                    <label for="role" class="tf-label">Role</label>
                     <select id="role" name="role" class="form-select">
                         <option value="campaign_manager">Campaign Manager</option>
                         <option value="viewer">Viewer (Read-only)</option>

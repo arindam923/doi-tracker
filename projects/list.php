@@ -67,32 +67,18 @@ $page_actions = '<a href="' . BASE_URL . '/projects/create.php" class="btn btn-p
 require_once __DIR__ . '/../helpers/layout_header.php';
 ?>
 
-<style>
-    .table-projects thead th { font-size: .7rem; letter-spacing: .06em; text-transform: uppercase; color: #64748b; font-weight: 600; background: #f8fafc; }
-    .table-projects tbody td { vertical-align: middle; padding: .85rem 1rem; }
-    .table-projects .project-name { color: #0f172a; font-weight: 600; text-decoration: none; }
-    .table-projects .project-name:hover { color: #4f46e5; }
-    .table-projects .project-code { background: #f1f5f9; color: #475569; padding: .125rem .5rem; border-radius: 4px; font-size: .75rem; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-    .progress-quota { width: 80px; height: 6px; }
-    .tf-pagination ul { display: inline-flex; align-items: center; list-style: none; margin: 0; padding: 0; border-radius: .5rem; overflow: hidden; border: 1px solid #e2e8f0; background: #fff; }
-    .tf-pagination li a, .tf-pagination li span { display: inline-flex; align-items: center; justify-content: center; min-width: 2.25rem; height: 2.25rem; padding: 0 .75rem; font-size: .875rem; font-weight: 500; color: #64748b; background: #fff; border-right: 1px solid #e2e8f0; text-decoration: none; }
-    .tf-pagination li:last-child a, .tf-pagination li:last-child span { border-right: 0; }
-    .tf-pagination a:hover { background: #f8fafc; color: #0f172a; text-decoration: none; }
-    .tf-pagination .is-active { background: #eef2ff !important; color: #4f46e5 !important; font-weight: 600; }
-    .tf-pagination .is-disabled { color: #cbd5e1; background: #f8fafc; cursor: not-allowed; }
-</style>
 
 <!-- Filters -->
-<div class="card border-0 shadow-sm mb-4">
+<div class="tf-card mb-4">
     <form method="GET" class="card-body">
         <div class="row g-3 align-items-end">
             <div class="col-12 col-md-3">
-                <label for="search" class="form-label small fw-semibold text-secondary">Search</label>
+                <label for="search" class="tf-label">Search</label>
                 <input type="text" id="search" name="search" class="form-control" placeholder="Search by code or name..."
                        value="<?php echo sanitize($search); ?>">
             </div>
             <div class="col-6 col-md-2">
-                <label for="status" class="form-label small fw-semibold text-secondary">Status</label>
+                <label for="status" class="tf-label">Status</label>
                 <select id="status" name="status" class="form-select">
                     <option value="">All Status</option>
                                     <option value="live" <?php echo $status_filter === 'live' ? 'selected' : ''; ?>>Live</option>
@@ -102,7 +88,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                 </select>
             </div>
             <div class="col-6 col-md-2">
-                <label for="campaign_type" class="form-label small fw-semibold text-secondary">Campaign Type</label>
+                <label for="campaign_type" class="tf-label">Campaign Type</label>
                 <select id="campaign_type" name="campaign_type" class="form-select">
                     <option value="">All Types</option>
                     <option value="CPL" <?php echo $campaign_type_filter === 'CPL' ? 'selected' : ''; ?>>CPL</option>
@@ -111,7 +97,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                 </select>
             </div>
             <div class="col-6 col-md-3">
-                <label for="client_id" class="form-label small fw-semibold text-secondary">Client</label>
+                <label for="client_id" class="tf-label">Client</label>
                 <select id="client_id" name="client_id" class="form-select">
                     <option value="">All Clients</option>
                     <?php foreach ($clients_list as $cl): ?>
@@ -129,7 +115,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
 </div>
 
 <!-- Projects Table -->
-<div class="card border-0 shadow-sm">
+<div class="tf-card">
     <div class="table-responsive">
         <table class="table table-hover table-projects align-middle mb-0">
             <thead>
@@ -255,7 +241,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
             </div>
             <div class="tf-modal-body">
                 <div class="mb-3">
-                    <label for="new_status_<?php echo $p['id']; ?>" class="form-label small fw-semibold text-secondary">New Status</label>
+                    <label for="new_status_<?php echo $p['id']; ?>" class="tf-label">New Status</label>
                     <select id="new_status_<?php echo $p['id']; ?>" name="new_status" class="form-select">
                         <option value="live" <?php echo $p['status'] === 'live' ? 'selected' : ''; ?>>🟢 Live</option>
                         <option value="hold" <?php echo $p['status'] === 'hold' ? 'selected' : ''; ?>>🟡 Hold</option>
@@ -296,7 +282,7 @@ $project_vendors = $project_vendor_map[$p['id']] ?? [];
                 </div>
             </div>
             <div class="mb-3">
-                <label class="form-label small fw-semibold text-secondary">Postback Token</label>
+                <label class="tf-label">Postback Token</label>
                 <div class="input-group">
                     <input type="text" class="form-control" style="font-family: ui-monospace, monospace; font-size: .85em;" readonly value="<?php echo sanitize($p['postback_token']); ?>">
                     <button class="btn btn-secondary" data-copy="<?php echo sanitize($p['postback_token']); ?>" aria-label="Copy"><i class="bi bi-clipboard"></i></button>

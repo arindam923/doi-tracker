@@ -120,6 +120,11 @@ function validateForm(formId) {
     requiredFields.forEach(field => {
         const isEmpty = !field.value.trim();
         field.classList.toggle('is-invalid', isEmpty);
+        if (isEmpty) {
+            field.setAttribute('aria-invalid', 'true');
+        } else {
+            field.removeAttribute('aria-invalid');
+        }
         // Associate feedback if present
         const feedbackId = field.id ? `${field.id}-feedback` : null;
         if (feedbackId) {

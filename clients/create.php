@@ -57,8 +57,8 @@ require_once __DIR__ . '/../helpers/layout_header.php';
 
 <div class="row justify-content-center">
     <div class="col-12 col-lg-8">
-        <div class="card border-0 shadow-sm">
-            <div class="card-header bg-white border-bottom py-3">
+        <div class="tf-card">
+            <div class="tf-card-header">
                 <h5 class="mb-0 fw-semibold">Client Details</h5>
             </div>
             <div class="card-body">
@@ -67,13 +67,13 @@ require_once __DIR__ . '/../helpers/layout_header.php';
 
                     <div class="row g-3">
                         <div class="col-12 col-md-8">
-                            <label for="client_name" class="form-label small fw-semibold text-secondary">Client Name <span class="text-danger">*</span></label>
+                            <label for="client_name" class="tf-label">Client Name <span class="text-danger">*</span></label>
                             <input type="text" id="client_name" name="client_name" class="form-control"
                                    value="<?php echo sanitize($form_data['client_name'] ?? ''); ?>" required>
                         </div>
 
                         <div class="col-12 col-md-4">
-                            <label for="client_code" class="form-label small fw-semibold text-secondary">Client Code <span class="text-danger">*</span></label>
+                            <label for="client_code" class="tf-label">Client Code <span class="text-danger">*</span></label>
                             <input type="text" id="client_code" name="client_code" class="form-control"
                                    value="<?php echo sanitize($form_data['client_code'] ?? ''); ?>"
                                    maxlength="20" style="text-transform: uppercase;" required>
@@ -81,43 +81,43 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                         </div>
 
                         <div class="col-12 col-md-6">
-                            <label for="contact_person" class="form-label small fw-semibold text-secondary">Contact Person</label>
+                            <label for="contact_person" class="tf-label">Contact Person</label>
                             <input type="text" id="contact_person" name="contact_person" class="form-control"
                                    value="<?php echo sanitize($form_data['contact_person'] ?? ''); ?>">
                         </div>
 
                         <div class="col-12 col-md-6">
-                            <label for="email" class="form-label small fw-semibold text-secondary">Email</label>
+                            <label for="email" class="tf-label">Email</label>
                             <input type="email" id="email" name="email" class="form-control"
                                    value="<?php echo sanitize($form_data['email'] ?? ''); ?>">
                         </div>
 
                         <div class="col-12 col-md-4">
-                            <label for="phone" class="form-label small fw-semibold text-secondary">Phone</label>
+                            <label for="phone" class="tf-label">Phone</label>
                             <input type="text" id="phone" name="phone" class="form-control"
                                    value="<?php echo sanitize($form_data['phone'] ?? ''); ?>">
                         </div>
 
                         <div class="col-6 col-md-4">
-                            <label for="skype" class="form-label small fw-semibold text-secondary">Skype</label>
+                            <label for="skype" class="tf-label">Skype</label>
                             <input type="text" id="skype" name="skype" class="form-control"
                                    value="<?php echo sanitize($form_data['skype'] ?? ''); ?>">
                         </div>
 
                         <div class="col-6 col-md-4">
-                            <label for="telegram" class="form-label small fw-semibold text-secondary">Telegram</label>
+                            <label for="telegram" class="tf-label">Telegram</label>
                             <input type="text" id="telegram" name="telegram" class="form-control"
                                    value="<?php echo sanitize($form_data['telegram'] ?? ''); ?>">
                         </div>
 
                         <div class="col-12 col-md-6">
-                            <label for="country" class="form-label small fw-semibold text-secondary">Country</label>
+                            <label for="country" class="tf-label">Country</label>
                             <input type="text" id="country" name="country" class="form-control"
                                    value="<?php echo sanitize($form_data['country'] ?? ''); ?>">
                         </div>
 
                         <div class="col-6 col-md-3">
-                            <label for="default_currency" class="form-label small fw-semibold text-secondary">Default Currency</label>
+                            <label for="default_currency" class="tf-label">Default Currency</label>
                             <select id="default_currency" name="default_currency" class="form-select">
                                 <?php foreach (tf_currencies() as $cur): ?>
                                 <option value="<?php echo $cur; ?>" <?php echo ($form_data['default_currency'] ?? 'USD') === $cur ? 'selected' : ''; ?>><?php echo $cur; ?></option>
@@ -126,7 +126,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                         </div>
 
                         <div class="col-6 col-md-3">
-                            <label for="payment_terms" class="form-label small fw-semibold text-secondary">Payment Terms</label>
+                            <label for="payment_terms" class="tf-label">Payment Terms</label>
                             <select id="payment_terms" name="payment_terms" class="form-select">
                                 <option value="">Select…</option>
                                 <?php foreach (['Net 15', 'Net 30', 'Net 45', 'Net 60', 'Prepaid', 'COD', 'Custom'] as $term): ?>
@@ -136,13 +136,13 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                         </div>
 
                         <div class="col-12">
-                            <label for="billing_address" class="form-label small fw-semibold text-secondary">Billing Address</label>
+                            <label for="billing_address" class="tf-label">Billing Address</label>
                             <textarea id="billing_address" name="billing_address" class="form-control" rows="2"
                                       placeholder="Street, city, state, postal code, country"><?php echo sanitize($form_data['billing_address'] ?? ''); ?></textarea>
                         </div>
 
                         <div class="col-12">
-                            <label for="notes" class="form-label small fw-semibold text-secondary">Notes</label>
+                            <label for="notes" class="tf-label">Notes</label>
                             <textarea id="notes" name="notes" class="form-control" rows="3"><?php echo sanitize($form_data['notes'] ?? ''); ?></textarea>
                         </div>
                     </div>

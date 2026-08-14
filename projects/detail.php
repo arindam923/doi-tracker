@@ -128,25 +128,11 @@ $page_actions = '
 require_once __DIR__ . '/../helpers/layout_header.php';
 ?>
 
-<style>
-    .stat-tile { padding: 1rem 1.25rem; }
-    .stat-tile .stat-label { font-size: .7rem; letter-spacing: .06em; text-transform: uppercase; color: #64748b; font-weight: 600; margin-bottom: .5rem; }
-    .stat-tile .stat-value { font-size: 1.5rem; font-weight: 700; color: #0f172a; line-height: 1.1; }
-    .table-vendors thead th { font-size: .7rem; letter-spacing: .06em; text-transform: uppercase; color: #64748b; font-weight: 600; background: #f8fafc; }
-    .table-vendors tbody td { vertical-align: middle; padding: .85rem 1rem; }
-    .table-vendors code { background: #f1f5f9; color: #475569; padding: .125rem .5rem; border-radius: 4px; font-size: .75rem; }
-    .info-table th { width: 40%; color: #64748b; font-weight: 500; padding: .75rem 1rem; }
-    .info-table td { padding: .75rem 1rem; }
-    .note-card { background: #f8fafc; border-left: 4px solid #4f46e5; border-radius: .5rem; padding: 1rem; }
-    .kpi-card { border: 1px solid #e2e8f0; border-radius: .875rem; background: #fff; padding: 1rem; }
-    .kpi-card .kpi-label { font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; color: #64748b; font-weight: 600; }
-    .kpi-card .kpi-value { font-size: 1.25rem; font-weight: 700; color: #0f172a; }
-</style>
 
 <!-- Project Info Cards -->
 <div class="row g-3 mb-4">
     <div class="col-6 col-md-4 col-xl-2">
-        <div class="card border-0 shadow-sm h-100 stat-tile">
+        <div class="tf-stat h-100">
             <div class="stat-label">Status</div>
             <div><?php echo status_badge($project['status']); ?></div>
             <?php if (!empty($project['campaign_status']) && $project['campaign_status'] !== $project['status']): ?>
@@ -155,31 +141,31 @@ require_once __DIR__ . '/../helpers/layout_header.php';
         </div>
     </div>
     <div class="col-6 col-md-4 col-xl-2">
-        <div class="card border-0 shadow-sm h-100 stat-tile">
+        <div class="tf-stat h-100">
             <div class="stat-label">Clicks</div>
             <div class="stat-value"><?php echo number_format($project['clicks_count']); ?></div>
         </div>
     </div>
     <div class="col-6 col-md-4 col-xl-2">
-        <div class="card border-0 shadow-sm h-100 stat-tile">
+        <div class="tf-stat h-100">
             <div class="stat-label">Completes</div>
             <div class="stat-value"><?php echo number_format($project['completes_count']); ?></div>
         </div>
     </div>
     <div class="col-6 col-md-4 col-xl-2">
-        <div class="card border-0 shadow-sm h-100 stat-tile">
+        <div class="tf-stat h-100">
             <div class="stat-label">CCR</div>
             <div><span class="badge bg-<?php echo ccr_color($ccr); ?>" style="font-size: 1rem; padding: .4rem .8rem;"><?php echo $ccr; ?>%</span></div>
         </div>
     </div>
     <div class="col-6 col-md-4 col-xl-2">
-        <div class="card border-0 shadow-sm h-100 stat-tile">
+        <div class="tf-stat h-100">
             <div class="stat-label">Revenue</div>
             <div class="stat-value text-success" style="font-size: 1.25rem;"><?php echo format_currency($total_revenue, $currency); ?></div>
         </div>
     </div>
     <div class="col-6 col-md-4 col-xl-2">
-        <div class="card border-0 shadow-sm h-100 stat-tile">
+        <div class="tf-stat h-100">
             <div class="stat-label">Profit</div>
             <div class="stat-value <?php echo $total_profit >= 0 ? 'text-success' : 'text-danger'; ?>" style="font-size: 1.25rem;"><?php echo format_currency($total_profit, $currency); ?></div>
         </div>
@@ -191,7 +177,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
     $pct = min(100, ($project['completes_count'] / $project['total_quota']) * 100);
     $barColor = $pct >= 100 ? 'bg-danger' : ($pct >= 80 ? 'bg-warning' : 'bg-success');
 ?>
-<div class="card border-0 shadow-sm mb-4">
+<div class="tf-card mb-4">
     <div class="card-body">
         <div class="d-flex justify-content-between mb-2">
             <span class="fw-semibold">Quota Progress</span>
@@ -207,8 +193,8 @@ require_once __DIR__ . '/../helpers/layout_header.php';
 <!-- Project Info Cards (2-column layout) -->
 <div class="row g-3 mb-4">
     <div class="col-12 col-lg-6">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-header bg-white border-bottom py-3"><h5 class="mb-0 fw-semibold">Project Info</h5></div>
+        <div class="tf-card h-100">
+            <div class="tf-card-header"><h5 class="mb-0 fw-semibold">Project Info</h5></div>
             <div class="card-body p-0">
                 <table class="table info-table mb-0">
                     <tbody>
@@ -238,12 +224,12 @@ require_once __DIR__ . '/../helpers/layout_header.php';
     </div>
 
     <div class="col-12 col-lg-6">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-header bg-white border-bottom py-3"><h5 class="mb-0 fw-semibold">Offer Links &amp; Tokens</h5></div>
+        <div class="tf-card h-100">
+            <div class="tf-card-header"><h5 class="mb-0 fw-semibold">Offer Links &amp; Tokens</h5></div>
             <div class="card-body">
 
                 <div class="mb-3">
-                    <label class="form-label small fw-semibold text-secondary">Landing Page (Client Link)</label>
+                    <label class="tf-label">Landing Page (Client Link)</label>
                     <div class="input-group">
                         <input type="text" class="form-control" style="font-family: ui-monospace, monospace; font-size: .85em;" readonly value="<?php echo sanitize($project['client_survey_link'] ?? ''); ?>">
                         <button class="btn btn-secondary" data-copy="<?php echo sanitize($project['client_survey_link'] ?? ''); ?>" aria-label="Copy"><i class="bi bi-clipboard"></i></button>
@@ -252,7 +238,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
 
                 <?php if (!empty($project['preview_link'])): ?>
                 <div class="mb-3">
-                    <label class="form-label small fw-semibold text-secondary">Preview Link</label>
+                    <label class="tf-label">Preview Link</label>
                     <div class="input-group">
                         <input type="text" class="form-control" style="font-family: ui-monospace, monospace; font-size: .85em;" readonly value="<?php echo sanitize($project['preview_link']); ?>">
                         <button class="btn btn-secondary" data-copy="<?php echo sanitize($project['preview_link']); ?>" aria-label="Copy"><i class="bi bi-clipboard"></i></button>
@@ -276,7 +262,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
 
                 <?php if (!empty($vendors)): ?>
                 <div class="mb-3">
-                    <label class="form-label small fw-semibold text-secondary">Vendor-Specific Tracking Links</label>
+                    <label class="tf-label">Vendor-Specific Tracking Links</label>
                     <div class="list-group list-group-flush border rounded">
                         <?php foreach ($vendors as $v):
                             if (!empty($v['vendor_short_code'])) {
@@ -331,7 +317,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                 </div>
 
                 <div class="mb-0">
-                    <label class="form-label small fw-semibold text-secondary">Postback Token</label>
+                    <label class="tf-label">Postback Token</label>
                     <div class="input-group">
                         <input type="text" class="form-control" style="font-family: ui-monospace, monospace; font-size: .85em;" readonly value="<?php echo sanitize($project['postback_token']); ?>">
                         <button class="btn btn-secondary" data-copy="<?php echo sanitize($project['postback_token']); ?>" aria-label="Copy"><i class="bi bi-clipboard"></i></button>
@@ -344,16 +330,18 @@ require_once __DIR__ . '/../helpers/layout_header.php';
 </div>
 
 <!-- Chart -->
-<div class="card border-0 shadow-sm mb-4">
+<div class="tf-card mb-4">
     <div class="card-header bg-white border-bottom d-flex justify-content-between align-items-center py-3">
         <h5 class="mb-0 fw-semibold">Clicks &amp; Conversions</h5>
         <span class="badge bg-light text-dark border">Last 7 Days</span>
     </div>
-    <div class="card-body"><div style="height: 280px;"><canvas id="projectChart"></canvas></div></div>
+    <div class="tf-chart-body" style="height: 280px;">
+        <canvas id="projectChart" role="img" aria-label="Project clicks and conversions over the last 7 days"></canvas>
+    </div>
 </div>
 
 <!-- Vendors Table -->
-<div class="card border-0 shadow-sm mb-4">
+<div class="tf-card mb-4">
     <div class="card-header bg-white border-bottom d-flex justify-content-between align-items-center gap-2 flex-wrap py-3">
         <h5 class="mb-0 fw-semibold">Vendors</h5>
         <?php if ($project['status'] === 'live'): ?>
@@ -429,7 +417,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                     <td class="text-end fw-semibold <?php echo $vs['profit'] >= 0 ? 'text-success' : 'text-danger'; ?>"><?php echo format_currency($vs['profit'], $currency); ?></td>
                     <td><?php echo status_badge($v['status']); ?></td>
                     <td>
-                        <a href="<?php echo BASE_URL; ?>/vendors/edit_global.php?id=<?php echo (int)$v['global_vendor_id']; ?>" class="btn btn-outline-primary btn-sm" title="Edit vendor"><i class="bi bi-pencil"></i></a>
+                        <a href="<?php echo BASE_URL; ?>/vendors/edit_global.php?id=<?php echo (int)$v['global_vendor_id']; ?>" class="btn btn-outline-primary btn-sm btn-icon" aria-label="Edit vendor"><i class="bi bi-pencil" aria-hidden="true"></i></a>
                     </td>
                 </tr>
                 <?php endforeach; endif; ?>
@@ -453,7 +441,7 @@ $ec = $pdo->prepare("
 $ec->execute([$id]);
 $ec_stats = $ec->fetch();
 ?>
-<div class="card border-0 shadow-sm mb-4">
+<div class="tf-card mb-4">
     <div class="card-header bg-white border-bottom d-flex justify-content-between align-items-center py-3">
         <h5 class="mb-0 fw-semibold"><i class="bi bi-envelope-paper me-1"></i>Email Campaigns</h5>
         <a href="<?php echo BASE_URL; ?>/email/campaigns.php?project_id=<?php echo $id; ?>" class="btn btn-outline-primary btn-sm"><i class="bi bi-funnel"></i>View Campaigns</a>
@@ -472,7 +460,7 @@ $ec_stats = $ec->fetch();
 </div>
 
 <!-- Campaign Notes (Item #36) -->
-<div class="card border-0 shadow-sm mb-4" id="notes">
+<div class="tf-card mb-4" id="notes">
     <div class="card-header bg-white border-bottom d-flex justify-content-between align-items-center py-3">
         <h5 class="mb-0 fw-semibold"><i class="bi bi-journal-text me-1"></i>Campaign Notes</h5>
         <span class="badge bg-light text-dark border"><?php echo count($notes); ?></span>
@@ -509,8 +497,8 @@ $ec_stats = $ec->fetch();
 
 <!-- Description -->
 <?php if ($project['description']): ?>
-<div class="card border-0 shadow-sm">
-    <div class="card-header bg-white border-bottom py-3"><h5 class="mb-0 fw-semibold">Description</h5></div>
+<div class="tf-card">
+    <div class="tf-card-header"><h5 class="mb-0 fw-semibold">Description</h5></div>
     <div class="card-body"><p class="mb-0"><?php echo nl2br(sanitize($project['description'])); ?></p></div>
 </div>
 <?php endif; ?>
@@ -530,7 +518,7 @@ new Chart(document.getElementById('projectChart'), {
     data: {
         labels: {$cl_json},
         datasets: [
-            { label: 'Clicks', data: {$cc_json}, backgroundColor: 'rgba(99, 102, 241, 0.85)', borderRadius: 4, borderSkipped: false, barPercentage: 0.6, categoryPercentage: 0.8 },
+            { label: 'Clicks', data: {$cc_json}, backgroundColor: 'rgba(20, 184, 166, 0.85)', borderRadius: 4, borderSkipped: false, barPercentage: 0.6, categoryPercentage: 0.8 },
             { label: 'Conversions', data: {$cvt_json}, backgroundColor: 'rgba(16, 185, 129, 0.85)', borderRadius: 4, borderSkipped: false, barPercentage: 0.6, categoryPercentage: 0.8 }
         ]
     },

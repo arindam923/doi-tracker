@@ -117,8 +117,8 @@ asort($countries);
 
 <div class="row justify-content-center">
     <div class="col-12 col-lg-11 col-xl-10">
-        <div class="card border-0 shadow-sm mb-4">
-            <div class="card-header bg-white border-bottom py-3">
+        <div class="tf-card mb-4">
+            <div class="tf-card-header">
                 <div class="d-flex align-items-center gap-3">
                     <div class="text-primary">
                         <i class="bi bi-folder-plus"></i>
@@ -145,7 +145,7 @@ asort($countries);
                                 <p class="small fw-semibold text-uppercase text-muted mb-3 tracking-wide">Campaign Identity</p>
                                 <div class="row g-3">
                                     <div class="col-12 col-md-6">
-                                        <label for="project_name" class="form-label small fw-semibold text-secondary">Project Name <span class="text-danger">*</span></label>
+                                        <label for="project_name" class="tf-label">Project Name <span class="text-danger">*</span></label>
                                         <div class="input-group">
                                             <span class="input-group-text bg-white"><i class="bi bi-tag text-secondary"></i></span>
                                             <input type="text" id="project_name" name="project_name" class="form-control"
@@ -154,7 +154,7 @@ asort($countries);
                                     </div>
 
                                     <div class="col-12 col-md-6">
-                                        <label for="client_id" class="form-label small fw-semibold text-secondary">Client <span class="text-danger">*</span></label>
+                                        <label for="client_id" class="tf-label">Client <span class="text-danger">*</span></label>
                                         <div class="input-group">
                                             <span class="input-group-text bg-white"><i class="bi bi-building text-secondary"></i></span>
                                             <select id="client_id" name="client_id" class="form-select" required>
@@ -169,7 +169,7 @@ asort($countries);
                                     </div>
 
                                     <div class="col-12">
-                                        <label for="client_survey_link" class="form-label small fw-semibold text-secondary">Client Link <span class="text-danger">*</span></label>
+                                        <label for="client_survey_link" class="tf-label">Client Link <span class="text-danger">*</span></label>
                                         <div class="input-group">
                                             <span class="input-group-text bg-white"><i class="bi bi-link-45deg text-secondary"></i></span>
                                             <input type="url" id="client_survey_link" name="client_survey_link" class="form-control"
@@ -187,7 +187,7 @@ asort($countries);
                                 <p class="small fw-semibold text-uppercase text-muted mb-3 tracking-wide">Budget & Quotas</p>
                                 <div class="row g-3">
                                     <div class="col-6 col-md-3">
-                                        <label for="client_cpi" class="form-label small fw-semibold text-secondary">Payout</label>
+                                        <label for="client_cpi" class="tf-label">Payout</label>
                                         <div class="input-group">
                                             <span class="input-group-text bg-white">$</span>
                                             <input type="number" id="client_cpi" name="client_cpi" class="form-control"
@@ -196,7 +196,7 @@ asort($countries);
                                     </div>
 
                                     <div class="col-6 col-md-3">
-                                        <label for="vendor_default_cpi" class="form-label small fw-semibold text-secondary">Default Vendor Payout</label>
+                                        <label for="vendor_default_cpi" class="tf-label">Default Vendor Payout</label>
                                         <div class="input-group">
                                             <span class="input-group-text bg-white">$</span>
                                             <input type="number" id="vendor_default_cpi" name="vendor_default_cpi" class="form-control"
@@ -205,7 +205,7 @@ asort($countries);
                                     </div>
 
                                     <div class="col-6 col-md-3">
-                                        <label for="currency" class="form-label small fw-semibold text-secondary">Currency</label>
+                                        <label for="currency" class="tf-label">Currency</label>
                                         <select id="currency" name="currency" class="form-select">
                                             <?php $cur = $form_data['currency'] ?? 'USD'; foreach (tf_currencies() as $c): ?>
                                             <option value="<?php echo $c; ?>" <?php echo $cur === $c ? 'selected' : ''; ?>><?php echo $c; ?></option>
@@ -214,14 +214,14 @@ asort($countries);
                                     </div>
 
                                     <div class="col-6 col-md-3">
-                                        <label for="total_quota" class="form-label small fw-semibold text-secondary">Total Quota</label>
+                                        <label for="total_quota" class="tf-label">Total Quota</label>
                                         <input type="number" id="total_quota" name="total_quota" class="form-control"
                                                value="<?php echo sanitize($form_data['total_quota'] ?? '0'); ?>" min="0">
                                         <div class="form-text">0 = unlimited</div>
                                     </div>
 
                                     <div class="col-6 col-md-3">
-                                        <label for="daily_cap" class="form-label small fw-semibold text-secondary">Daily Cap</label>
+                                        <label for="daily_cap" class="tf-label">Daily Cap</label>
                                         <input type="number" id="daily_cap" name="daily_cap" class="form-control"
                                                value="<?php echo sanitize($form_data['daily_cap'] ?? '0'); ?>" min="0">
                                         <div class="form-text">0 = unlimited</div>
@@ -235,7 +235,7 @@ asort($countries);
                                 <p class="small fw-semibold text-uppercase text-muted mb-3 tracking-wide">Campaign Configuration</p>
                                 <div class="row g-3">
                                     <div class="col-6 col-md-3">
-                                        <label for="campaign_type" class="form-label small fw-semibold text-secondary">Campaign Type</label>
+                                        <label for="campaign_type" class="tf-label">Campaign Type</label>
                                         <select id="campaign_type" name="campaign_type" class="form-select">
                                             <?php $ct = $form_data['campaign_type'] ?? 'CPL'; foreach (tf_campaign_types() as $key => $label): ?>
                                             <option value="<?php echo $key; ?>" <?php echo $ct === $key ? 'selected' : ''; ?>><?php echo sanitize($label); ?></option>
@@ -244,7 +244,7 @@ asort($countries);
                                     </div>
 
                                     <div class="col-6 col-md-3">
-                                        <label for="vertical" class="form-label small fw-semibold text-secondary">Project Type (Vertical)</label>
+                                        <label for="vertical" class="tf-label">Project Type (Vertical)</label>
                                         <select id="vertical" name="vertical" class="form-select">
                                             <?php $v = $form_data['vertical'] ?? 'Other'; foreach (tf_verticals() as $vt): ?>
                                             <option value="<?php echo $vt; ?>" <?php echo $v === $vt ? 'selected' : ''; ?>><?php echo sanitize($vt); ?></option>
@@ -253,7 +253,7 @@ asort($countries);
                                     </div>
 
                                     <div class="col-6 col-md-3">
-                                        <label for="conversion_type" class="form-label small fw-semibold text-secondary">Conversion Type</label>
+                                        <label for="conversion_type" class="tf-label">Conversion Type</label>
                                         <select id="conversion_type" name="conversion_type" class="form-select">
                                             <?php $cv = $form_data['conversion_type'] ?? 'SOI'; foreach (tf_conversion_types() as $ct2): ?>
                                             <option value="<?php echo $ct2; ?>" <?php echo $cv === $ct2 ? 'selected' : ''; ?>><?php echo sanitize($ct2); ?></option>
@@ -262,7 +262,7 @@ asort($countries);
                                     </div>
 
                                     <div class="col-6 col-md-3">
-                                        <label for="target_device" class="form-label small fw-semibold text-secondary">Target Device</label>
+                                        <label for="target_device" class="tf-label">Target Device</label>
                                         <select id="target_device" name="target_device" class="form-select">
                                             <?php $td = $form_data['target_device'] ?? 'All'; foreach (tf_target_devices() as $dv): ?>
                                             <option value="<?php echo $dv; ?>" <?php echo $td === $dv ? 'selected' : ''; ?>><?php echo sanitize($dv); ?></option>
@@ -271,7 +271,7 @@ asort($countries);
                                     </div>
 
                                     <div class="col-6 col-md-3">
-                                        <label for="campaign_status" class="form-label small fw-semibold text-secondary">Campaign Status</label>
+                                        <label for="campaign_status" class="tf-label">Campaign Status</label>
                                         <select id="campaign_status" name="campaign_status" class="form-select">
                                             <?php $cs = $form_data['campaign_status'] ?? 'live'; foreach (tf_campaign_status() as $key => $label): ?>
                                             <option value="<?php echo $key; ?>" <?php echo $cs === $key ? 'selected' : ''; ?>><?php echo sanitize($label); ?></option>
@@ -280,7 +280,7 @@ asort($countries);
                                     </div>
 
                                     <div class="col-6 col-md-3">
-                                        <label for="visibility" class="form-label small fw-semibold text-secondary">Visibility</label>
+                                        <label for="visibility" class="tf-label">Visibility</label>
                                         <select id="visibility" name="visibility" class="form-select">
                                             <?php $vis = $form_data['visibility'] ?? 'private'; foreach (tf_visibility() as $key => $label): ?>
                                             <option value="<?php echo $key; ?>" <?php echo $vis === $key ? 'selected' : ''; ?>><?php echo sanitize($label); ?></option>
@@ -296,7 +296,7 @@ asort($countries);
                                 <p class="small fw-semibold text-uppercase text-muted mb-3 tracking-wide">Geography & Schedule</p>
                                 <div class="row g-3">
                                     <div class="col-12 col-md-4">
-                                        <label for="country_target" class="form-label small fw-semibold text-secondary">Primary Country</label>
+                                        <label for="country_target" class="tf-label">Primary Country</label>
                                         <div class="tf-country-dropdown" data-name="country_target" data-selected="<?php echo sanitize($form_data['country_target'] ?? ''); ?>">
                                             <button type="button" class="btn btn-outline-secondary w-100 text-start d-flex justify-content-between align-items-center" data-bs-toggle="dropdown" aria-expanded="false">
                                                 <span class="tf-country-dropdown-label">Select Country</span>
@@ -317,19 +317,19 @@ asort($countries);
                                     </div>
 
                                     <div class="col-12 col-md-4">
-                                        <label for="start_date" class="form-label small fw-semibold text-secondary">Start Date</label>
+                                        <label for="start_date" class="tf-label">Start Date</label>
                                         <input type="date" id="start_date" name="start_date" class="form-control"
                                                value="<?php echo sanitize($form_data['start_date'] ?? ''); ?>">
                                     </div>
 
                                     <div class="col-12 col-md-4">
-                                        <label for="end_date" class="form-label small fw-semibold text-secondary">End Date</label>
+                                        <label for="end_date" class="tf-label">End Date</label>
                                         <input type="date" id="end_date" name="end_date" class="form-control"
                                                value="<?php echo sanitize($form_data['end_date'] ?? ''); ?>">
                                     </div>
 
                                     <div class="col-12">
-                                        <label class="form-label small fw-semibold text-secondary">Campaign GEO <span class="text-muted">(searchable multi-select)</span></label>
+                                        <label class="tf-label">Campaign GEO <span class="text-muted">(searchable multi-select)</span></label>
                                         <div class="tf-country-dropdown tf-geo-dropdown" data-name="geo_codes" data-separator="," data-multi="1">
                                             <button type="button" class="btn btn-outline-secondary w-100 text-start d-flex justify-content-between align-items-center" data-bs-toggle="dropdown" aria-expanded="false">
                                                 <span class="tf-country-dropdown-label">Select Countries</span>
@@ -359,7 +359,7 @@ asort($countries);
                                 <p class="small fw-semibold text-uppercase text-muted mb-3 tracking-wide">Additional Information</p>
                                 <div class="row g-3">
                                     <div class="col-12">
-                                        <label for="description" class="form-label small fw-semibold text-secondary">Description</label>
+                                        <label for="description" class="tf-label">Description</label>
                                         <textarea id="description" name="description" class="form-control" rows="3"
                                                   placeholder="Campaign brief: audience, vertical, requirements..."><?php echo sanitize($form_data['description'] ?? ''); ?></textarea>
                                     </div>

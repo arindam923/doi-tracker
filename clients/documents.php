@@ -89,15 +89,15 @@ require_once __DIR__ . '/../helpers/layout_header.php';
 
 <div class="row g-4">
     <div class="col-12 col-lg-4">
-        <div class="card border-0 shadow-sm">
-            <div class="card-header bg-white border-bottom py-3">
+        <div class="tf-card">
+            <div class="tf-card-header">
                 <h5 class="mb-0 fw-semibold">Upload Document</h5>
             </div>
             <div class="card-body">
                 <form method="POST" enctype="multipart/form-data">
                     <?php echo csrf_field(); ?>
                     <div class="mb-3">
-                        <label for="doc_type" class="form-label small fw-semibold text-secondary">Document Type</label>
+                        <label for="doc_type" class="tf-label">Document Type</label>
                         <select id="doc_type" name="doc_type" class="form-select" required>
                             <?php foreach (tf_document_types() as $key => $label): ?>
                             <option value="<?php echo $key; ?>"><?php echo $label; ?></option>
@@ -105,7 +105,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                         </select>
                     </div>
                     <div class="mb-3">
-                        <label for="document" class="form-label small fw-semibold text-secondary">File (PDF, DOC, XLS, image, ZIP — max 25 MB)</label>
+                        <label for="document" class="tf-label">File (PDF, DOC, XLS, image, ZIP — max 25 MB)</label>
                         <input type="file" id="document" name="document" class="form-control" required>
                     </div>
                     <button type="submit" class="btn btn-primary w-100"><i class="bi bi-cloud-upload"></i> Upload</button>
@@ -115,8 +115,8 @@ require_once __DIR__ . '/../helpers/layout_header.php';
     </div>
 
     <div class="col-12 col-lg-8">
-        <div class="card border-0 shadow-sm">
-            <div class="card-header bg-white border-bottom py-3">
+        <div class="tf-card">
+            <div class="tf-card-header">
                 <h5 class="mb-0 fw-semibold">Documents (<?php echo count($documents); ?>)</h5>
             </div>
             <div class="table-responsive">

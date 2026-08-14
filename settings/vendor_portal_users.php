@@ -98,16 +98,9 @@ $page_actions = '<a href="' . BASE_URL . '/settings/vendor_portal_users.php?acti
 require_once __DIR__ . '/../helpers/layout_header.php';
 ?>
 
-<style>
-    .table-vpu thead th { font-size: .7rem; letter-spacing: .06em; text-transform: uppercase; color: #64748b; font-weight: 600; background: #f8fafc; }
-    .table-vpu tbody td { vertical-align: middle; padding: .85rem 1rem; }
-    .tf-modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 1050; }
-    .tf-modal { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1060; width: 90vw; max-width: 600px; background: #fff; border-radius: .75rem; box-shadow: 0 20px 60px rgba(0,0,0,.25); }
-    .tf-modal.hidden { display: none; }
-</style>
 
-<div class="card border-0 shadow-sm mb-4" id="newAccountCard" style="<?php echo $action === 'new' ? '' : 'display:none;'; ?>">
-    <div class="card-header bg-white border-bottom py-3">
+<div class="tf-card mb-4" id="newAccountCard" style="<?php echo $action === 'new' ? '' : 'display:none;'; ?>">
+    <div class="tf-card-header">
         <h5 class="mb-0 fw-semibold">Create Portal Account</h5>
     </div>
     <div class="card-body">
@@ -116,7 +109,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
             <input type="hidden" name="post_action" value="create">
             <div class="row g-3">
                 <div class="col-12">
-                    <label class="form-label small fw-semibold text-secondary">Global Vendor <span class="text-danger">*</span></label>
+                    <label class="tf-label">Global Vendor <span class="text-danger">*</span></label>
                     <select name="global_vendor_id" class="form-select" required>
                         <option value="">Select a vendor…</option>
                         <?php foreach ($global_vendors as $gv): ?>
@@ -127,12 +120,12 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                     </select>
                 </div>
                 <div class="col-12">
-                    <label class="form-label small fw-semibold text-secondary">Email Address <span class="text-danger">*</span></label>
+                    <label class="tf-label">Email Address <span class="text-danger">*</span></label>
                     <input type="email" name="email" class="form-control" required maxlength="150" placeholder="vendor@example.com">
                     <p class="form-text mb-0">This email receives magic-link / password-reset emails.</p>
                 </div>
                 <div class="col-12">
-                    <label class="form-label small fw-semibold text-secondary">Password <span class="text-danger">*</span></label>
+                    <label class="tf-label">Password <span class="text-danger">*</span></label>
                     <input type="password" name="password" class="form-control" required minlength="8" maxlength="255">
                     <p class="form-text mb-0">Min 8 characters.</p>
                 </div>
@@ -156,7 +149,7 @@ $stmt->execute();
 $accounts = $stmt->fetchAll();
 ?>
 
-<div class="card border-0 shadow-sm">
+<div class="tf-card">
     <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
         <h5 class="mb-0 fw-semibold"><?php echo number_format(count($accounts)); ?> portal account(s)</h5>
         <?php if ($action !== 'new'): ?>

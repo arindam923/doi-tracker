@@ -58,59 +58,10 @@ $stmt->execute([$global_vendor_id]);
 $gv = $stmt->fetch();
 
 $page_title = 'Vendor Profile';
+$portal_show_dashboard_link = true;
+$portal_narrow = true;
+require_once __DIR__ . '/../helpers/portal_header.php';
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Vendor profile for <?php echo htmlspecialchars(SITE_NAME, ENT_QUOTES, 'UTF-8'); ?>">
-    <meta name="theme-color" content="#4f46e5">
-    <title><?php echo htmlspecialchars($page_title, ENT_QUOTES, 'UTF-8'); ?> — <?php echo htmlspecialchars(SITE_NAME, ENT_QUOTES, 'UTF-8'); ?></title>
-
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="<?php echo BASE_URL; ?>/assets/css/app.css?v=<?php echo filemtime(__DIR__ . '/../assets/css/app.css'); ?>" rel="stylesheet">
-</head>
-<body>
-
-    <a class="tf-skip-link" href="#main-content">Skip to main content</a>
-
-    <header class="tf-hero" style="border-radius: 0; margin-bottom: 0; padding: 1rem 1.5rem;">
-        <div class="container-fluid" style="position: relative; z-index: 1;">
-            <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
-                <a href="<?php echo BASE_URL; ?>/vendor_portal/index.php" class="d-flex align-items-center gap-2 text-white text-decoration-none">
-                     <span class="tf-login-logo" style="width: 2.25rem; height: 2.25rem; font-size: 1.1rem; margin: 0;" aria-hidden="true"><i class="bi bi-graph-up-arrow"></i></span>
-                    <span class="fw-bold fs-5"><?php echo htmlspecialchars(SITE_NAME, ENT_QUOTES, 'UTF-8'); ?> <span class="tf-hero-pill ms-1">Vendor</span></span>
-                </a>
-                <div class="d-flex align-items-center gap-3 flex-wrap">
-                    <a href="<?php echo BASE_URL; ?>/vendor_portal/index.php" class="btn btn-sm btn-outline-light"><i class="bi bi-arrow-left" aria-hidden="true"></i> Dashboard</a>
-                    <a href="<?php echo BASE_URL; ?>/vendor_portal/logout.php" class="btn btn-sm btn-outline-light">Logout</a>
-                </div>
-            </div>
-        </div>
-    </header>
-
-    <main id="main-content" class="tf-main" style="height: auto; min-height: calc(100vh - 4.5rem);">
-        <div class="tf-page" style="max-width: 42rem;">
-
-            <?php
-            $flash = get_flash();
-            if ($flash):
-                $alertClasses = ['success' => 'alert-success', 'danger' => 'alert-danger', 'warning' => 'alert-warning', 'info' => 'alert-info'];
-                $alertClass = $alertClasses[$flash['type']] ?? 'alert-info';
-                $live = $flash['type'] === 'danger' ? 'role="alert" aria-live="assertive"' : 'role="status" aria-live="polite"';
-            ?>
-            <div class="alert <?php echo $alertClass; ?> mb-4" <?php echo $live; ?> id="flash-alert">
-                <div class="alert-body"><?php echo htmlspecialchars($flash['message'], ENT_QUOTES, 'UTF-8'); ?></div>
-                <button type="button" class="alert-close" aria-label="Dismiss" onclick="document.getElementById('flash-alert').remove()">
-                    <i class="bi bi-x-lg" aria-hidden="true"></i>
-                </button>
-            </div>
-            <?php endif; ?>
 
             <section class="tf-card" aria-labelledby="profile-title">
                 <div class="tf-card-header is-muted">

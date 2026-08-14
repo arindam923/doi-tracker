@@ -139,10 +139,6 @@ $page_actions = '<a href="' . BASE_URL . '/email/compose.php" class="btn btn-out
 require_once __DIR__ . '/../helpers/layout_header.php';
 ?>
 
-<style>
-    .table-lists thead th { font-size: .7rem; letter-spacing: .06em; text-transform: uppercase; color: #64748b; font-weight: 600; background: #f8fafc; }
-    .table-lists tbody td { vertical-align: middle; padding: .85rem 1rem; }
-</style>
 
 <?php if ($action === 'upload' || $action === 'entries'): $current = null;
     foreach ($lists as $l) { if ((int)$l['id'] === $view_list) { $current = $l; break; } } ?>
@@ -164,8 +160,8 @@ require_once __DIR__ . '/../helpers/layout_header.php';
     </div>
 
     <?php if ($action === 'upload'): ?>
-    <div class="card border-0 shadow-sm">
-        <div class="card-header bg-white border-bottom py-3"><h6 class="mb-0 fw-semibold">Import recipients into "<?php echo sanitize($current['name']); ?>"</h6></div>
+    <div class="tf-card">
+        <div class="tf-card-header"><h6 class="mb-0 fw-semibold">Import recipients into "<?php echo sanitize($current['name']); ?>"</h6></div>
         <div class="card-body">
             <form method="POST" enctype="multipart/form-data">
                 <?php echo csrf_field(); ?>
@@ -173,7 +169,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                 <input type="hidden" name="list_id" value="<?php echo $view_list; ?>">
 
                 <div class="mb-3">
-                    <label class="form-label small fw-semibold text-secondary">CSV File</label>
+                    <label class="tf-label">CSV File</label>
                     <input type="file" name="csv_file" accept=".csv,text/csv" class="form-control" required>
                     <p class="form-text mb-0">
                         Format: <code>email,name</code> (header row optional). Emails are deduped case-insensitively;
@@ -208,7 +204,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
         $stmt->execute($params);
         $entries = $stmt->fetchAll();
     ?>
-    <div class="card border-0 shadow-sm mb-4">
+    <div class="tf-card mb-4">
         <form method="GET" class="card-body">
             <input type="hidden" name="action" value="entries">
             <input type="hidden" name="list_id" value="<?php echo $view_list; ?>">
@@ -226,7 +222,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
         </form>
     </div>
 
-    <div class="card border-0 shadow-sm">
+    <div class="tf-card">
         <form method="POST">
             <?php echo csrf_field(); ?>
             <input type="hidden" name="action" value="delete_entries">
@@ -255,7 +251,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                     </tbody>
                 </table>
             </div>
-            <div class="card-footer bg-white py-3"><?php echo render_pagination($pagination, BASE_URL . '/email/lists.php?action=entries&list_id=' . $view_list); ?></div>
+            <div class="tf-card-footer"><?php echo render_pagination($pagination, BASE_URL . '/email/lists.php?action=entries&list_id=' . $view_list); ?></div>
         </form>
     </div>
     <?php endif; endif; ?>
@@ -263,18 +259,18 @@ require_once __DIR__ . '/../helpers/layout_header.php';
 <?php else: ?>
 <div class="row g-4">
     <div class="col-12 col-lg-4">
-        <div class="card border-0 shadow-sm">
-            <div class="card-header bg-white border-bottom py-3"><h5 class="mb-0 fw-semibold">Create List</h5></div>
+        <div class="tf-card">
+            <div class="tf-card-header"><h5 class="mb-0 fw-semibold">Create List</h5></div>
             <div class="card-body">
                 <form method="POST">
                     <?php echo csrf_field(); ?>
                     <input type="hidden" name="action" value="create">
                     <div class="mb-3">
-                        <label class="form-label small fw-semibold text-secondary">List Name <span class="text-danger">*</span></label>
+                        <label class="tf-label">List Name <span class="text-danger">*</span></label>
                         <input type="text" name="name" class="form-control" required maxlength="200" placeholder="e.g. June Newsletter">
                     </div>
                     <div class="mb-3">
-                        <label class="form-label small fw-semibold text-secondary">Description</label>
+                        <label class="tf-label">Description</label>
                         <textarea name="description" class="form-control" rows="3" placeholder="Optional notes about this list"></textarea>
                     </div>
                     <button type="submit" class="btn btn-primary"><i class="bi bi-plus-lg"></i> Create List</button>
@@ -284,8 +280,8 @@ require_once __DIR__ . '/../helpers/layout_header.php';
     </div>
 
     <div class="col-12 col-lg-8">
-        <div class="card border-0 shadow-sm">
-            <div class="card-header bg-white border-bottom py-3">
+        <div class="tf-card">
+            <div class="tf-card-header">
                 <h5 class="mb-0 fw-semibold"><?php echo count($lists); ?> email lists</h5>
             </div>
             <div class="table-responsive">

@@ -58,17 +58,12 @@ $page_actions = '<a href="' . BASE_URL . '/email/campaign_create.php" class="btn
 require_once __DIR__ . '/../helpers/layout_header.php';
 ?>
 
-<style>
-    .table-campaigns thead th { font-size: .7rem; letter-spacing: .06em; text-transform: uppercase; color: #64748b; font-weight: 600; background: #f8fafc; }
-    .table-campaigns tbody td { vertical-align: middle; padding: .85rem 1rem; }
-    .table-campaigns code { background: #f1f5f9; color: #475569; padding: .125rem .5rem; border-radius: 4px; font-size: .75rem; }
-</style>
 
-<div class="card border-0 shadow-sm mb-4">
+<div class="tf-card mb-4">
     <form method="GET" class="card-body">
         <div class="row g-2 align-items-end">
             <div class="col-6 col-md-3">
-                <label class="form-label small fw-semibold text-secondary">Project</label>
+                <label class="tf-label">Project</label>
                 <select name="project_id" class="form-select form-select-sm">
                     <option value="">All</option>
                     <?php foreach ($projects_list as $p): ?>
@@ -77,7 +72,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                 </select>
             </div>
             <div class="col-6 col-md-3">
-                <label class="form-label small fw-semibold text-secondary">Vendor</label>
+                <label class="tf-label">Vendor</label>
                 <select name="vendor_id" class="form-select form-select-sm">
                     <option value="">All</option>
                     <?php foreach ($vendors_list as $v): ?>
@@ -86,7 +81,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                 </select>
             </div>
             <div class="col-6 col-md-3">
-                <label class="form-label small fw-semibold text-secondary">Status</label>
+                <label class="tf-label">Status</label>
                 <select name="status" class="form-select form-select-sm">
                     <option value="">All</option>
                     <?php foreach (['draft','scheduled','running','paused','completed','failed'] as $s): ?>
@@ -96,14 +91,14 @@ require_once __DIR__ . '/../helpers/layout_header.php';
             </div>
             <div class="col-12 col-md-3 d-flex gap-2">
                 <button type="submit" class="btn btn-primary btn-sm flex-fill"><i class="bi bi-funnel"></i>Apply</button>
-                <a href="<?php echo BASE_URL; ?>/email/campaigns.php" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-counterclockwise"></i></a>
+                <a href="<?php echo BASE_URL; ?>/email/campaigns.php" class="btn btn-outline-secondary btn-sm btn-icon" aria-label="Reset filters"><i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i></a>
             </div>
         </div>
     </form>
 </div>
 
-<div class="card border-0 shadow-sm">
-    <div class="card-header bg-white border-bottom py-3"><h5 class="mb-0 fw-semibold"><?php echo number_format($total); ?> campaigns</h5></div>
+<div class="tf-card">
+    <div class="tf-card-header"><h5 class="mb-0 fw-semibold"><?php echo number_format($total); ?> campaigns</h5></div>
     <div class="table-responsive">
         <table class="table table-hover table-campaigns align-middle mb-0">
             <thead>
@@ -137,15 +132,15 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                         <td class="text-end"><?php echo number_format((int)($c['bounced_count'] ?? 0)); ?></td>
                         <td class="text-end"><?php echo number_format((int)($c['failed_count'] ?? 0)); ?></td>
                         <td>
-                            <a href="<?php echo BASE_URL; ?>/email/campaign_detail.php?id=<?php echo (int)$c['id']; ?>" class="btn btn-outline-secondary btn-sm"><i class="bi bi-eye"></i></a>
-                            <a href="<?php echo BASE_URL; ?>/email/campaign_edit.php?id=<?php echo (int)$c['id']; ?>" class="btn btn-outline-secondary btn-sm"><i class="bi bi-pencil"></i></a>
+                            <a href="<?php echo BASE_URL; ?>/email/campaign_detail.php?id=<?php echo (int)$c['id']; ?>" class="btn btn-outline-secondary btn-sm btn-icon" aria-label="View campaign"><i class="bi bi-eye" aria-hidden="true"></i></a>
+                            <a href="<?php echo BASE_URL; ?>/email/campaign_edit.php?id=<?php echo (int)$c['id']; ?>" class="btn btn-outline-secondary btn-sm btn-icon" aria-label="Edit campaign"><i class="bi bi-pencil" aria-hidden="true"></i></a>
                         </td>
                     </tr>
                 <?php endforeach; endif; ?>
             </tbody>
         </table>
     </div>
-    <div class="card-footer bg-white py-3"><?php echo render_pagination($pagination, BASE_URL . '/email/campaigns.php?' . http_build_query($_GET)); ?></div>
+    <div class="tf-card-footer"><?php echo render_pagination($pagination, BASE_URL . '/email/campaigns.php?' . http_build_query($_GET)); ?></div>
 </div>
 
 <?php require_once __DIR__ . '/../helpers/layout_footer.php'; ?>

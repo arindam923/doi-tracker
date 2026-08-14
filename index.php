@@ -14,12 +14,12 @@ $has_error = $flash && ($flash['type'] === 'danger' || $flash['type'] === 'warni
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Sign in to <?php echo htmlspecialchars(SITE_NAME, ENT_QUOTES, 'UTF-8'); ?> — DOI registration and tracking platform.">
-    <meta name="theme-color" content="#4f46e5">
+    <meta name="theme-color" content="#0f766e">
     <title>Sign In — <?php echo SITE_NAME; ?></title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="<?php echo BASE_URL; ?>/assets/css/app.css?v=<?php echo filemtime(__DIR__ . '/assets/css/app.css'); ?>" rel="stylesheet">
@@ -29,11 +29,6 @@ $has_error = $flash && ($flash['type'] === 'danger' || $flash['type'] === 'warni
     <a class="tf-skip-link" href="#login-form">Skip to sign in form</a>
 
     <main class="tf-login-page">
-        <!-- Decorative blobs -->
-        <div class="login-blob is-indigo" style="top: -12rem; right: -12rem; width: 28rem; height: 28rem; opacity: .18;" aria-hidden="true"></div>
-        <div class="login-blob is-emerald" style="bottom: -14rem; left: -14rem; width: 30rem; height: 30rem; opacity: .16;" aria-hidden="true"></div>
-        <div class="login-blob is-rose" style="top: 40%; left: -8rem; width: 18rem; height: 18rem; opacity: .12;" aria-hidden="true"></div>
-
         <div class="tf-login-card" role="region" aria-labelledby="login-heading">
             <div class="tf-login-header">
                 <div class="tf-login-logo" aria-hidden="true">
@@ -77,7 +72,8 @@ $has_error = $flash && ($flash['type'] === 'danger' || $flash['type'] === 'warni
                             <span class="tf-input-group-icon" aria-hidden="true"><i class="bi bi-person"></i></span>
                             <input type="text" id="username" name="username" placeholder="Enter your username" required
                                    class="form-control <?php echo $has_error ? 'is-invalid' : ''; ?>"
-                                   aria-describedby="username-help"
+                                   aria-describedby="username-help<?php echo $has_error ? ' login-alert' : ''; ?>"
+                                   <?php if ($has_error) echo 'aria-invalid="true"'; ?>
                                    autocomplete="username"
                                    autofocus>
                         </div>
@@ -93,7 +89,8 @@ $has_error = $flash && ($flash['type'] === 'danger' || $flash['type'] === 'warni
                             <span class="tf-input-group-icon" aria-hidden="true"><i class="bi bi-lock"></i></span>
                             <input type="password" id="password" name="password" placeholder="Enter your password" required
                                    class="form-control <?php echo $has_error ? 'is-invalid' : ''; ?>"
-                                   aria-describedby="password-help"
+                                   aria-describedby="password-help<?php echo $has_error ? ' login-alert' : ''; ?>"
+                                   <?php if ($has_error) echo 'aria-invalid="true"'; ?>
                                    autocomplete="current-password">
                             <button type="button" class="btn btn-icon position-absolute end-0 me-2" id="toggle-password" aria-label="Show password" aria-pressed="false" style="top: .25rem; color: var(--tf-muted);">
                                 <i class="bi bi-eye" aria-hidden="true"></i>

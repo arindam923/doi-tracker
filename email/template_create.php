@@ -50,21 +50,6 @@ $form_data = $_SESSION['form_data'] ?? [];
 unset($_SESSION['form_data']);
 ?>
 
-<style>
-  .tf-page .tf-card { background:#ffffff; border:1px solid #e2e8f0; color:#0f172a; }
-  .tf-page .tf-card-header { background:#ffffff; border-bottom:1px solid #e2e8f0; }
-  .tf-page .tf-card-title { color:#0f172a; }
-  .tf-page .tf-card-subtitle { color:#475569; }
-  .tf-page .tf-label { color:#334155; }
-  .tf-page .tf-help { color:#475569; }
-  .tf-page .form-control,
-  .tf-page textarea.form-control,
-  .tf-page .form-select { background:#ffffff; color:#0f172a; border-color:#cbd5e1; }
-  .tf-page .form-check-label { color:#0f172a; }
-  .tf-page .form-actions { border-top-color:#e2e8f0; }
-  .tf-page .btn-secondary { background:#ffffff; color:#0f172a; border-color:#cbd5e1; }
-  .tf-page .alert { color:#0f172a; }
-</style>
 
 <div class="tf-page">
     <div class="tf-card">

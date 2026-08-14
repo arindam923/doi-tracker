@@ -53,16 +53,16 @@ $page_actions = $project_filter
     : '';
 require_once __DIR__ . '/../helpers/layout_header.php';
 ?>
-<div class="card border-0 shadow-sm mb-4">
+<div class="tf-card mb-4">
     <form method="GET" class="card-body">
         <?php if ($project_filter): ?><input type="hidden" name="project_id" value="<?php echo $project_filter; ?>"><?php endif; ?>
         <div class="row g-2 align-items-end">
             <div class="col-12 col-md-4">
-                <label class="form-label small fw-semibold text-secondary">Search</label>
+                <label class="tf-label">Search</label>
                 <input type="text" name="search" class="form-control form-control-sm" value="<?php echo sanitize($search); ?>" placeholder="Vendor name / code / email / company...">
             </div>
             <div class="col-6 col-md-2">
-                <label class="form-label small fw-semibold text-secondary">Status</label>
+                <label class="tf-label">Status</label>
                 <select name="status" class="form-select form-select-sm">
                     <option value="">All</option>
                     <?php foreach (tf_vendor_statuses() as $k => $label): ?>
@@ -71,7 +71,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                 </select>
             </div>
             <div class="col-6 col-md-2">
-                <label class="form-label small fw-semibold text-secondary">Traffic</label>
+                <label class="tf-label">Traffic</label>
                 <select name="traffic" class="form-select form-select-sm">
                     <option value="">All</option>
                     <?php foreach (tf_traffic_types() as $t): ?>
@@ -80,7 +80,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                 </select>
             </div>
             <div class="col-12 col-md-2">
-                <label class="form-label small fw-semibold text-secondary">Attach to Project</label>
+                <label class="tf-label">Attach to Project</label>
                 <select name="project_id" class="form-select form-select-sm">
                     <option value="">(view only)</option>
                     <?php foreach ($projects_list as $p): ?>
@@ -96,7 +96,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
     </form>
 </div>
 
-<div class="card border-0 shadow-sm">
+<div class="tf-card">
     <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
         <h5 class="mb-0 fw-semibold"><?php echo number_format($total); ?> global vendors</h5>
         <div>
@@ -160,7 +160,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
             </tbody>
         </table>
     </div>
-    <div class="card-footer bg-white py-3">
+    <div class="tf-card-footer">
         <?php echo render_pagination($pagination, BASE_URL . '/vendors/global_library.php?' . http_build_query($_GET)); ?>
     </div>
 </div>

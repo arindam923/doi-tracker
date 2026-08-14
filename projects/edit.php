@@ -115,8 +115,8 @@ require_once __DIR__ . '/../helpers/layout_header.php';
 
 <div class="row justify-content-center">
     <div class="col-12 col-xl-10">
-        <div class="card border-0 shadow-sm">
-            <div class="card-header bg-white border-bottom py-3">
+        <div class="tf-card">
+            <div class="tf-card-header">
                 <div class="d-flex flex-column">
                     <h5 class="mb-0 fw-semibold">Edit: <?php echo sanitize($project['project_name']); ?></h5>
                     <code class="small text-muted" style="font-family: ui-monospace, monospace;"><?php echo sanitize($project['project_code']); ?></code>
@@ -128,13 +128,13 @@ require_once __DIR__ . '/../helpers/layout_header.php';
 
                     <div class="row g-3">
                         <div class="col-12 col-md-8">
-                            <label for="project_name" class="form-label small fw-semibold text-secondary">Project Name <span class="text-danger">*</span></label>
+                            <label for="project_name" class="tf-label">Project Name <span class="text-danger">*</span></label>
                             <input type="text" id="project_name" name="project_name" class="form-control"
                                    value="<?php echo sanitize($f['project_name']); ?>" required>
                         </div>
 
                         <div class="col-12 col-md-4">
-                            <label for="client_id" class="form-label small fw-semibold text-secondary">Client <span class="text-danger">*</span></label>
+                            <label for="client_id" class="tf-label">Client <span class="text-danger">*</span></label>
                             <select id="client_id" name="client_id" class="form-select" required>
                                 <?php foreach ($clients_list as $c): ?>
                                 <option value="<?php echo $c['id']; ?>" <?php echo $f['client_id'] == $c['id'] ? 'selected' : ''; ?>>
@@ -145,31 +145,31 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                         </div>
 
                         <div class="col-12">
-                            <label for="client_survey_link" class="form-label small fw-semibold text-secondary">Client Link</label>
+                            <label for="client_survey_link" class="tf-label">Client Link</label>
                             <input type="url" id="client_survey_link" name="client_survey_link" class="form-control"
                                    value="<?php echo sanitize($f['client_survey_link'] ?? ''); ?>">
                         </div>
 
                         <div class="col-12">
-                            <label for="preview_link" class="form-label small fw-semibold text-secondary">Preview Link</label>
+                            <label for="preview_link" class="tf-label">Preview Link</label>
                             <input type="url" id="preview_link" name="preview_link" class="form-control"
                                    value="<?php echo sanitize($f['preview_link'] ?? ''); ?>">
                         </div>
 
                         <div class="col-6 col-md-2">
-                            <label for="client_cpi" class="form-label small fw-semibold text-secondary">Payout</label>
+                            <label for="client_cpi" class="tf-label">Payout</label>
                             <input type="number" id="client_cpi" name="client_cpi" class="form-control"
                                    value="<?php echo sanitize($f['client_cpi']); ?>" step="0.01" min="0">
                         </div>
 
                         <div class="col-6 col-md-2">
-                            <label for="vendor_default_cpi" class="form-label small fw-semibold text-secondary">Default Vendor Payout</label>
+                            <label for="vendor_default_cpi" class="tf-label">Default Vendor Payout</label>
                             <input type="number" id="vendor_default_cpi" name="vendor_default_cpi" class="form-control"
                                    value="<?php echo sanitize($f['vendor_default_cpi']); ?>" step="0.01" min="0">
                         </div>
 
                         <div class="col-6 col-md-2">
-                            <label for="currency" class="form-label small fw-semibold text-secondary">Currency</label>
+                            <label for="currency" class="tf-label">Currency</label>
                             <select id="currency" name="currency" class="form-select">
                                 <?php $cur = $f['currency'] ?? 'USD'; foreach (tf_currencies() as $c): ?>
                                 <option value="<?php echo $c; ?>" <?php echo $cur === $c ? 'selected' : ''; ?>><?php echo $c; ?></option>
@@ -178,19 +178,19 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                         </div>
 
                         <div class="col-6 col-md-2">
-                            <label for="total_quota" class="form-label small fw-semibold text-secondary">Total Quota</label>
+                            <label for="total_quota" class="tf-label">Total Quota</label>
                             <input type="number" id="total_quota" name="total_quota" class="form-control"
                                    value="<?php echo (int)$f['total_quota']; ?>" min="0">
                         </div>
 
                         <div class="col-6 col-md-2">
-                            <label for="daily_cap" class="form-label small fw-semibold text-secondary">Daily Cap</label>
+                            <label for="daily_cap" class="tf-label">Daily Cap</label>
                             <input type="number" id="daily_cap" name="daily_cap" class="form-control"
                                    value="<?php echo (int)($f['daily_cap'] ?? 0); ?>" min="0">
                         </div>
 
                         <div class="col-6 col-md-2">
-                            <label for="campaign_type" class="form-label small fw-semibold text-secondary">Campaign Type</label>
+                            <label for="campaign_type" class="tf-label">Campaign Type</label>
                             <select id="campaign_type" name="campaign_type" class="form-select">
                                 <?php $ct = $f['campaign_type'] ?? 'CPL'; foreach (tf_campaign_types() as $key => $label): ?>
                                 <option value="<?php echo $key; ?>" <?php echo $ct === $key ? 'selected' : ''; ?>><?php echo sanitize($label); ?></option>
@@ -199,7 +199,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                         </div>
 
                         <div class="col-6 col-md-3">
-                            <label for="vertical" class="form-label small fw-semibold text-secondary">Project Type (Vertical)</label>
+                            <label for="vertical" class="tf-label">Project Type (Vertical)</label>
                             <select id="vertical" name="vertical" class="form-select">
                                 <?php $v = $f['vertical'] ?? 'Other'; foreach (tf_verticals() as $vt): ?>
                                 <option value="<?php echo $vt; ?>" <?php echo $v === $vt ? 'selected' : ''; ?>><?php echo sanitize($vt); ?></option>
@@ -208,7 +208,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                         </div>
 
                         <div class="col-6 col-md-3">
-                            <label for="conversion_type" class="form-label small fw-semibold text-secondary">Conversion Type</label>
+                            <label for="conversion_type" class="tf-label">Conversion Type</label>
                             <select id="conversion_type" name="conversion_type" class="form-select">
                                 <?php $cv = $f['conversion_type'] ?? 'SOI'; foreach (tf_conversion_types() as $ct2): ?>
                                 <option value="<?php echo $ct2; ?>" <?php echo $cv === $ct2 ? 'selected' : ''; ?>><?php echo sanitize($ct2); ?></option>
@@ -217,7 +217,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                         </div>
 
                         <div class="col-6 col-md-3">
-                            <label for="target_device" class="form-label small fw-semibold text-secondary">Target Device</label>
+                            <label for="target_device" class="tf-label">Target Device</label>
                             <select id="target_device" name="target_device" class="form-select">
                                 <?php $td = $f['target_device'] ?? 'All'; foreach (tf_target_devices() as $dv): ?>
                                 <option value="<?php echo $dv; ?>" <?php echo $td === $dv ? 'selected' : ''; ?>><?php echo sanitize($dv); ?></option>
@@ -226,7 +226,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                         </div>
 
                         <div class="col-6 col-md-3">
-                            <label for="campaign_status" class="form-label small fw-semibold text-secondary">Campaign Status</label>
+                            <label for="campaign_status" class="tf-label">Campaign Status</label>
                             <select id="campaign_status" name="campaign_status" class="form-select">
                                 <?php $cs = $f['campaign_status'] ?? 'live'; foreach (tf_campaign_status() as $key => $label): ?>
                                 <option value="<?php echo $key; ?>" <?php echo $cs === $key ? 'selected' : ''; ?>><?php echo sanitize($label); ?></option>
@@ -235,7 +235,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                         </div>
 
                         <div class="col-6 col-md-3">
-                            <label for="visibility" class="form-label small fw-semibold text-secondary">Visibility</label>
+                            <label for="visibility" class="tf-label">Visibility</label>
                             <select id="visibility" name="visibility" class="form-select">
                                 <?php $vis = $f['visibility'] ?? 'private'; foreach (tf_visibility() as $key => $label): ?>
                                 <option value="<?php echo $key; ?>" <?php echo $vis === $key ? 'selected' : ''; ?>><?php echo sanitize($label); ?></option>
@@ -244,7 +244,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                         </div>
 
                         <div class="col-12">
-                            <label class="form-label small fw-semibold text-secondary">Campaign GEO <span class="text-muted">(searchable multi-select)</span></label>
+                            <label class="tf-label">Campaign GEO <span class="text-muted">(searchable multi-select)</span></label>
                             <input type="text" id="geo_search" class="form-control mb-2" placeholder="Type to filter countries…">
                             <select id="geo_codes" name="geo_codes[]" multiple size="8" class="form-select">
                                 <?php foreach (tf_countries() as $code => $name): ?>
@@ -254,25 +254,25 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                         </div>
 
                         <div class="col-6 col-md-3">
-                            <label for="country_target" class="form-label small fw-semibold text-secondary">Primary Country</label>
+                            <label for="country_target" class="tf-label">Primary Country</label>
                             <input type="text" id="country_target" name="country_target" class="form-control"
                                    value="<?php echo sanitize($f['country_target'] ?? ''); ?>">
                         </div>
 
                         <div class="col-6 col-md-3">
-                            <label for="start_date" class="form-label small fw-semibold text-secondary">Start Date</label>
+                            <label for="start_date" class="tf-label">Start Date</label>
                             <input type="date" id="start_date" name="start_date" class="form-control"
                                    value="<?php echo sanitize($f['start_date'] ?? ''); ?>">
                         </div>
 
                         <div class="col-6 col-md-3">
-                            <label for="end_date" class="form-label small fw-semibold text-secondary">End Date</label>
+                            <label for="end_date" class="tf-label">End Date</label>
                             <input type="date" id="end_date" name="end_date" class="form-control"
                                    value="<?php echo sanitize($f['end_date'] ?? ''); ?>">
                         </div>
 
                         <div class="col-12">
-                            <label for="description" class="form-label small fw-semibold text-secondary">Description</label>
+                            <label for="description" class="tf-label">Description</label>
                             <textarea id="description" name="description" class="form-control" rows="3"><?php echo sanitize($f['description'] ?? ''); ?></textarea>
                         </div>
                     </div>

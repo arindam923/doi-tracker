@@ -86,23 +86,12 @@ $page_actions = '<a href="' . BASE_URL . '/email/compose.php" class="btn btn-pri
 require_once __DIR__ . '/../helpers/layout_header.php';
 ?>
 
-<style>
-    .table-emails thead th { font-size: .7rem; letter-spacing: .06em; text-transform: uppercase; color: #64748b; font-weight: 600; background: #f8fafc; }
-    .table-emails tbody td { vertical-align: middle; padding: .85rem 1rem; }
-    .tf-pagination ul { display: inline-flex; align-items: center; list-style: none; margin: 0; padding: 0; border-radius: .5rem; overflow: hidden; border: 1px solid #e2e8f0; background: #fff; }
-    .tf-pagination li a, .tf-pagination li span { display: inline-flex; align-items: center; justify-content: center; min-width: 2.25rem; height: 2.25rem; padding: 0 .75rem; font-size: .875rem; font-weight: 500; color: #64748b; background: #fff; border-right: 1px solid #e2e8f0; text-decoration: none; }
-    .tf-pagination li:last-child a, .tf-pagination li:last-child span { border-right: 0; }
-    .tf-pagination a:hover { background: #f8fafc; color: #0f172a; text-decoration: none; }
-    .tf-pagination .is-active { background: #eef2ff !important; color: #4f46e5 !important; font-weight: 600; }
-    .tf-pagination .is-disabled { color: #cbd5e1; background: #f8fafc; cursor: not-allowed; }
-    .preview-pre { background: #f8fafc; padding: 1rem; border-radius: .375rem; white-space: pre-wrap; font-family: inherit; font-size: .9rem; margin: 0; }
-</style>
 
-<div class="card border-0 shadow-sm mb-4">
+<div class="tf-card mb-4">
     <form method="GET" class="card-body">
         <div class="row g-3 align-items-end">
             <div class="col-12 col-md-3">
-                <label for="status" class="form-label small fw-semibold text-secondary">Status</label>
+                <label for="status" class="tf-label">Status</label>
                 <select id="status" name="status" class="form-select">
                     <option value="">All Status</option>
                     <option value="queued" <?php echo $status_filter === 'queued' ? 'selected' : ''; ?>>Queued</option>
@@ -112,15 +101,15 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                 </select>
             </div>
             <div class="col-12 col-md-3">
-                <label for="from" class="form-label small fw-semibold text-secondary">From Date</label>
+                <label for="from" class="tf-label">From Date</label>
                 <input type="date" id="from" name="from" class="form-control" value="<?php echo $date_from; ?>">
             </div>
             <div class="col-12 col-md-3">
-                <label for="to" class="form-label small fw-semibold text-secondary">To Date</label>
+                <label for="to" class="tf-label">To Date</label>
                 <input type="date" id="to" name="to" class="form-control" value="<?php echo $date_to; ?>">
             </div>
             <div class="col-12 col-md-3">
-                <label for="batch_id" class="form-label small fw-semibold text-secondary">Batch ID</label>
+                <label for="batch_id" class="tf-label">Batch ID</label>
                 <input type="text" id="batch_id" name="batch_id" class="form-control" value="<?php echo sanitize($batch_filter); ?>" placeholder="YYYYMMDDHHMMSS-xxxx">
             </div>
             <div class="col-12 col-md-3 d-flex justify-content-end gap-2">
@@ -136,7 +125,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
     </div>
 </div>
 
-<div class="card border-0 shadow-sm">
+<div class="tf-card">
     <div class="table-responsive">
         <table class="table table-hover table-emails align-middle mb-0">
             <thead>
@@ -180,8 +169,8 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                     </td>
                     <td><?php echo sanitize($e['sent_by_name'] ?? '-'); ?></td>
                     <td>
-                        <button class="btn btn-outline-secondary btn-sm" data-view-email='<?php echo htmlspecialchars(json_encode($e), ENT_QUOTES, 'UTF-8'); ?>' aria-label="View email">
-                            <i class="bi bi-eye"></i>
+                        <button class="btn btn-outline-secondary btn-sm btn-icon" data-view-email='<?php echo htmlspecialchars(json_encode($e), ENT_QUOTES, 'UTF-8'); ?>' aria-label="View email">
+                            <i class="bi bi-eye" aria-hidden="true"></i>
                         </button>
                     </td>
                 </tr>
@@ -204,15 +193,15 @@ require_once __DIR__ . '/../helpers/layout_header.php';
         </div>
         <div class="tf-modal-body">
             <div class="mb-3">
-                <label class="form-label small fw-semibold text-secondary">Recipient:</label>
+                <label class="tf-label">Recipient:</label>
                 <p class="mb-0" id="viewRecipient">—</p>
             </div>
             <div class="mb-3">
-                <label class="form-label small fw-semibold text-secondary">Subject:</label>
+                <label class="tf-label">Subject:</label>
                 <p class="mb-0" id="viewSubject">—</p>
             </div>
             <div class="mb-3">
-                <label class="form-label small fw-semibold text-secondary">Status:</label>
+                <label class="tf-label">Status:</label>
                 <p class="mb-0" id="viewStatus">—</p>
             </div>
             <div class="mb-3" id="viewErrorWrap" hidden>
@@ -220,11 +209,11 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                 <p class="mb-0 text-danger" id="viewError">—</p>
             </div>
             <div class="mb-3">
-                <label class="form-label small fw-semibold text-secondary">Resend ID:</label>
+                <label class="tf-label">Resend ID:</label>
                 <p class="mb-0 small" style="font-family: ui-monospace, monospace;" id="viewResendId">—</p>
             </div>
             <div class="mb-0">
-                <label class="form-label small fw-semibold text-secondary">Message:</label>
+                <label class="tf-label">Message:</label>
                 <pre class="preview-pre" id="viewBody">—</pre>
             </div>
         </div>

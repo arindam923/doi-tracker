@@ -36,26 +36,21 @@ $page_title = 'Traffic Summary';
 require_once __DIR__ . '/../helpers/layout_header.php';
 ?>
 
-<style>
-    .table-traffic thead th { font-size: .7rem; letter-spacing: .06em; text-transform: uppercase; color: #64748b; font-weight: 600; background: #f8fafc; }
-    .table-traffic tbody td { vertical-align: middle; padding: .85rem 1rem; }
-    .table-traffic code { background: #f1f5f9; color: #475569; padding: .125rem .5rem; border-radius: 4px; font-size: .75rem; }
-</style>
 
 <!-- Filters -->
-<div class="card border-0 shadow-sm mb-4">
+<div class="tf-card mb-4">
     <form method="GET" class="card-body">
         <div class="row g-3 align-items-end">
             <div class="col-12 col-md-3">
-                <label for="from" class="form-label small fw-semibold text-secondary">From</label>
+                <label for="from" class="tf-label">From</label>
                 <input type="date" id="from" name="from" class="form-control" value="<?php echo $from_date; ?>">
             </div>
             <div class="col-12 col-md-3">
-                <label for="to" class="form-label small fw-semibold text-secondary">To</label>
+                <label for="to" class="tf-label">To</label>
                 <input type="date" id="to" name="to" class="form-control" value="<?php echo $to_date; ?>">
             </div>
             <div class="col-12 col-md-4">
-                <label for="project_id" class="form-label small fw-semibold text-secondary">Project</label>
+                <label for="project_id" class="tf-label">Project</label>
                 <select id="project_id" name="project_id" class="form-select">
                     <option value="">All Projects</option>
                     <?php foreach ($projects_list as $p): ?>
@@ -73,7 +68,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
 </div>
 
 <!-- Traffic Table -->
-<div class="card border-0 shadow-sm">
+<div class="tf-card">
     <div class="card-header bg-white border-bottom d-flex justify-content-between align-items-center py-3">
         <h5 class="mb-0 fw-semibold">Vendor Traffic Summary</h5>
         <span class="badge bg-light text-dark border"><?php echo $from_date; ?> → <?php echo $to_date; ?></span>

@@ -71,12 +71,12 @@ $user_initials = $user_initials ?: mb_substr($user_name, 0, 2);
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?php echo isset($page_title) ? htmlspecialchars($page_title, ENT_QUOTES, 'UTF-8') . ' — ' : ''; ?><?php echo htmlspecialchars(SITE_NAME, ENT_QUOTES, 'UTF-8'); ?></title>
     <meta name="description" content="<?php echo htmlspecialchars(SITE_NAME, ENT_QUOTES, 'UTF-8'); ?> — DOI registration and tracking platform.">
-    <meta name="theme-color" content="#4f46e5">
+    <meta name="theme-color" content="#0f766e">
 
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
 
     <!-- Bootstrap Icons -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
@@ -84,25 +84,12 @@ $user_initials = $user_initials ?: mb_substr($user_name, 0, 2);
     <!-- Bootstrap 5 -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 
-    <!-- Tailwind CSS CDN (utility classes for legacy markup) -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    fontFamily: { sans: ['Inter', 'sans-serif'] },
-                    colors: { primary: '#4f46e5' }
-                }
-            }
-        }
-    </script>
-
     <!-- Track Flow Design System -->
     <link href="<?php echo BASE_URL; ?>/assets/css/app.css?v=<?php echo filemtime(__DIR__ . '/../assets/css/app.css'); ?>" rel="stylesheet">
 
     <?php if (isset($extra_head)) echo $extra_head; ?>
 </head>
-<body class="text-slate-800 antialiased h-screen flex overflow-hidden">
+<body class="tf-shell">
 
     <!-- Skip links for accessibility -->
     <a class="tf-skip-link" href="#main-content">Skip to main content</a>
@@ -112,8 +99,10 @@ $user_initials = $user_initials ?: mb_substr($user_name, 0, 2);
     <aside id="sidebar" class="tf-sidebar sidebar-transition sidebar-mobile-hidden" role="navigation" aria-label="Main navigation">
         <div class="tf-sidebar-header">
             <a href="<?php echo BASE_URL; ?>/dashboard.php" class="tf-sidebar-brand" aria-label="<?php echo htmlspecialchars(SITE_NAME, ENT_QUOTES, 'UTF-8'); ?> home">
+                <span class="tf-sidebar-logo" aria-hidden="true"><i class="bi bi-graph-up-arrow"></i></span>
                 <div>
                     <span class="tf-sidebar-brand-text"><?php echo SITE_NAME; ?></span>
+                    <span class="tf-sidebar-tagline">DOI tracking</span>
                 </div>
             </a>
         </div>
@@ -155,19 +144,19 @@ $user_initials = $user_initials ?: mb_substr($user_name, 0, 2);
     <div id="sidebar-backdrop" class="tf-sidebar-backdrop" aria-hidden="true" onclick="toggleSidebar()"></div>
 
     <!-- Main Content -->
-    <main id="main-content" class="tf-main flex-1 flex flex-col min-w-0 overflow-hidden bg-slate-50 h-screen" tabindex="-1">
+    <main id="main-content" class="tf-main tf-main-col" tabindex="-1">
         <!-- Topbar -->
         <header class="tf-topbar">
             <div class="tf-topbar-inner">
-                <div class="flex items-center gap-4">
-                    <button type="button" class="lg:hidden text-slate-300 hover:text-white p-2 -ml-2 rounded" onclick="toggleSidebar()" aria-label="Open sidebar" aria-expanded="false" aria-controls="sidebar">
-                        <i class="bi bi-list text-2xl" aria-hidden="true"></i>
+                <div class="tf-topbar-start">
+                    <button type="button" class="tf-menu-toggle tf-lg-only-hidden" onclick="toggleSidebar()" aria-label="Open sidebar" aria-expanded="false" aria-controls="sidebar">
+                        <i class="bi bi-list" style="font-size: 1.5rem;" aria-hidden="true"></i>
                     </button>
                     <?php if (isset($page_title)): ?>
                     <h1 class="tf-topbar-title"><?php echo htmlspecialchars($page_title, ENT_QUOTES, 'UTF-8'); ?></h1>
                     <?php endif; ?>
                 </div>
-                <div class="flex items-center gap-4">
+                <div class="tf-topbar-end">
                     <?php if (isset($page_actions)): ?>
                     <div class="tf-topbar-actions">
                         <?php echo $page_actions; ?>
@@ -208,7 +197,7 @@ $user_initials = $user_initials ?: mb_substr($user_name, 0, 2);
         </header>
 
         <!-- Flash Messages & Page Content -->
-        <div class="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+        <div class="tf-content-scroll">
             <?php
             $flash = get_flash();
             if ($flash):

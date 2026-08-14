@@ -84,60 +84,8 @@ $conv_stmt->execute($params);
 $conversions = $conv_stmt->fetchAll();
 
 $page_title = 'Vendor Dashboard';
+require_once __DIR__ . '/../helpers/portal_header.php';
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Vendor dashboard for <?php echo htmlspecialchars(SITE_NAME, ENT_QUOTES, 'UTF-8'); ?>">
-    <meta name="theme-color" content="#4f46e5">
-    <title><?php echo htmlspecialchars($page_title, ENT_QUOTES, 'UTF-8'); ?> — <?php echo htmlspecialchars(SITE_NAME, ENT_QUOTES, 'UTF-8'); ?></title>
-
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="<?php echo BASE_URL; ?>/assets/css/app.css?v=<?php echo filemtime(__DIR__ . '/../assets/css/app.css'); ?>" rel="stylesheet">
-</head>
-<body>
-
-    <a class="tf-skip-link" href="#main-content">Skip to main content</a>
-
-    <header class="tf-hero" style="border-radius: 0; margin-bottom: 0; padding: 1rem 1.5rem;">
-        <div class="container-fluid" style="position: relative; z-index: 1;">
-            <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
-                <a href="<?php echo BASE_URL; ?>/vendor_portal/index.php" class="d-flex align-items-center gap-2 text-white text-decoration-none">
-                     <span class="tf-login-logo" style="width: 2.25rem; height: 2.25rem; font-size: 1.1rem; margin: 0;" aria-hidden="true"><i class="bi bi-graph-up-arrow"></i></span>
-                    <span class="fw-bold fs-5"><?php echo htmlspecialchars(SITE_NAME, ENT_QUOTES, 'UTF-8'); ?> <span class="tf-hero-pill ms-1">Vendor</span></span>
-                </a>
-                <div class="d-flex align-items-center gap-3 flex-wrap">
-                    <span class="tf-hero-pill" aria-label="Vendor"><i class="bi bi-person-badge" aria-hidden="true"></i> <?php echo htmlspecialchars($vendor['vendor_code']); ?> — <?php echo htmlspecialchars($vendor['vendor_name']); ?></span>
-                    <a href="<?php echo BASE_URL; ?>/vendor_portal/profile.php" class="btn btn-sm btn-outline-light">Profile</a>
-                    <a href="<?php echo BASE_URL; ?>/vendor_portal/logout.php" class="btn btn-sm btn-outline-light">Logout</a>
-                </div>
-            </div>
-        </div>
-    </header>
-
-    <main id="main-content" class="tf-main" style="height: auto; min-height: calc(100vh - 4.5rem);">
-        <div class="tf-page">
-
-            <?php
-            $flash = get_flash();
-            if ($flash):
-                $alertClasses = ['success' => 'alert-success', 'danger' => 'alert-danger', 'warning' => 'alert-warning', 'info' => 'alert-info'];
-                $alertClass = $alertClasses[$flash['type']] ?? 'alert-info';
-                $live = $flash['type'] === 'danger' ? 'role="alert" aria-live="assertive"' : 'role="status" aria-live="polite"';
-            ?>
-            <div class="alert <?php echo $alertClass; ?> mb-4" <?php echo $live; ?> id="flash-alert">
-                <div class="alert-body"><?php echo htmlspecialchars($flash['message'], ENT_QUOTES, 'UTF-8'); ?></div>
-                <button type="button" class="alert-close" aria-label="Dismiss" onclick="document.getElementById('flash-alert').remove()">
-                    <i class="bi bi-x-lg" aria-hidden="true"></i>
-                </button>
-            </div>
-            <?php endif; ?>
 
             <!-- KPIs -->
             <div class="row g-3 mb-4">
@@ -158,7 +106,8 @@ $page_title = 'Vendor Dashboard';
                         <p class="tf-chart-subtitle">Clicks, conversions and revenue</p>
                     </div>
                 </div>
-                <div class="card-body" style="height: 300px; position: relative;">
+                <div class="tf-chart-body">
+                    <p class="tf-visually-hidden">Last 7 days: <?php echo (int)array_sum($clicks_series); ?> clicks, <?php echo (int)array_sum($conv_series); ?> conversions.</p>
                     <canvas id="vendorChart" role="img" aria-label="Bar and line chart showing last 7 days activity"></canvas>
                 </div>
             </section>
@@ -251,9 +200,9 @@ $page_title = 'Vendor Dashboard';
         data: {
             labels,
             datasets: [
-                { label: 'Clicks', data: clicksData, backgroundColor: 'rgba(79,70,229,.75)', borderRadius: 6, order: 2 },
-                { label: 'Conversions', data: convData, type: 'line', borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,.1)', fill: true, tension: .35, pointRadius: 0, order: 1 },
-                { label: 'Revenue', data: revData, type: 'line', borderColor: '#f59e0b', borderDash: [4,4], fill: false, tension: .35, pointRadius: 0, order: 0 }
+                { label: 'Clicks', data: clicksData, backgroundColor: 'rgba(15,118,110,.75)', borderRadius: 4, order: 2 },
+                { label: 'Conversions', data: convData, type: 'line', borderColor: '#047857', backgroundColor: 'rgba(4,120,87,.1)', fill: true, tension: .35, pointRadius: 0, order: 1 },
+                { label: 'Revenue', data: revData, type: 'line', borderColor: '#c2410c', borderDash: [4,4], fill: false, tension: .35, pointRadius: 0, order: 0 }
             ]
         },
         options: {

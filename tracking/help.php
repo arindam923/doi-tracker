@@ -6,8 +6,8 @@ $page_title = 'Postback Reference';
 require_once __DIR__ . '/../helpers/layout_header.php';
 ?>
 
-<div class="card border-0 shadow-sm">
-    <div class="card-header bg-white border-bottom py-3">
+<div class="tf-card">
+    <div class="tf-card-header">
         <h5 class="mb-0 fw-semibold">Postback URL Reference</h5>
     </div>
     <div class="card-body">

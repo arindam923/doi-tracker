@@ -11,18 +11,11 @@ $lists = $pdo->query("SELECT l.id, l.name, (SELECT COUNT(*) FROM email_list_entr
 require_once __DIR__ . '/../helpers/layout_header.php';
 ?>
 
-<style>
-    .stat-tile { padding: 1rem 1.25rem; }
-    .stat-tile .stat-label { font-size: .7rem; letter-spacing: .06em; text-transform: uppercase; color: #64748b; font-weight: 600; margin-bottom: .5rem; }
-    .stat-tile .stat-value { font-size: 1.75rem; font-weight: 700; color: #0f172a; line-height: 1.1; }
-    #client_ids { min-height: 12rem; }
-    .preview-pre { background: #f8fafc; padding: 1rem; border-radius: .375rem; white-space: pre-wrap; font-family: inherit; font-size: .9rem; margin: 0; }
-</style>
 
 <div class="row g-4">
     <div class="col-12 col-lg-8">
-        <div class="card border-0 shadow-sm">
-            <div class="card-header bg-white border-bottom py-3">
+        <div class="tf-card">
+            <div class="tf-card-header">
                 <h5 class="mb-0 fw-semibold">Compose Email</h5>
             </div>
             <div class="card-body">
@@ -30,7 +23,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                     <?php echo csrf_field(); ?>
 
                     <div class="mb-3">
-                        <label class="form-label small fw-semibold text-secondary">Recipients <span class="text-danger">*</span></label>
+                        <label class="tf-label">Recipients <span class="text-danger">*</span></label>
                         <div class="d-flex gap-3 mb-2">
                             <div class="form-check">
                                 <input class="form-check-input" type="radio" name="recipient_mode" id="modeSelected" value="selected" checked onchange="toggleRecipientMode()">
@@ -78,12 +71,12 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                     </div>
 
                     <div class="mb-3">
-                        <label for="subject" class="form-label small fw-semibold text-secondary">Subject <span class="text-danger">*</span></label>
+                        <label for="subject" class="tf-label">Subject <span class="text-danger">*</span></label>
                         <input type="text" id="subject" name="subject" class="form-control" required maxlength="300" placeholder="Enter email subject">
                     </div>
 
                     <div class="mb-3">
-                        <label for="body" class="form-label small fw-semibold text-secondary">Message <span class="text-danger">*</span></label>
+                        <label for="body" class="tf-label">Message <span class="text-danger">*</span></label>
                         <textarea id="body" name="body" class="form-control" rows="14" required placeholder="Write your email message here..."></textarea>
                         <p class="form-text">Plain text only. Each recipient will receive an individual email.</p>
                     </div>
@@ -98,8 +91,8 @@ require_once __DIR__ . '/../helpers/layout_header.php';
     </div>
 
     <div class="col-12 col-lg-4">
-        <div class="card border-0 shadow-sm">
-            <div class="card-header bg-white border-bottom py-3">
+        <div class="tf-card">
+            <div class="tf-card-header">
                 <h5 class="mb-0 fw-semibold">Recipients Overview</h5>
             </div>
             <div class="card-body">
@@ -129,15 +122,15 @@ require_once __DIR__ . '/../helpers/layout_header.php';
         </div>
         <div class="tf-modal-body">
             <div class="mb-3">
-                <label class="form-label small fw-semibold text-secondary">To:</label>
+                <label class="tf-label">To:</label>
                 <p class="mb-0" style="white-space: pre-line;" id="previewTo">—</p>
             </div>
             <div class="mb-3">
-                <label class="form-label small fw-semibold text-secondary">Subject:</label>
+                <label class="tf-label">Subject:</label>
                 <p class="mb-0" id="previewSubject">—</p>
             </div>
             <div class="mb-0">
-                <label class="form-label small fw-semibold text-secondary">Message:</label>
+                <label class="tf-label">Message:</label>
                 <pre class="preview-pre" id="previewBody">—</pre>
             </div>
         </div>

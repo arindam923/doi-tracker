@@ -66,8 +66,8 @@ require_once __DIR__ . '/../helpers/layout_header.php';
 ?>
 <div class="row justify-content-center">
     <div class="col-12 col-lg-6">
-        <div class="card border-0 shadow-sm">
-            <div class="card-header bg-white border-bottom py-3">
+        <div class="tf-card">
+            <div class="tf-card-header">
                 <h5 class="mb-0 fw-semibold">Detach Vendor</h5>
             </div>
             <div class="card-body">

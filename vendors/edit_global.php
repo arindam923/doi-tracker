@@ -63,8 +63,8 @@ require_once __DIR__ . '/../helpers/layout_header.php';
 
 <div class="row justify-content-center">
     <div class="col-12 col-lg-10">
-        <div class="card border-0 shadow-sm">
-            <div class="card-header bg-white border-bottom py-3">
+        <div class="tf-card">
+            <div class="tf-card-header">
                 <div class="d-flex flex-column">
                     <h5 class="mb-0 fw-semibold">Edit: <?php echo sanitize($vendor['vendor_name']); ?></h5>
                     <small class="text-muted"><code><?php echo sanitize($vendor['vendor_code']); ?></code></small>
@@ -76,13 +76,13 @@ require_once __DIR__ . '/../helpers/layout_header.php';
 
                     <div class="row g-3">
                         <div class="col-12 col-md-8">
-                            <label for="vendor_name" class="form-label small fw-semibold text-secondary">Vendor Name <span class="text-danger">*</span></label>
+                            <label for="vendor_name" class="tf-label">Vendor Name <span class="text-danger">*</span></label>
                             <input type="text" id="vendor_name" name="vendor_name" class="form-control"
                                    value="<?php echo sanitize($vendor['vendor_name']); ?>" required>
                         </div>
 
                         <div class="col-12 col-md-4">
-                            <label for="vendor_status" class="form-label small fw-semibold text-secondary">Master Status</label>
+                            <label for="vendor_status" class="tf-label">Master Status</label>
                             <select id="vendor_status" name="vendor_status" class="form-select">
                                 <?php foreach (tf_vendor_statuses() as $key => $label): ?>
                                 <option value="<?php echo $key; ?>" <?php echo ($vendor['vendor_status'] ?? 'approved') === $key ? 'selected' : ''; ?>><?php echo sanitize($label); ?></option>
@@ -91,13 +91,13 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                         </div>
 
                         <div class="col-12 col-md-8">
-                            <label for="company_name" class="form-label small fw-semibold text-secondary">Company Name</label>
+                            <label for="company_name" class="tf-label">Company Name</label>
                             <input type="text" id="company_name" name="company_name" class="form-control"
                                    value="<?php echo sanitize($vendor['company_name'] ?? ''); ?>">
                         </div>
 
                         <div class="col-6 col-md-4">
-                            <label for="traffic_type" class="form-label small fw-semibold text-secondary">Traffic Type</label>
+                            <label for="traffic_type" class="tf-label">Traffic Type</label>
                             <select id="traffic_type" name="traffic_type" class="form-select">
                                 <?php foreach (tf_traffic_types() as $t): ?>
                                 <option value="<?php echo $t; ?>" <?php echo ($vendor['traffic_type'] ?? 'Other') === $t ? 'selected' : ''; ?>><?php echo sanitize($t); ?></option>
@@ -106,37 +106,37 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                         </div>
 
                         <div class="col-6 col-md-4">
-                            <label for="contact_person" class="form-label small fw-semibold text-secondary">Contact Person</label>
+                            <label for="contact_person" class="tf-label">Contact Person</label>
                             <input type="text" id="contact_person" name="contact_person" class="form-control"
                                    value="<?php echo sanitize($vendor['contact_person'] ?? ''); ?>">
                         </div>
 
                         <div class="col-12 col-md-6">
-                            <label for="email" class="form-label small fw-semibold text-secondary">Email</label>
+                            <label for="email" class="tf-label">Email</label>
                             <input type="email" id="email" name="email" class="form-control"
                                    value="<?php echo sanitize($vendor['email'] ?? ''); ?>">
                         </div>
 
                         <div class="col-12 col-md-6">
-                            <label for="phone" class="form-label small fw-semibold text-secondary">Phone</label>
+                            <label for="phone" class="tf-label">Phone</label>
                             <input type="text" id="phone" name="phone" class="form-control"
                                    value="<?php echo sanitize($vendor['phone'] ?? ''); ?>">
                         </div>
 
                         <div class="col-6 col-md-4">
-                            <label for="telegram" class="form-label small fw-semibold text-secondary">Telegram</label>
+                            <label for="telegram" class="tf-label">Telegram</label>
                             <input type="text" id="telegram" name="telegram" class="form-control"
                                    value="<?php echo sanitize($vendor['telegram'] ?? ''); ?>">
                         </div>
 
                         <div class="col-6 col-md-4">
-                            <label for="skype" class="form-label small fw-semibold text-secondary">Skype</label>
+                            <label for="skype" class="tf-label">Skype</label>
                             <input type="text" id="skype" name="skype" class="form-control"
                                    value="<?php echo sanitize($vendor['skype'] ?? ''); ?>">
                         </div>
 
                         <div class="col-6 col-md-4">
-                            <label for="currency" class="form-label small fw-semibold text-secondary">Currency</label>
+                            <label for="currency" class="tf-label">Currency</label>
                             <select id="currency" name="currency" class="form-select">
                                 <?php foreach (tf_currencies() as $c): ?>
                                 <option value="<?php echo $c; ?>" <?php echo ($vendor['currency'] ?? 'USD') === $c ? 'selected' : ''; ?>><?php echo $c; ?></option>
@@ -145,20 +145,20 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                         </div>
 
                         <div class="col-6 col-md-6">
-                            <label for="default_payout" class="form-label small fw-semibold text-secondary">Default Payout (per conversion)</label>
+                            <label for="default_payout" class="tf-label">Default Payout (per conversion)</label>
                             <input type="number" id="default_payout" name="default_payout" class="form-control"
                                    value="<?php echo $vendor['default_payout']; ?>" step="0.01" min="0">
                         </div>
 
                         <div class="col-6 col-md-6">
-                            <label for="daily_cap" class="form-label small fw-semibold text-secondary">Daily Cap</label>
+                            <label for="daily_cap" class="tf-label">Daily Cap</label>
                             <input type="number" id="daily_cap" name="daily_cap" class="form-control"
                                    value="<?php echo (int)$vendor['daily_cap']; ?>" min="0">
                             <p class="form-text mb-0 small">0 = unlimited</p>
                         </div>
 
                         <div class="col-12">
-                            <label for="notes" class="form-label small fw-semibold text-secondary">Notes</label>
+                            <label for="notes" class="tf-label">Notes</label>
                             <textarea id="notes" name="notes" class="form-control" rows="3"><?php echo sanitize($vendor['notes'] ?? ''); ?></textarea>
                         </div>
                     </div>

@@ -181,236 +181,6 @@ $page_title = 'Revenue Report';
 require_once __DIR__ . '/../helpers/layout_header.php';
 ?>
 
-<style>
-    /* ─── Page header ───────────────────────────────────────── */
-    .report-hero {
-        background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4338ca 100%);
-        border-radius: 1rem;
-        padding: 1rem 1.5rem;
-        color: #fff;
-        margin-bottom: 1.25rem;
-    }
-    .report-hero .hero-pill {
-        display: inline-flex; align-items: center; gap: .375rem;
-        background: rgba(255, 255, 255, .12); backdrop-filter: blur(6px);
-        padding: .375rem .75rem; border-radius: 9999px;
-        font-size: .75rem; font-weight: 500;
-    }
-    .report-hero .hero-pill .dot { width: 6px; height: 6px; border-radius: 50%; background: #10b981; box-shadow: 0 0 8px #10b981; }
-
-    /* ─── Filter bar ────────────────────────────────────────── */
-    .filter-bar {
-        background: #fff;
-        border-radius: .75rem;
-        border: 1px solid #e2e8f0;
-        padding: 1rem 1.25rem;
-        margin-bottom: 1.5rem;
-        box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
-    }
-    .filter-bar label.form-label {
-        font-size: .7rem; text-transform: uppercase; letter-spacing: .06em;
-        font-weight: 600; color: #64748b; margin-bottom: .375rem;
-    }
-    .filter-bar .form-control,
-    .filter-bar .form-select {
-        border: 1px solid #e2e8f0; border-radius: .5rem; font-size: .875rem;
-        transition: border-color .15s ease, box-shadow .15s ease;
-    }
-    .filter-bar .form-control:focus,
-    .filter-bar .form-select:focus {
-        border-color: #818cf8; box-shadow: 0 0 0 3px rgba(99, 102, 241, .12);
-    }
-    .filter-bar .btn { border-radius: .5rem; font-size: .875rem; font-weight: 500; }
-
-    /* ─── All-time switch card ───────────────────────────────── */
-    .form-switch-card {
-        display: flex; align-items: center; gap: .5rem;
-        height: calc(2.25rem + 2px); /* match form-control height */
-        padding: 0 .875rem;
-        background: #f8fafc;
-        border: 1px solid #e2e8f0;
-        border-radius: .5rem;
-        cursor: pointer;
-        transition: all .15s ease;
-        user-select: none;
-    }
-    .form-switch-card .form-switch-input {
-        width: 2.25rem; height: 1.25rem;
-        margin: 0; cursor: pointer;
-        background-color: #cbd5e1;
-        border-color: #cbd5e1;
-    }
-    .form-switch-card .form-switch-input:checked {
-        background-color: #4f46e5;
-        border-color: #4f46e5;
-    }
-    .form-switch-card .form-switch-input:focus {
-        box-shadow: 0 0 0 3px rgba(99, 102, 241, .2);
-        border-color: #818cf8;
-    }
-    .form-switch-card .form-switch-label {
-        font-size: .8125rem; font-weight: 600; color: #475569;
-        cursor: pointer; margin: 0; display: flex; align-items: center; gap: .375rem;
-        white-space: nowrap;
-    }
-    .form-switch-card.is-active .form-switch-label { color: #4338ca; }
-    .form-switch-card .form-switch-label i { font-size: 1rem; }
-
-    /* ─── Stat cards ────────────────────────────────────────── */
-    .kpi-card {
-        border: 1px solid #e2e8f0;
-        border-radius: .875rem;
-        background: #fff;
-        padding: 1rem 1.125rem;
-        height: 100%;
-        transition: transform .18s ease, box-shadow .18s ease;
-        position: relative;
-        overflow: hidden;
-    }
-    .kpi-card:hover { transform: translateY(-2px); box-shadow: 0 8px 20px -4px rgba(15, 23, 42, .08); }
-    .kpi-card .kpi-icon {
-        width: 2.25rem; height: 2.25rem; border-radius: .5rem;
-        display: flex; align-items: center; justify-content: center;
-        font-size: 1rem; flex-shrink: 0;
-    }
-    .kpi-card .kpi-label {
-        font-size: .6875rem; text-transform: uppercase; letter-spacing: .05em;
-        font-weight: 600; color: #64748b; margin: 0 0 .25rem 0;
-        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    }
-    .kpi-card .kpi-value {
-        font-size: 1.375rem; font-weight: 700; color: #0f172a; line-height: 1.1;
-        margin: 0; letter-spacing: -0.01em;
-        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    }
-    .kpi-card .kpi-value.is-currency { font-size: 1.25rem; }
-    .kpi-card .kpi-meta { font-size: .75rem; color: #64748b; margin-top: .25rem; }
-    .kpi-card.kpi-conversions .kpi-icon { background: linear-gradient(135deg, #dbeafe, #bfdbfe); color: #1d4ed8; }
-    .kpi-card.kpi-clicks .kpi-icon { background: linear-gradient(135deg, #e0e7ff, #c7d2fe); color: #4338ca; }
-    .kpi-card.kpi-ccr .kpi-icon { background: linear-gradient(135deg, #fef3c7, #fde68a); color: #b45309; }
-    .kpi-card.kpi-revenue .kpi-icon { background: linear-gradient(135deg, #d1fae5, #a7f3d0); color: #047857; }
-    .kpi-card.kpi-cost .kpi-icon { background: linear-gradient(135deg, #fee2e2, #fecaca); color: #b91c1c; }
-    .kpi-card.kpi-profit .kpi-icon { background: linear-gradient(135deg, #ddd6fe, #c4b5fd); color: #5b21b6; }
-    .kpi-card.kpi-profit.is-positive { background: linear-gradient(135deg, #ecfdf5 0%, #fff 60%); border-color: #a7f3d0; }
-    .kpi-card.kpi-profit.is-negative { background: linear-gradient(135deg, #fef2f2 0%, #fff 60%); border-color: #fecaca; }
-    .kpi-card .kpi-trend { display: inline-flex; align-items: center; gap: .25rem; font-size: .75rem; font-weight: 600; }
-    .kpi-card .kpi-text { min-width: 0; flex: 1 1 0; }
-
-    /* Compact KPI variant — used for secondary metrics */
-    .kpi-card.kpi-sm { padding: .75rem 1rem; background: #f8fafc; }
-    .kpi-card.kpi-sm .kpi-icon { width: 1.875rem; height: 1.875rem; font-size: .875rem; }
-    .kpi-card.kpi-sm .kpi-label { font-size: .65rem; margin-bottom: 0; }
-    .kpi-card.kpi-sm .kpi-value { font-size: 1.125rem; }
-    .kpi-card.kpi-sm .kpi-value.is-currency { font-size: 1.05rem; }
-
-    /* ─── Chart card ────────────────────────────────────────── */
-    .chart-card { border: 1px solid #e2e8f0; border-radius: .875rem; background: #fff; }
-    .chart-card .chart-header {
-        padding: 1.25rem 1.5rem; border-bottom: 1px solid #f1f5f9;
-        display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: .75rem;
-    }
-    .chart-card .chart-header h5 { font-weight: 600; margin: 0; }
-    .chart-card .chart-legend { display: flex; gap: 1rem; align-items: center; }
-    .chart-card .chart-legend .legend-dot {
-        display: inline-flex; align-items: center; gap: .375rem;
-        font-size: .8125rem; color: #475569; font-weight: 500;
-    }
-    .chart-card .chart-legend .legend-dot::before {
-        content: ''; width: 10px; height: 10px; border-radius: 50%;
-    }
-    .chart-card .chart-legend .legend-dot.legend-revenue::before { background: #10b981; }
-    .chart-card .chart-legend .legend-dot.legend-cost::before { background: #ef4444; }
-    .chart-card .chart-legend .legend-dot.legend-profit::before { background: #4f46e5; }
-
-    /* ─── Chart toolbar (legend + view toggle) ─────────────── */
-    .chart-toolbar { display: flex; align-items: center; gap: 1.25rem; flex-wrap: wrap; }
-    .chart-view-toggle {
-        display: inline-flex; background: #f1f5f9; border-radius: .5rem;
-        padding: 3px; border: 1px solid #e2e8f0;
-    }
-    .chart-view-toggle .view-btn {
-        border: 0; background: transparent;
-        padding: .375rem .625rem; border-radius: .375rem;
-        font-size: .875rem; color: #64748b;
-        cursor: pointer; transition: all .15s ease;
-        display: inline-flex; align-items: center; gap: .25rem;
-    }
-    .chart-view-toggle .view-btn:hover { color: #0f172a; }
-    .chart-view-toggle .view-btn.is-active {
-        background: #fff; color: #4f46e5;
-        box-shadow: 0 1px 2px rgba(15, 23, 42, .08);
-    }
-    .chart-view-toggle .view-btn i { font-size: 1rem; }
-
-    /* ─── Tables ────────────────────────────────────────────── */
-    .data-card { border: 1px solid #e2e8f0; border-radius: .875rem; background: #fff; overflow: hidden; }
-    .data-card .data-header {
-        padding: 1.25rem 1.5rem; border-bottom: 1px solid #f1f5f9;
-        display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: .75rem;
-    }
-    .data-card .data-header h5 { font-weight: 600; margin: 0; }
-    .table-reports thead th {
-        font-size: .7rem; letter-spacing: .06em; text-transform: uppercase;
-        color: #64748b; font-weight: 600; background: #f8fafc;
-        border-bottom: 1px solid #e2e8f0; padding: .75rem 1rem;
-    }
-    .table-reports tbody td {
-        vertical-align: middle; padding: 1rem;
-        border-bottom: 1px solid #f1f5f9;
-    }
-    .table-reports tbody tr:last-child td { border-bottom: 0; }
-    .table-reports tbody tr { transition: background-color .15s ease; }
-    .table-reports tbody tr:hover { background: #f8fafc; }
-    .table-reports .project-cell strong { color: #0f172a; font-weight: 600; }
-    .table-reports .project-cell .proj-name { font-size: .8125rem; color: #64748b; margin-top: .125rem; }
-    .table-reports .margin-pill {
-        display: inline-flex; align-items: center; gap: .25rem;
-        padding: .25rem .5rem; border-radius: 9999px;
-        font-size: .75rem; font-weight: 600;
-    }
-    .margin-pill.is-positive { background: #d1fae5; color: #047857; }
-    .margin-pill.is-neutral  { background: #fef3c7; color: #b45309; }
-    .margin-pill.is-negative { background: #fee2e2; color: #b91c1c; }
-    .table-reports .empty-state { padding: 3rem 1rem; text-align: center; }
-    .table-reports .empty-state .empty-icon {
-        width: 4rem; height: 4rem; border-radius: 1rem;
-        background: linear-gradient(135deg, #f1f5f9, #e2e8f0);
-        color: #94a3b8; font-size: 1.75rem;
-        display: inline-flex; align-items: center; justify-content: center;
-        margin-bottom: 1rem;
-    }
-
-    /* Preset pills */
-    .preset-pills { display: flex; flex-wrap: wrap; gap: .5rem; }
-    .preset-pill {
-        border: 1px solid #e2e8f0; background: #f8fafc; color: #475569; border-radius: 9999px;
-        padding: .25rem .75rem; font-size: .75rem; font-weight: 600; cursor: pointer; transition: all .15s ease;
-    }
-    .preset-pill:hover { border-color: #c7d2fe; background: #eef2ff; color: #4338ca; }
-    .preset-pill.active { background: #4f46e5; color: #fff; border-color: #4f46e5; box-shadow: 0 2px 6px rgba(79,70,229,.2); }
-
-    /* Segmented tab control (Project / Vendor toggle) */
-    .tf-segmented {
-        display: inline-flex; background: #f1f5f9; border-radius: .5rem;
-        padding: 3px; border: 1px solid #e2e8f0;
-    }
-    .tf-segmented-btn {
-        padding: .35rem .75rem; border-radius: .375rem;
-        font-size: .8125rem; color: #64748b; text-decoration: none;
-        font-weight: 500; transition: all .15s ease;
-    }
-    .tf-segmented-btn:hover { color: #0f172a; text-decoration: none; }
-    .tf-segmented-btn.is-active {
-        background: #fff; color: #4f46e5;
-        box-shadow: 0 1px 2px rgba(15, 23, 42, .08);
-    }
-
-    /* Stack chart toolbar items on small screens */
-    @media (max-width: 767.98px) {
-        .chart-toolbar { flex-direction: column; align-items: flex-start !important; gap: .5rem; }
-        .chart-view-toggle { align-self: stretch; justify-content: center; }
-    }
-</style>
 
 <!-- Hero Header -->
 <div class="report-hero">
@@ -437,7 +207,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
 
         <div class="row g-2 mb-3">
             <div class="col-12">
-                <label class="form-label small fw-semibold text-secondary">Date Presets</label>
+                <label class="tf-label">Date Presets</label>
                 <div class="preset-pills">
                     <?php
                     $preset_opts = [
@@ -605,19 +375,19 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                 <span class="legend-dot legend-cost">Cost</span>
                 <span class="legend-dot legend-profit">Profit</span>
             </div>
-            <div class="chart-view-toggle" role="tablist">
-                <button type="button" class="view-btn is-active" data-view="bar">
-                    <i class="bi bi-bar-chart-fill"></i>
+            <div class="chart-view-toggle" role="tablist" aria-label="Chart view">
+                <button type="button" class="view-btn is-active" data-view="bar" role="tab" aria-selected="true" aria-label="Bar chart">
+                    <i class="bi bi-bar-chart-fill" aria-hidden="true"></i>
                 </button>
-                <button type="button" class="view-btn" data-view="line">
-                    <i class="bi bi-graph-up"></i>
+                <button type="button" class="view-btn" data-view="line" role="tab" aria-selected="false" aria-label="Line chart">
+                    <i class="bi bi-graph-up" aria-hidden="true"></i>
                 </button>
             </div>
         </div>
     </div>
     <div class="card-body p-4">
-        <div style="height: 360px; position: relative;">
-            <canvas id="revenueChart"></canvas>
+        <div class="tf-chart-body" style="height: 360px;">
+            <canvas id="revenueChart" role="img" aria-label="Revenue, cost, and profit over the selected period"></canvas>
         </div>
     </div>
 </div>
@@ -786,13 +556,13 @@ const sharedDatasets = (view) => {
         return [
             { label: 'Revenue', data: revData,  backgroundColor: revenueBar, hoverBackgroundColor: '#059669', borderRadius: { topLeft: 4, topRight: 4 }, borderSkipped: false, barPercentage: 0.7, categoryPercentage: 0.7, order: 2 },
             { label: 'Cost',    data: costData, backgroundColor: costBar,    hoverBackgroundColor: '#dc2626', borderRadius: { topLeft: 4, topRight: 4 }, borderSkipped: false, barPercentage: 0.7, categoryPercentage: 0.7, order: 3 },
-            { label: 'Profit',  data: profitData, type: 'line', borderColor: '#4f46e5', backgroundColor: 'rgba(79, 70, 229, .08)', borderWidth: 2, tension: 0.35, pointRadius: 0, pointHoverRadius: 5, pointHoverBackgroundColor: '#4f46e5', pointHoverBorderColor: '#fff', pointHoverBorderWidth: 2, fill: false, order: 1 }
+            { label: 'Profit',  data: profitData, type: 'line', borderColor: '#0f766e', backgroundColor: 'rgba(15, 118, 110, .08)', borderWidth: 2, tension: 0.35, pointRadius: 0, pointHoverRadius: 5, pointHoverBackgroundColor: '#0f766e', pointHoverBorderColor: '#fff', pointHoverBorderWidth: 2, fill: false, order: 1 }
         ];
     }
     return [
         { label: 'Revenue', data: revData,  borderColor: '#10b981', backgroundColor: revenueLine, fill: true, tension: 0.4, pointRadius: 0, pointHoverRadius: 5, pointHoverBackgroundColor: '#10b981', pointHoverBorderColor: '#fff', pointHoverBorderWidth: 2, borderWidth: 2.5, order: 2 },
         { label: 'Cost',    data: costData, borderColor: '#ef4444', backgroundColor: costLine,    fill: true, tension: 0.4, pointRadius: 0, pointHoverRadius: 5, pointHoverBackgroundColor: '#ef4444', pointHoverBorderColor: '#fff', pointHoverBorderWidth: 2, borderWidth: 2.5, order: 3 },
-        { label: 'Profit',  data: profitData, borderColor: '#4f46e5', backgroundColor: 'rgba(79, 70, 229, .05)', fill: false, tension: 0.4, pointRadius: 0, pointHoverRadius: 5, pointHoverBackgroundColor: '#4f46e5', pointHoverBorderColor: '#fff', pointHoverBorderWidth: 2, borderWidth: 2, borderDash: [4, 4], order: 1 }
+        { label: 'Profit',  data: profitData, borderColor: '#0f766e', backgroundColor: 'rgba(15, 118, 110, .05)', fill: false, tension: 0.4, pointRadius: 0, pointHoverRadius: 5, pointHoverBackgroundColor: '#0f766e', pointHoverBorderColor: '#fff', pointHoverBorderWidth: 2, borderWidth: 2, borderDash: [4, 4], order: 1 }
     ];
 };
 
@@ -812,7 +582,7 @@ const baseOptions = {
             bodyFont: { size: 13 },
             padding: { top: 10, right: 12, bottom: 10, left: 12 },
             cornerRadius: 10,
-            borderColor: 'rgba(99, 102, 241, .35)',
+            borderColor: 'rgba(20, 184, 166, .35)',
             borderWidth: 1,
             displayColors: true,
             boxWidth: 8,
