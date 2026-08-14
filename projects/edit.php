@@ -32,7 +32,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $vendor_default_cpi = floatval($_POST['vendor_default_cpi'] ?? 0);
     $total_quota = intval($_POST['total_quota'] ?? 0);
     $daily_cap = intval($_POST['daily_cap'] ?? 0);
-    $country_target = trim($_POST['country_target'] ?? '');
+    $geo_codes = tf_normalize_geo_codes($_POST['geo_codes'] ?? []);
+    $country_target = $geo_codes[0] ?? '';
     $campaign_type = $_POST['campaign_type'] ?? ($project['campaign_type'] ?? 'CPL');
     $vertical = $_POST['vertical'] ?? 'Other';
     $conversion_type = $_POST['conversion_type'] ?? 'SOI';
@@ -43,7 +44,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $start_date = trim($_POST['start_date'] ?? '');
     $end_date = trim($_POST['end_date'] ?? '');
     $description = trim($_POST['description'] ?? '');
-    $geo_codes = $_POST['geo_codes'] ?? [];
 
     $errors = [];
     if (empty($project_name)) $errors[] = 'Project name is required.';
@@ -80,14 +80,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         // Sync campaign_geo
         $pdo->prepare("DELETE FROM campaign_geo WHERE project_id = ?")->execute([$id]);
-        if (is_array($geo_codes) && !empty($geo_codes)) {
+        if (!empty($geo_codes)) {
             $geo_insert = $pdo->prepare("INSERT IGNORE INTO campaign_geo (project_id, country_code, country_name) VALUES (?, ?, ?)");
+            $names = tf_countries();
             foreach ($geo_codes as $code) {
-                $code = strtoupper(substr(trim($code), 0, 2));
-                if (preg_match('/^[A-Z]{2}$/', $code)) {
-                    $name = tf_countries()[$code] ?? null;
-                    $geo_insert->execute([$id, $code, $name]);
-                }
+                $geo_insert->execute([$id, $code, $names[$code] ?? $code]);
             }
         }
 
@@ -244,19 +241,9 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                         </div>
 
                         <div class="col-12">
-                            <label class="tf-label">Campaign GEO <span class="text-muted">(searchable multi-select)</span></label>
-                            <input type="text" id="geo_search" class="form-control mb-2" placeholder="Type to filter countries…">
-                            <select id="geo_codes" name="geo_codes[]" multiple size="8" class="form-select">
-                                <?php foreach (tf_countries() as $code => $name): ?>
-                                <option value="<?php echo $code; ?>" <?php echo in_array($code, $existing_geo_codes, true) ? 'selected' : ''; ?>><?php echo $code; ?> — <?php echo sanitize($name); ?></option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-
-                        <div class="col-6 col-md-3">
-                            <label for="country_target" class="tf-label">Primary Country</label>
-                            <input type="text" id="country_target" name="country_target" class="form-control"
-                                   value="<?php echo sanitize($f['country_target'] ?? ''); ?>">
+                            <label class="tf-label">Campaign GEO</label>
+                            <?php echo tf_geo_picker_html($existing_geo_codes); ?>
+                            <div class="form-text">Search and select one or more target countries. The first selected country is stored as the project country.</div>
                         </div>
 
                         <div class="col-6 col-md-3">
@@ -286,15 +273,5 @@ require_once __DIR__ . '/../helpers/layout_header.php';
         </div>
     </div>
 </div>
-
-<script>
-document.getElementById('geo_search').addEventListener('input', function(e) {
-    const term = e.target.value.toLowerCase();
-    const sel = document.getElementById('geo_codes');
-    for (const opt of sel.options) {
-        opt.hidden = term && !opt.text.toLowerCase().includes(term);
-    }
-});
-</script>
 
 <?php require_once __DIR__ . '/../helpers/layout_footer.php'; ?>

@@ -17,7 +17,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $vendor_default_cpi = floatval($_POST['vendor_default_cpi'] ?? 0);
     $total_quota = intval($_POST['total_quota'] ?? 0);
     $daily_cap = intval($_POST['daily_cap'] ?? 0);
-    $country_target = trim($_POST['country_target'] ?? '');
+    $geo_codes = tf_normalize_geo_codes($_POST['geo_codes'] ?? []);
+    $country_target = $geo_codes[0] ?? '';
     $campaign_type = $_POST['campaign_type'] ?? 'CPL';
     $vertical = $_POST['vertical'] ?? 'Other';
     $conversion_type = $_POST['conversion_type'] ?? 'SOI';
@@ -28,7 +29,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $start_date = trim($_POST['start_date'] ?? '');
     $end_date = trim($_POST['end_date'] ?? '');
     $description = trim($_POST['description'] ?? '');
-    $geo_codes = $_POST['geo_codes'] ?? [];
 
     $errors = [];
     if (empty($project_name)) $errors[] = 'Project name is required.';
@@ -76,14 +76,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         ensure_project_short_code($pdo, $new_id);
 
-        if (is_array($geo_codes) && !empty($geo_codes)) {
+        if (!empty($geo_codes)) {
             $geo_insert = $pdo->prepare("INSERT IGNORE INTO campaign_geo (project_id, country_code, country_name) VALUES (?, ?, ?)");
+            $names = tf_countries();
             foreach ($geo_codes as $code) {
-                $code = strtoupper(substr(trim($code), 0, 2));
-                if (preg_match('/^[A-Z]{2}$/', $code)) {
-                    $name = tf_countries()[$code] ?? null;
-                    $geo_insert->execute([$new_id, $code, $name]);
-                }
+                $geo_insert->execute([$new_id, $code, $names[$code] ?? $code]);
             }
         }
 
@@ -110,9 +107,6 @@ unset($_SESSION['form_data']);
 
 $page_title = 'Create New Project';
 require_once __DIR__ . '/../helpers/layout_header.php';
-
-$countries = tf_countries();
-asort($countries);
 ?>
 
 <div class="row justify-content-center">
@@ -123,11 +117,6 @@ asort($countries);
                     <div class="text-primary">
                         <i class="bi bi-folder-plus"></i>
                     </div>
-                    <div>
-                        <h5 class="mb-0 fw-semibold">Create New Project</h5>
-                        <p class="text-muted small mb-0">Define a new campaign project and configure its targeting, budget, and status.</p>
-                    </div>
-                </div>
                     <div>
                         <h5 class="mb-0 fw-semibold">Create New Project</h5>
                         <p class="text-muted small mb-0">Define a new campaign project and configure its targeting, budget, and status.</p>
@@ -295,60 +284,28 @@ asort($countries);
                             <div class="p-3 rounded-3 border mb-0">
                                 <p class="small fw-semibold text-uppercase text-muted mb-3 tracking-wide">Geography & Schedule</p>
                                 <div class="row g-3">
-                                    <div class="col-12 col-md-4">
-                                        <label for="country_target" class="tf-label">Primary Country</label>
-                                        <div class="tf-country-dropdown" data-name="country_target" data-selected="<?php echo sanitize($form_data['country_target'] ?? ''); ?>">
-                                            <button type="button" class="btn btn-outline-secondary w-100 text-start d-flex justify-content-between align-items-center" data-bs-toggle="dropdown" aria-expanded="false">
-                                                <span class="tf-country-dropdown-label">Select Country</span>
-                                                <i class="bi bi-chevron-down ms-2 text-muted"></i>
-                                            </button>
-                                            <div class="dropdown-menu p-2 w-100 shadow-sm border">
-                                                <input type="text" class="form-control form-control-sm mb-2 tf-country-search" placeholder="Search countries…" autocomplete="off">
-                                                <div class="tf-country-list" style="max-height: 220px; overflow-y: auto;">
-                                                    <?php foreach ($countries as $code => $name): ?>
-                                                    <button type="button" class="dropdown-item small py-1" data-value="<?php echo $code; ?>">
-                                                        <span class="tf-country-code text-muted me-2"><?php echo $code; ?></span><?php echo sanitize($name); ?>
-                                                    </button>
-                                                    <?php endforeach; ?>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <input type="hidden" name="country_target" id="country_target" value="<?php echo sanitize($form_data['country_target'] ?? ''); ?>">
+                                    <div class="col-12">
+                                        <label class="tf-label">Campaign GEO</label>
+                                        <?php
+                                        if (function_exists('tf_geo_picker_html')) {
+                                            echo tf_geo_picker_html((array)($form_data['geo_codes'] ?? []));
+                                        } else {
+                                            echo '<div class="alert alert-warning py-2">Country list could not be loaded.</div>';
+                                        }
+                                        ?>
+                                        <div class="form-text">Search and select one or more target countries. The first selected country is used in the project code.</div>
                                     </div>
 
-                                    <div class="col-12 col-md-4">
+                                    <div class="col-12 col-md-6">
                                         <label for="start_date" class="tf-label">Start Date</label>
                                         <input type="date" id="start_date" name="start_date" class="form-control"
                                                value="<?php echo sanitize($form_data['start_date'] ?? ''); ?>">
                                     </div>
 
-                                    <div class="col-12 col-md-4">
+                                    <div class="col-12 col-md-6">
                                         <label for="end_date" class="tf-label">End Date</label>
                                         <input type="date" id="end_date" name="end_date" class="form-control"
                                                value="<?php echo sanitize($form_data['end_date'] ?? ''); ?>">
-                                    </div>
-
-                                    <div class="col-12">
-                                        <label class="tf-label">Campaign GEO <span class="text-muted">(searchable multi-select)</span></label>
-                                        <div class="tf-country-dropdown tf-geo-dropdown" data-name="geo_codes" data-separator="," data-multi="1">
-                                            <button type="button" class="btn btn-outline-secondary w-100 text-start d-flex justify-content-between align-items-center" data-bs-toggle="dropdown" aria-expanded="false">
-                                                <span class="tf-country-dropdown-label">Select Countries</span>
-                                                <i class="bi bi-chevron-down ms-2 text-muted"></i>
-                                            </button>
-                                            <div class="dropdown-menu p-2 w-100 shadow-sm border">
-                                                <input type="text" class="form-control form-control-sm mb-2 tf-country-search" placeholder="Search countries…" autocomplete="off">
-                                                <div class="tf-country-list" style="max-height: 220px; overflow-y: auto;">
-                                                    <?php foreach ($countries as $code => $name): ?>
-                                                    <label class="dropdown-item small py-1 d-flex align-items-center gap-2">
-                                                        <input type="checkbox" value="<?php echo $code; ?>" <?php echo in_array($code, (array)($form_data['geo_codes'] ?? []), true) ? 'checked' : ''; ?>>
-                                                        <span class="tf-country-code text-muted me-1"><?php echo $code; ?></span><?php echo sanitize($name); ?>
-                                                    </label>
-                                                    <?php endforeach; ?>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <input type="hidden" name="geo_codes[]" id="geo_codes" value="">
-                                        <div class="form-text">Search and select multiple countries.</div>
                                     </div>
                                 </div>
                             </div>
@@ -378,85 +335,5 @@ asort($countries);
         </div>
     </div>
 </div>
-
-<script>
-document.querySelectorAll('.tf-country-dropdown').forEach(function(dd) {
-    const search = dd.querySelector('.tf-country-search');
-    const list = dd.querySelector('.tf-country-list');
-    const label = dd.querySelector('.tf-country-dropdown-label');
-    const hidden = dd.querySelector('input[type="hidden"]');
-    const multi = dd.dataset.multi === '1';
-    const separator = dd.dataset.separator || ',';
-
-    function updateLabel() {
-        if (!label) return;
-        if (multi) {
-            const checked = Array.from(list.querySelectorAll('input[type="checkbox"]:checked'));
-            if (checked.length === 0) {
-                label.textContent = 'Select Countries';
-            } else {
-                const names = checked.slice(0, 3).map(cb => {
-                    const text = cb.closest('label').textContent.trim().replace(cb.value, '').trim();
-                    return text;
-                });
-                label.textContent = names.join(', ') + (checked.length > 3 ? ' +' + (checked.length - 3) : '');
-            }
-        } else {
-            const active = list.querySelector('button.is-active');
-            label.textContent = active ? active.textContent.trim() : 'Select Country';
-        }
-    }
-
-    function syncHidden() {
-        if (!hidden) return;
-        if (multi) {
-            const values = Array.from(list.querySelectorAll('input[type="checkbox"]:checked')).map(cb => cb.value);
-            hidden.value = values.join(separator);
-        } else {
-            const active = list.querySelector('button.is-active');
-            hidden.value = active ? active.dataset.value : '';
-        }
-    }
-
-    if (search) {
-        search.addEventListener('input', function(e) {
-            const term = e.target.value.toLowerCase();
-            Array.from(list.children).forEach(function(el) {
-                const text = el.textContent.toLowerCase();
-                el.style.display = (!term || text.includes(term)) ? '' : 'none';
-            });
-        });
-    }
-
-    if (multi) {
-        list.querySelectorAll('input[type="checkbox"]').forEach(function(cb) {
-            cb.addEventListener('change', function() {
-                syncHidden();
-                updateLabel();
-            });
-        });
-        syncHidden();
-    } else {
-        list.querySelectorAll('button').forEach(function(btn) {
-            btn.addEventListener('click', function() {
-                list.querySelectorAll('button').forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-                syncHidden();
-                updateLabel();
-            });
-        });
-        const selected = (hidden && hidden.value) ? hidden.value : (dd.dataset.selected || '');
-        if (selected) {
-            const match = list.querySelector('button[data-value="' + selected.replace(/"/g, '\\"') + '"]');
-            if (match) {
-                list.querySelectorAll('button').forEach(b => b.classList.remove('active'));
-                match.classList.add('active');
-                syncHidden();
-                updateLabel();
-            }
-        }
-    }
-});
-</script>
 
 <?php require_once __DIR__ . '/../helpers/layout_footer.php'; ?>

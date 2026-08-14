@@ -493,3 +493,67 @@ function lookup_isp($ip) {
     @file_put_contents($cache_file, $isp);
     return $isp;
 }
+
+/**
+ * Normalize posted country codes against the ISO list.
+ */
+function tf_normalize_geo_codes($raw) {
+    if (!is_array($raw)) {
+        $raw = preg_split('/[\s,]+/', (string)$raw, -1, PREG_SPLIT_NO_EMPTY);
+    }
+    $valid = tf_countries();
+    $codes = [];
+    foreach ($raw as $code) {
+        $code = strtoupper(substr(trim((string)$code), 0, 2));
+        if (isset($valid[$code])) {
+            $codes[$code] = $code;
+        }
+    }
+    return array_values($codes);
+}
+
+function tf_country_flag_html($code, $class = 'tf-flag') {
+    $code = strtolower(substr((string)$code, 0, 2));
+    if (!preg_match('/^[a-z]{2}$/', $code)) {
+        return '';
+    }
+    $src = 'https://flagcdn.com/w40/' . $code . '.png';
+    $src2x = 'https://flagcdn.com/w80/' . $code . '.png';
+    return '<img src="' . htmlspecialchars($src, ENT_QUOTES, 'UTF-8') . '" srcset="' . htmlspecialchars($src2x, ENT_QUOTES, 'UTF-8') . ' 2x" alt="" class="' . htmlspecialchars($class, ENT_QUOTES, 'UTF-8') . '" width="20" height="15" loading="lazy">';
+}
+
+/**
+ * Searchable multi-select country picker with flags.
+ */
+function tf_geo_picker_html(array $selected = []) {
+    $countries = tf_countries();
+    asort($countries);
+    $selected = array_map('strtoupper', $selected);
+    $html = '<div class="tf-geo-picker" data-geo-picker>';
+    $html .= '<div class="tf-geo-picker-box">';
+    $html .= '<div class="tf-geo-picker-toolbar">';
+    $html .= '<div class="tf-geo-picker-search-wrap">';
+    $html .= '<i class="bi bi-search"></i>';
+    $html .= '<input type="search" class="form-control tf-geo-picker-search" placeholder="Search countries by name or code…" autocomplete="off">';
+    $html .= '</div>';
+    $html .= '<div class="tf-geo-picker-actions">';
+    $html .= '<button type="button" class="btn btn-link btn-sm p-0 tf-geo-picker-all">Select all</button>';
+    $html .= '<span class="text-muted">·</span>';
+    $html .= '<button type="button" class="btn btn-link btn-sm p-0 tf-geo-picker-none">Clear</button>';
+    $html .= '<span class="ms-auto small text-muted tf-geo-picker-count">0 selected</span>';
+    $html .= '</div></div>';
+    $html .= '<div class="tf-geo-picker-list" role="listbox" aria-multiselectable="true">';
+    foreach ($countries as $code => $name) {
+        $is_on = in_array($code, $selected, true);
+        $html .= '<label class="tf-geo-picker-option' . ($is_on ? ' is-selected' : '') . '">';
+        $html .= '<input type="checkbox" name="geo_codes[]" value="' . sanitize($code) . '"' . ($is_on ? ' checked' : '') . '>';
+        $html .= tf_country_flag_html($code);
+        $html .= '<span class="tf-geo-picker-name">' . sanitize($name) . '</span>';
+        $html .= '<span class="tf-geo-picker-iso">' . sanitize($code) . '</span>';
+        $html .= '</label>';
+    }
+    $html .= '</div></div>';
+    $html .= '<div class="tf-geo-picker-chips" hidden></div>';
+    $html .= '</div>';
+    return $html;
+}

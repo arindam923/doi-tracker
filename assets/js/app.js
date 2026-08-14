@@ -439,3 +439,108 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 });
+
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('[data-geo-picker]').forEach(function (picker) {
+        const summary = picker.querySelector('.tf-geo-picker-summary');
+        const search = picker.querySelector('.tf-geo-picker-search');
+        const chips = picker.querySelector('.tf-geo-picker-chips');
+        const countEl = picker.querySelector('.tf-geo-picker-count');
+        const options = () => Array.from(picker.querySelectorAll('.tf-geo-picker-option'));
+
+        function checkedOptions() {
+            return options().filter(opt => {
+                const input = opt.querySelector('input');
+                return input && input.checked;
+            });
+        }
+
+        function refresh() {
+            const selected = checkedOptions();
+            options().forEach(opt => {
+                const input = opt.querySelector('input');
+                opt.classList.toggle('is-selected', !!(input && input.checked));
+            });
+            if (countEl) countEl.textContent = selected.length + ' selected';
+
+            if (summary) {
+                if (selected.length === 0) {
+                    summary.innerHTML = '<span class="tf-geo-picker-placeholder">Select countries…</span>';
+                } else {
+                    const preview = selected.slice(0, 3).map(opt => {
+                        const flag = opt.querySelector('.tf-flag');
+                        const nameEl = opt.querySelector('.tf-geo-picker-name');
+                        const name = nameEl ? nameEl.textContent.trim() : '';
+                        const flagHtml = flag ? flag.outerHTML : '';
+                        return '<span class="tf-geo-picker-preview">' + flagHtml + '<span>' + name + '</span></span>';
+                    }).join('');
+                    const extra = selected.length > 3
+                        ? '<span class="tf-geo-picker-more">+' + (selected.length - 3) + '</span>'
+                        : '';
+                    summary.innerHTML = preview + extra;
+                }
+            }
+
+            if (chips) {
+                chips.innerHTML = selected.map(opt => {
+                    const code = opt.querySelector('input').value;
+                    const flag = opt.querySelector('.tf-flag');
+                    const name = opt.querySelector('.tf-geo-picker-name').textContent.trim();
+                    return '<span class="tf-geo-chip" data-code="' + code + '">' +
+                        (flag ? flag.outerHTML : '') +
+                        '<span>' + name + '</span>' +
+                        '<button type="button" aria-label="Remove ' + name + '">&times;</button></span>';
+                }).join('');
+                chips.hidden = selected.length === 0;
+            }
+        }
+
+        if (search) {
+            search.addEventListener('input', function () {
+                const term = search.value.toLowerCase().trim();
+                options().forEach(function (opt) {
+                    const hay = opt.textContent.toLowerCase();
+                    opt.style.display = (!term || hay.includes(term)) ? '' : 'none';
+                });
+            });
+            search.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') e.preventDefault();
+            });
+        }
+
+        picker.addEventListener('change', function (e) {
+            if (e.target.matches('input[type="checkbox"]')) refresh();
+        });
+
+        const selectAll = picker.querySelector('.tf-geo-picker-all');
+        const clearAll = picker.querySelector('.tf-geo-picker-none');
+        if (selectAll) {
+            selectAll.addEventListener('click', function () {
+                options().forEach(function (opt) {
+                    if (opt.style.display !== 'none') opt.querySelector('input').checked = true;
+                });
+                refresh();
+            });
+        }
+        if (clearAll) {
+            clearAll.addEventListener('click', function () {
+                options().forEach(opt => opt.querySelector('input').checked = false);
+                refresh();
+            });
+        }
+        if (chips) {
+            chips.addEventListener('click', function (e) {
+                const btn = e.target.closest('button');
+                if (!btn) return;
+                const chip = btn.closest('.tf-geo-chip');
+                const input = picker.querySelector('input[value="' + chip.dataset.code + '"]');
+                if (input) {
+                    input.checked = false;
+                    refresh();
+                }
+            });
+        }
+
+        refresh();
+    });
+});

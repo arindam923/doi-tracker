@@ -201,13 +201,17 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                         <tr><th>Code</th><td><code style="background: #f1f5f9; color: #475569; padding: .125rem .5rem; border-radius: 4px; font-size: .85em;"><?php echo sanitize($project['project_code']); ?></code></td></tr>
                         <tr><th>Client</th><td><?php echo sanitize($project['client_name'] ?? '-'); ?> (<?php echo sanitize($project['client_code'] ?? '-'); ?>)</td></tr>
                         <tr><th>Currency</th><td><?php echo sanitize($project['currency'] ?? 'USD'); ?></td></tr>
-                        <tr><th>Country</th><td><?php echo sanitize($project['country_target'] ?? '-'); ?></td></tr>
-                        <tr><th>GEOs</th><td>
+                        <tr><th>Country</th><td>
                             <?php if (!empty($geo_list)): ?>
                                 <?php foreach ($geo_list as $g): ?>
-                                <span class="badge bg-light text-dark border me-1 mb-1"><?php echo sanitize($g['country_code']); ?></span>
+                                <span class="badge bg-light text-dark border me-1 mb-1 d-inline-flex align-items-center gap-1">
+                                    <?php echo tf_country_flag_html($g['country_code']); ?>
+                                    <?php echo sanitize($g['country_code']); ?>
+                                </span>
                                 <?php endforeach; ?>
-                            <?php else: ?><span class="text-muted">—</span><?php endif; ?>
+                            <?php else: ?>
+                                <?php echo sanitize($project['country_target'] ?? '-'); ?>
+                            <?php endif; ?>
                         </td></tr>
                         <tr><th>Vertical</th><td><?php echo sanitize($project['vertical'] ?? 'Other'); ?></td></tr>
                         <tr><th>Conversion</th><td><?php echo sanitize($project['conversion_type'] ?? 'SOI'); ?> · <?php echo sanitize($project['target_device'] ?? 'All'); ?></td></tr>
