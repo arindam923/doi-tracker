@@ -36,7 +36,7 @@ try {
         [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            PDO::ATTR_EMULATE_PREPARES => false,
+            PDO::ATTR_EMULATE_PREPARES => true,
         ]
     );
 } catch (PDOException $e) {
@@ -45,29 +45,36 @@ try {
 }
 
 // ─── Session Configuration ───
-ini_set('session.gc_maxlifetime', SESSION_TIMEOUT_HOURS * 3600);
-ini_set('session.gc_probability', 1);
-ini_set('session.gc_divisor', 100);
-$__secure_cookie = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-    || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
-session_name('ternfluenzy_session');
-session_set_cookie_params([
-    'lifetime' => SESSION_TIMEOUT_HOURS * 3600,
-    'path' => '/',
-    'httponly' => true,
-    'secure' => $__secure_cookie,
-    'samesite' => 'Lax',
-]);
-session_start();
+// Public tracking endpoints must not start a session (InfinityFree session
+// regenerate + cookie headers interfere with 302 click redirects).
+$__is_tracking = defined('TF_TRACKING_REQUEST') && TF_TRACKING_REQUEST;
+if (!$__is_tracking) {
+    ini_set('session.gc_maxlifetime', SESSION_TIMEOUT_HOURS * 3600);
+    ini_set('session.gc_probability', 1);
+    ini_set('session.gc_divisor', 100);
+    $__secure_cookie = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+        || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+    session_name('ternfluenzy_session');
+    session_set_cookie_params([
+        'lifetime' => SESSION_TIMEOUT_HOURS * 3600,
+        'path' => '/',
+        'httponly' => true,
+        'secure' => $__secure_cookie,
+        'samesite' => 'Lax',
+    ]);
+    session_start();
 
-// Regenerate session ID periodically to prevent fixation
-if (!isset($_SESSION['_last_regen']) || time() - $_SESSION['_last_regen'] > 1800) {
-    session_regenerate_id(true);
-    $_SESSION['_last_regen'] = time();
+    // Regenerate session ID periodically to prevent fixation
+    if (!isset($_SESSION['_last_regen']) || time() - $_SESSION['_last_regen'] > 1800) {
+        session_regenerate_id(true);
+        $_SESSION['_last_regen'] = time();
+    }
 }
 
 // ─── Load Helpers ───
 require_once __DIR__ . '/helpers/functions.php';
-require_once __DIR__ . '/helpers/csrf.php';
-require_once __DIR__ . '/helpers/auth_middleware.php';
 require_once __DIR__ . '/helpers/constants.php';
+if (!$__is_tracking) {
+    require_once __DIR__ . '/helpers/csrf.php';
+    require_once __DIR__ . '/helpers/auth_middleware.php';
+}

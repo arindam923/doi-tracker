@@ -22,7 +22,20 @@ function sanitize($input) {
  * Generate a unique click ID (32-char hex)
  */
 function generate_click_id() {
-    return bin2hex(random_bytes(16));
+    try {
+        if (function_exists('random_bytes')) {
+            return bin2hex(random_bytes(16));
+        }
+    } catch (Throwable $e) {
+        // fall through
+    }
+    if (function_exists('openssl_random_pseudo_bytes')) {
+        $bytes = openssl_random_pseudo_bytes(16);
+        if (is_string($bytes) && strlen($bytes) === 16) {
+            return bin2hex($bytes);
+        }
+    }
+    return md5(uniqid((string)mt_rand(), true) . microtime(true));
 }
 
 /**
@@ -221,6 +234,7 @@ function get_setting($pdo, $key, $default = '') {
     $stmt = $pdo->prepare("SELECT setting_value FROM settings WHERE setting_key = ?");
     $stmt->execute([$key]);
     $row = $stmt->fetch();
+    if ($stmt) $stmt->closeCursor();
     return $row ? $row['setting_value'] : $default;
 }
 
@@ -413,6 +427,7 @@ function check_rate_limit($pdo, $identity, $action, $max, $window_seconds = 60) 
     $stmt = $pdo->prepare("SELECT attempts, locked_until, created_at FROM rate_limits WHERE ip_address = ? AND action = ?");
     $stmt->execute([$identity, $action]);
     $row = $stmt->fetch();
+    if ($stmt) $stmt->closeCursor();
 
     if ($row && $row['locked_until'] && strtotime($row['locked_until']) > time()) {
         return ['allowed' => false, 'retry_after' => max(1, ceil((strtotime($row['locked_until']) - time()) / 60))];
@@ -556,4 +571,79 @@ function tf_geo_picker_html(array $selected = []) {
     $html .= '<div class="tf-geo-picker-chips" hidden></div>';
     $html .= '</div>';
     return $html;
+}
+
+/**
+ * Fetch one row and release the statement (InfinityFree/mysqlnd HY000/2014).
+ */
+function tf_fetch_one(PDO $pdo, $sql, array $params = []) {
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    $row = $stmt->fetch();
+    $stmt->closeCursor();
+    return $row ?: null;
+}
+
+/**
+ * Insert a click using the richest column set the live schema accepts.
+ */
+function tf_record_click(PDO $pdo, array $row) {
+    $attempts = [
+        ['click_id','project_id','vendor_id','ip_address','user_agent','referrer','device_type','browser','os','browser_lang','isp','country_code','is_duplicate_ip','sub1','sub2','sub3','sub4','sub5'],
+        ['click_id','project_id','vendor_id','ip_address','user_agent','referrer','device_type','country_code','is_duplicate_ip','sub1','sub2','sub3','sub4','sub5'],
+        ['click_id','project_id','vendor_id','ip_address','user_agent','referrer','device_type','country_code'],
+        ['click_id','project_id','vendor_id','ip_address','user_agent','device_type'],
+        ['click_id','project_id','vendor_id'],
+    ];
+    $last = null;
+    foreach ($attempts as $cols) {
+        $placeholders = implode(',', array_fill(0, count($cols), '?'));
+        $sql = 'INSERT INTO clicks (' . implode(',', $cols) . ') VALUES (' . $placeholders . ')';
+        $vals = [];
+        foreach ($cols as $col) {
+            $vals[] = $row[$col] ?? null;
+        }
+        try {
+            $pdo->prepare($sql)->execute($vals);
+            return true;
+        } catch (PDOException $e) {
+            $last = $e;
+            $msg = $e->getMessage();
+            if (strpos($msg, 'Duplicate') !== false) {
+                throw $e;
+            }
+            if (strpos($msg, '1452') !== false || stripos($msg, 'foreign key') !== false) {
+                try {
+                    $pdo->exec('SET FOREIGN_KEY_CHECKS=0');
+                    $pdo->prepare($sql)->execute($vals);
+                    $pdo->exec('SET FOREIGN_KEY_CHECKS=1');
+                    return true;
+                } catch (PDOException $e2) {
+                    try { $pdo->exec('SET FOREIGN_KEY_CHECKS=1'); } catch (Throwable $ignored) {}
+                    $last = $e2;
+                }
+            }
+        }
+    }
+    if ($last instanceof Throwable) {
+        throw $last;
+    }
+    return false;
+}
+
+function tf_log_event(PDO $pdo, $type, $status, $message, $project_id = null, $vendor_id = null, $click_id = null) {
+    try {
+        $pdo->prepare("INSERT INTO logs (log_type, project_id, vendor_id, click_id, status, message, ip_address) VALUES (?, ?, ?, ?, ?, ?, ?)")
+            ->execute([
+                $type,
+                $project_id ?: null,
+                $vendor_id ?: null,
+                $click_id,
+                $status,
+                substr((string)$message, 0, 4000),
+                $_SERVER['REMOTE_ADDR'] ?? '',
+            ]);
+    } catch (Throwable $e) {
+        error_log('Track Flow tf_log_event failed: ' . $e->getMessage());
+    }
 }

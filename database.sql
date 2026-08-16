@@ -324,7 +324,7 @@ CREATE TABLE `sent_emails` (
 -- ============================================================
 CREATE TABLE `short_links` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
-  `code` VARCHAR(12) NOT NULL UNIQUE,
+  `code` VARCHAR(32) NOT NULL UNIQUE,
   `project_id` INT NOT NULL,
   `vendor_id` INT NOT NULL,
   `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
