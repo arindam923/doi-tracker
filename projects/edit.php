@@ -181,7 +181,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                         </div>
 
                         <div class="col-6 col-md-2">
-                            <label for="daily_cap" class="tf-label">Daily Cap</label>
+                            <label for="daily_cap" class="tf-label">Daily Cap (completes)</label>
                             <input type="number" id="daily_cap" name="daily_cap" class="form-control"
                                    value="<?php echo (int)($f['daily_cap'] ?? 0); ?>" min="0">
                         </div>

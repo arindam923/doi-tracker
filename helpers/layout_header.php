@@ -23,10 +23,8 @@ $nav_items = [
     ],
     'email' => [
         ['url' => '/email/compose.php', 'icon' => 'bi-send', 'label' => 'Send Email'],
-        ['url' => '/email/lists.php', 'icon' => 'bi-list-check', 'label' => 'Email Lists'],
         ['url' => '/email/history.php', 'icon' => 'bi-clock-history', 'label' => 'Email History'],
         ['url' => '/email/templates.php', 'icon' => 'bi-file-earmark-text', 'label' => 'Templates'],
-        ['url' => '/email/campaigns.php', 'icon' => 'bi-funnel', 'label' => 'Campaigns'],
     ],
     'system' => [
         ['url' => '/audit/list.php', 'icon' => 'bi-shield-check', 'label' => 'Audit Log', 'roles' => ['super_admin']],
@@ -88,6 +86,32 @@ $user_initials = $user_initials ?: mb_substr($user_name, 0, 2);
     <link href="<?php echo BASE_URL; ?>/assets/css/app.css?v=<?php echo filemtime(__DIR__ . '/../assets/css/app.css'); ?>" rel="stylesheet">
 
     <?php if (isset($extra_head)) echo $extra_head; ?>
+    <script>
+    function tfCopyText(text, btn) {
+        text = text == null ? '' : String(text);
+
+        function flash() {
+            if (!btn) return;
+            var prev = btn.innerHTML;
+            btn.innerHTML = '<i class="bi bi-check-lg" aria-hidden="true"></i>';
+            btn.setAttribute('aria-label', 'Copied');
+            setTimeout(function () {
+                btn.innerHTML = prev;
+                btn.setAttribute('aria-label', 'Copy');
+            }, 1600);
+        }
+
+        function showCopyBox() {
+            window.prompt('Copy this text:', text);
+        }
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(flash, showCopyBox);
+            return;
+        }
+        showCopyBox();
+    }
+    </script>
 </head>
 <body class="tf-shell">
 

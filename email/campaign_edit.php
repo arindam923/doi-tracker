@@ -3,21 +3,22 @@ require_once __DIR__ . '/../config.php';
 require_role(['super_admin', 'campaign_manager']);
 
 $id = intval($_GET['id'] ?? 0);
-if (!$id) redirect(BASE_URL . '/email/campaigns.php');
+if (!$id) redirect(BASE_URL . '/projects/list.php');
 
 $stmt = $pdo->prepare("SELECT ec.*, p.project_code, p.project_name, p.country_target FROM email_campaigns ec JOIN projects p ON ec.project_id = p.id WHERE ec.id = ?");
 $stmt->execute([$id]);
 $campaign = $stmt->fetch();
 if (!$campaign) {
     set_flash('danger', 'Campaign not found.');
-    redirect(BASE_URL . '/email/campaigns.php');
+        redirect(BASE_URL . '/email/campaign_detail.php?id=' . $id);
 }
 
-$vendors = $pdo->prepare("SELECT pv.vendor_id AS id, gv.vendor_name FROM project_vendor pv JOIN global_vendors gv ON gv.id = pv.vendor_id WHERE pv.project_id = ? ORDER BY gv.vendor_name");
+$vendors = $pdo->prepare("SELECT pv.vendor_id AS id, gv.vendor_name FROM project_vendor pv JOIN global_vendors gv ON gv.id = pv.vendor_id WHERE pv.project_id = ? AND gv.traffic_type = 'Email' ORDER BY gv.vendor_name");
 $vendors->execute([$campaign['project_id']]);
 $vendors = $vendors->fetchAll();
 
-$templates = $pdo->query("SELECT id, name, subject FROM email_templates ORDER BY is_default DESC, name ASC")->fetchAll();
+email_ensure_starter_templates($pdo, $_SESSION['user_id'] ?? null);
+$templates = $pdo->query("SELECT id, name, subject, html_body FROM email_templates ORDER BY is_default DESC, name ASC")->fetchAll();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
@@ -30,6 +31,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $name = trim($_POST['name'] ?? '');
     $subject = trim($_POST['subject'] ?? '');
     $html_body = trim($_POST['html_body'] ?? '');
+    if (!empty($_FILES['html_file']['tmp_name']) && is_uploaded_file($_FILES['html_file']['tmp_name'])) {
+        $html_body = (string)file_get_contents($_FILES['html_file']['tmp_name']);
+    }
     $from_name = trim($_POST['from_name'] ?? '');
     $from_email = trim($_POST['from_email'] ?? '');
     $daily_limit = intval($_POST['daily_limit'] ?? 1000);
@@ -75,7 +79,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
             </div>
         </div>
         <div class="tf-card-body">
-            <form method="POST" class="tf-form" novalidate>
+            <form method="POST" class="tf-form" enctype="multipart/form-data" novalidate>
                 <?php echo csrf_field(); ?>
                 <div class="tf-form-row">
                     <div class="tf-field col-12 col-md-6">
@@ -112,7 +116,13 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                 <div class="tf-form-row">
                     <div class="tf-field col-12">
                         <label for="html_body" class="tf-label">HTML Body <span class="tf-required" aria-hidden="true">*</span></label>
-                        <textarea id="html_body" name="html_body" class="form-control" rows="14" required placeholder="<html>...</html>"><?php echo sanitize($campaign['html_body']); ?></textarea>
+                        <textarea id="html_body" name="html_body" class="form-control" rows="14" placeholder="<html>...</html>"><?php echo sanitize($campaign['html_body']); ?></textarea>
+                    </div>
+                </div>
+                <div class="tf-form-row">
+                    <div class="tf-field col-12">
+                        <label for="html_file" class="tf-label">Replace HTML from file</label>
+                        <input type="file" id="html_file" name="html_file" class="form-control" accept=".html,.htm,text/html">
                     </div>
                 </div>
                 <div class="tf-form-row">
@@ -143,7 +153,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                     </div>
                 </div>
                 <div class="form-actions">
-                    <a href="<?php echo BASE_URL; ?>/email/campaign_detail.php?id=<?php echo (int)$id; ?>" class="btn btn-secondary">Cancel</a>
+                    <a href="<?php echo BASE_URL; ?>/projects/detail.php?id=<?php echo (int)$campaign['project_id']; ?>#email-campaigns" class="btn btn-secondary">Cancel</a>
                     <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg" aria-hidden="true"></i> Save Changes</button>
                 </div>
             </form>

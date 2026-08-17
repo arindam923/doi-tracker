@@ -1,10 +1,11 @@
 <?php
 /**
- * TRACK FLOW — Email Campaign Worker (Item #11)
- * Processes due email campaigns: selects recipients by GEO, skips bad statuses,
- * respects daily/total limits, sends via Resend, and updates live counts.
+ * TRACK FLOW — Email Campaign Worker
  *
- * Suggested cron: every 1-5 minutes
+ * Selects recipients from the vendor's canonical email database by GEO,
+ * skips unsubscribed/bounced/invalid, respects daily/total limits, and
+ * resumes the next day without completing the campaign on daily cap.
+ *
  *   * * * * * cd /path/to/doi-tracker && php cron/email_campaign_worker.php >> storage/logs/email_campaign_worker.log 2>&1
  */
 
@@ -12,7 +13,9 @@ declare(ticks=1);
 require_once __DIR__ . '/../config.php';
 
 $log_dir = __DIR__ . '/../storage/logs';
-if (!is_dir($log_dir)) @mkdir($log_dir, 0755, true);
+if (!is_dir($log_dir)) {
+    @mkdir($log_dir, 0755, true);
+}
 
 function campaign_log($msg) {
     $line = '[' . date('c') . '] ' . $msg . PHP_EOL;
@@ -32,36 +35,12 @@ if (empty($resend_api_key)) {
     exit(0);
 }
 
-function send_via_resend($api_key, $from_address, $from_name, $to_email, $to_name, $subject, $html) {
-    $ch = curl_init('https://api.resend.com/emails');
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-        'Authorization: Bearer ' . $api_key,
-        'Content-Type: application/json',
-    ]);
-    $payload = [
-        'from' => ($from_name ? $from_name . ' ' : '') . '<' . $from_address . '>',
-        'to' => [$to_email],
-        'subject' => $subject,
-        'html' => $html,
-    ];
-    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
-    curl_setopt($ch, CURLOPT_TIMEOUT, 15);
-    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
-    $response = curl_exec($ch);
-    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $curl_error = curl_error($ch);
-    curl_close($ch);
-    return [$http_code, $response, $curl_error];
-}
-
-$pdo->beginTransaction();
+[$rate_per_minute, $tokens, $now] = email_rate_tokens_load($pdo);
 
 try {
+    $pdo->beginTransaction();
     $campaign = $pdo->query("
-        SELECT ec.*, p.project_code, p.project_name, p.country_target
+        SELECT ec.*, p.project_code, p.project_name
         FROM email_campaigns ec
         JOIN projects p ON ec.project_id = p.id
         WHERE ec.status = 'running'
@@ -72,150 +51,209 @@ try {
 
     if (!$campaign) {
         $pdo->commit();
-        campaign_log('no due campaign found');
+        campaign_log('no running campaign found');
+        email_rate_tokens_save($pdo, $tokens, $now);
         exit(0);
     }
 
     $campaign_id = (int)$campaign['id'];
-
-    $today_count = (int)$pdo->prepare("SELECT COUNT(*) FROM email_campaign_sends WHERE campaign_id = ? AND DATE(created_at) = CURDATE() AND status IN ('sent','delivered','opened','clicked','converted','bounced','failed')")->execute([$campaign_id]) && $pdo->prepare("SELECT COUNT(*) FROM email_campaign_sends WHERE campaign_id = ? AND DATE(created_at) = CURDATE() AND status IN ('sent','delivered','opened','clicked','converted','bounced','failed')")->fetchColumn();
-
-    $total_sent = (int)$pdo->prepare("SELECT COUNT(*) FROM email_campaign_sends WHERE campaign_id = ? AND status IN ('sent','delivered','opened','clicked','converted','bounced','failed')")->execute([$campaign_id]) && $pdo->prepare("SELECT COUNT(*) FROM email_campaign_sends WHERE campaign_id = ? AND status IN ('sent','delivered','opened','clicked','converted','bounced','failed')")->fetchColumn();
-
-    if (($campaign['daily_limit'] > 0 && $today_count >= $campaign['daily_limit']) || ($campaign['total_limit'] > 0 && $total_sent >= $campaign['total_limit'])) {
-        $pdo->prepare("UPDATE email_campaigns SET status = 'completed', completed_at = NOW() WHERE id = ?")->execute([$campaign_id]);
-        $pdo->commit();
-        campaign_log('campaign ' . $campaign_id . ' completed by limits');
-        exit(0);
-    }
-
-    $batch_size = 50;
-    $today_remaining = $campaign['daily_limit'] > 0 ? max(0, $campaign['daily_limit'] - $today_count) : $batch_size;
-    $total_remaining = $campaign['total_limit'] > 0 ? max(0, $campaign['total_limit'] - $total_sent) : $batch_size;
-    $batch_size = (int)min($batch_size, $today_remaining, $total_remaining);
-    if ($batch_size <= 0) {
-        $pdo->prepare("UPDATE email_campaigns SET status = 'completed', completed_at = NOW() WHERE id = ?")->execute([$campaign_id]);
-        $pdo->commit();
-        campaign_log('campaign ' . $campaign_id . ' no remaining quota');
-        exit(0);
-    }
-
     $vendor_id = (int)$campaign['vendor_id'];
     $project_id = (int)$campaign['project_id'];
+    $pdo->commit();
+} catch (Throwable $e) {
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
+    campaign_log('lock error: ' . $e->getMessage());
+    email_rate_tokens_save($pdo, $tokens, $now);
+    exit(1);
+}
 
-    $allowed_countries = [];
-    $geo_rows = $pdo->prepare("SELECT country_code FROM campaign_geo WHERE project_id = ?");
-    $geo_rows->execute([$project_id]);
-    foreach ($geo_rows->fetchAll() as $g) {
-        $allowed_countries[] = strtoupper(substr($g['country_code'], 0, 2));
+$today_count = email_count_scalar(
+    $pdo,
+    "SELECT COUNT(*) FROM email_campaign_sends
+     WHERE campaign_id = ?
+       AND DATE(COALESCE(sent_at, created_at)) = CURDATE()
+       AND status IN ('sent','delivered','opened','clicked','converted','bounced','failed')",
+    [$campaign_id]
+);
+
+$total_sent = email_count_scalar(
+    $pdo,
+    "SELECT COUNT(*) FROM email_campaign_sends
+     WHERE campaign_id = ?
+       AND status IN ('sent','delivered','opened','clicked','converted','bounced','failed')",
+    [$campaign_id]
+);
+
+$daily_limit = (int)$campaign['daily_limit'];
+$total_limit = (int)$campaign['total_limit'];
+
+if ($total_limit > 0 && $total_sent >= $total_limit) {
+    $pdo->prepare("UPDATE email_campaigns SET status = 'completed', completed_at = NOW() WHERE id = ?")->execute([$campaign_id]);
+    campaign_log('campaign ' . $campaign_id . ' completed by total_limit');
+    email_rate_tokens_save($pdo, $tokens, $now);
+    exit(0);
+}
+
+if ($daily_limit > 0 && $today_count >= $daily_limit) {
+    campaign_log('campaign ' . $campaign_id . ' daily limit reached (' . $today_count . '/' . $daily_limit . '); waiting until tomorrow');
+    email_rate_tokens_save($pdo, $tokens, $now);
+    exit(0);
+}
+
+$batch_size = 50;
+$today_remaining = $daily_limit > 0 ? max(0, $daily_limit - $today_count) : $batch_size;
+$total_remaining = $total_limit > 0 ? max(0, $total_limit - $total_sent) : $batch_size;
+$batch_size = (int)min($batch_size, $today_remaining, $total_remaining, max(0, (int)floor($tokens)));
+if ($batch_size <= 0) {
+    campaign_log('campaign ' . $campaign_id . ' no remaining quota or rate tokens');
+    email_rate_tokens_save($pdo, $tokens, $now);
+    exit(0);
+}
+
+$geos = [];
+$geo_rows = $pdo->prepare('SELECT country_code FROM campaign_geo WHERE project_id = ?');
+$geo_rows->execute([$project_id]);
+foreach ($geo_rows->fetchAll() as $g) {
+    $code = strtoupper(substr($g['country_code'], 0, 2));
+    if ($code !== '') {
+        $geos[] = $code;
+    }
+}
+
+if (!$geos) {
+    $pdo->prepare("UPDATE email_campaigns SET status = 'completed', completed_at = NOW() WHERE id = ?")->execute([$campaign_id]);
+    campaign_log('campaign ' . $campaign_id . ' no campaign GEO configured; not sending globally');
+    email_rate_tokens_save($pdo, $tokens, $now);
+    exit(0);
+}
+
+$list_id = ensure_vendor_email_list($pdo, $vendor_id);
+$ph = implode(',', array_fill(0, count($geos), '?'));
+$sql = "SELECT ele.id, ele.email, ele.name, ele.first_name, ele.last_name, ele.country, ele.list_id
+        FROM email_list_entries ele
+        JOIN email_lists el ON el.id = ele.list_id
+        WHERE el.vendor_id = ?
+          AND ele.status = 'active'
+          AND ele.is_unsubscribed = 0
+          AND UPPER(ele.country) IN ($ph)
+          AND NOT EXISTS (
+              SELECT 1 FROM email_campaign_sends s
+              WHERE s.campaign_id = ? AND LOWER(s.recipient_email) = LOWER(ele.email)
+          )
+        ORDER BY ele.id ASC
+        LIMIT " . (int)$batch_size;
+$params = array_merge([$vendor_id], $geos, [$campaign_id]);
+$stmt = $pdo->prepare($sql);
+$stmt->execute($params);
+$recipients = $stmt->fetchAll();
+
+if (empty($recipients)) {
+    $pdo->prepare("UPDATE email_campaigns SET status = 'completed', completed_at = NOW() WHERE id = ?")->execute([$campaign_id]);
+    campaign_log('campaign ' . $campaign_id . ' no eligible recipients remaining');
+    email_rate_tokens_save($pdo, $tokens, $now);
+    exit(0);
+}
+
+$from_name_use = $campaign['from_name'] ?: $from_name;
+$from_email_use = $campaign['from_email'] ?: $from_address;
+$sent = 0;
+$failed = 0;
+
+foreach ($recipients as $row) {
+    if ($tokens < 1) {
+        campaign_log('rate limit reached; pausing until next tick');
+        break;
     }
 
-    $exclude_statuses = ["'unsubscribed'", "'bounced'", "'invalid'"];
-    $existing_sql = "SELECT recipient_email FROM email_campaign_sends WHERE campaign_id = " . (int)$campaign_id . " AND status NOT IN ('queued','skipped')";
-    $existing = $pdo->query($existing_sql)->fetchAll(PDO::FETCH_COLUMN);
-    $existing_map = array_flip(array_map('strtolower', $existing));
-
-    $sql = "SELECT ele.id, ele.email, ele.name, ele.country FROM email_list_entries ele
-            JOIN email_lists el ON el.id = ele.list_id
-            WHERE (el.vendor_id = ? OR el.project_id = ?)
-              AND ele.is_unsubscribed = 0
-              AND ele.status NOT IN (" . implode(',', $exclude_statuses) . ")
-              AND LOWER(ele.email) NOT IN (" . implode(',', array_fill(0, count($existing_map), '?')) . ")";
-    $params = [$vendor_id, $project_id];
-    $params = array_merge($params, array_keys($existing_map));
-    $sql .= " LIMIT " . (int)$batch_size;
-
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute($params);
-    $recipients = $stmt->fetchAll();
-
-    if (empty($recipients)) {
-        $pdo->prepare("UPDATE email_campaigns SET status = 'completed', completed_at = NOW() WHERE id = ?")->execute([$campaign_id]);
-        $pdo->commit();
-        campaign_log('campaign ' . $campaign_id . ' no eligible recipients');
-        exit(0);
-    }
-
-    $subject = $campaign['subject'];
-    $html_body = $campaign['html_body'];
-    $from_name_use = $campaign['from_name'] ?: $from_name;
-    $from_email_use = $campaign['from_email'] ?: $from_address;
-    $sent = 0;
-
-    foreach ($recipients as $row) {
-        $country = strtoupper(substr($row['country'] ?? '', 0, 2));
-        if (!empty($allowed_countries) && !in_array($country, $allowed_countries, true)) {
-            continue;
-        }
-
-        $personalized_html = str_replace(
-            ['{{name}}', '{{email}}', '{{country}}'],
-            [$row['name'] ?? '', $row['email'], $country ?: ''],
-            $html_body
-        );
-        $personalized_subject = str_replace(
-            ['{{name}}', '{{email}}', '{{country}}'],
-            [$row['name'] ?? '', $row['email'], $country ?: ''],
-            $subject
-        );
-
-        [$http_code, $response, $curl_error] = send_via_resend(
-            $resend_api_key,
-            $from_email_use,
-            $from_name_use,
-            $row['email'],
-            $row['name'] ?? '',
-            $personalized_subject,
-            $personalized_html
-        );
-
-        $status = 'failed';
-        $resend_id = null;
-        $error_message = null;
-
-        if ($http_code === 200 || $http_code === 202) {
-            $decoded = json_decode($response, true);
-            $resend_id = $decoded['id'] ?? null;
-            if ($resend_id) {
-                $status = 'sent';
-            } else {
-                $status = 'failed';
-                $error_message = 'missing_resend_id';
-            }
-        } else {
-            $error_message = 'http_' . $http_code . ($curl_error ? ': ' . $curl_error : '');
-        }
-
-        $insert = $pdo->prepare("
-            INSERT INTO email_campaign_sends (campaign_id, project_id, vendor_id, list_id, entry_id, recipient_email, recipient_name, country, status, resend_id, error_message, sent_at, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
-            ON DUPLICATE KEY UPDATE status = VALUES(status), resend_id = VALUES(resend_id), error_message = VALUES(error_message), sent_at = VALUES(sent_at)
-        ");
+    $insert = $pdo->prepare("
+        INSERT INTO email_campaign_sends
+            (campaign_id, project_id, vendor_id, list_id, entry_id, recipient_email, recipient_name, country, status, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'queued', NOW())
+    ");
+    try {
+        $name = $row['name'] ?: trim(($row['first_name'] ?? '') . ' ' . ($row['last_name'] ?? ''));
         $insert->execute([
             $campaign_id,
             $project_id,
             $vendor_id,
-           0,
+            $row['list_id'] ?: $list_id,
             (int)$row['id'],
             $row['email'],
-            $row['name'] ?? null,
-            $country ?: null,
-            $status,
-            $resend_id,
-            $error_message,
-            $status === 'sent' ? date('Y-m-d H:i:s') : null,
+            $name !== '' ? $name : null,
+            strtoupper(substr((string)$row['country'], 0, 2)) ?: null,
         ]);
+    } catch (PDOException $e) {
+        continue;
+    }
+    $send_id = (int)$pdo->lastInsertId();
+    if ($send_id < 1) {
+        continue;
+    }
 
+    $personalized_html = email_personalize($campaign['html_body'], $row);
+    $personalized_html = email_inject_tracking($personalized_html, $send_id);
+    $personalized_subject = email_personalize($campaign['subject'], $row);
+
+    [$http_code, $response, $curl_error] = email_send_via_resend(
+        $resend_api_key,
+        $from_email_use,
+        $from_name_use,
+        $row['email'],
+        $personalized_subject,
+        $personalized_html
+    );
+
+    $tokens--;
+
+    if ($http_code === 429) {
+        $pdo->prepare("DELETE FROM email_campaign_sends WHERE id = ? AND status = 'queued'")->execute([$send_id]);
+        campaign_log('Resend 429; pausing');
+        break;
+    }
+
+    $status = 'failed';
+    $resend_id = null;
+    $error_message = null;
+    if ($http_code === 200 || $http_code === 202) {
+        $decoded = json_decode($response, true);
+        $resend_id = $decoded['id'] ?? null;
+        if ($resend_id) {
+            $status = 'sent';
+        } else {
+            $error_message = 'missing_resend_id';
+        }
+    } else {
+        $error_message = 'http_' . $http_code . ($curl_error ? ': ' . $curl_error : '');
+    }
+
+    $pdo->prepare("
+        UPDATE email_campaign_sends
+        SET status = ?, resend_id = ?, error_message = ?, sent_at = ?
+        WHERE id = ?
+    ")->execute([
+        $status,
+        $resend_id,
+        $error_message,
+        $status === 'sent' ? date('Y-m-d H:i:s') : null,
+        $send_id,
+    ]);
+
+    if ($status === 'sent') {
         $sent++;
+        $pdo->prepare("UPDATE email_list_entries SET last_emailed_at = NOW(), total_emails_sent = total_emails_sent + 1 WHERE id = ?")
+            ->execute([(int)$row['id']]);
+        $pdo->prepare("UPDATE email_campaigns SET sent_count = sent_count + 1, started_at = COALESCE(started_at, NOW()), updated_at = NOW() WHERE id = ?")
+            ->execute([$campaign_id]);
+    } else {
+        $failed++;
+        $pdo->prepare("UPDATE email_campaigns SET failed_count = failed_count + 1, updated_at = NOW() WHERE id = ?")
+            ->execute([$campaign_id]);
     }
 
-    if ($sent > 0) {
-        $pdo->prepare("UPDATE email_campaigns SET sent_count = sent_count + ?, status = 'running', started_at = COALESCE(started_at, NOW()), updated_at = NOW() WHERE id = ?")->execute([$sent, $campaign_id]);
-    }
-
-    $pdo->commit();
-    campaign_log('campaign ' . $campaign_id . ' sent=' . $sent . ' checked=' . count($recipients));
-} catch (Throwable $e) {
-    if ($pdo->inTransaction()) $pdo->rollBack();
-    campaign_log('campaign worker error: ' . $e->getMessage());
+    usleep(150000);
 }
+
+email_rate_tokens_save($pdo, $tokens, microtime(true));
+campaign_log('campaign ' . $campaign_id . ' sent=' . $sent . ' failed=' . $failed . ' checked=' . count($recipients));

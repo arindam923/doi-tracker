@@ -57,26 +57,46 @@ function email_dedupe($rows) {
  *
  * @return int number of rows actually inserted (0 for duplicates).
  */
-function upsert_list_entries($pdo, $list_id, $rows) {
+function upsert_list_entries($pdo, $list_id, $rows, $vendor_id = null) {
     $inserted = 0;
     $tx = !$pdo->inTransaction();
     if ($tx) $pdo->beginTransaction();
 
+    if ($vendor_id === null) {
+        $vstmt = $pdo->prepare('SELECT vendor_id FROM email_lists WHERE id = ?');
+        $vstmt->execute([$list_id]);
+        $vendor_id = $vstmt->fetchColumn() ?: null;
+    }
+
     try {
         $stmt = $pdo->prepare("
-            INSERT INTO email_list_entries (list_id, email, name, metadata_json, is_unsubscribed, dedupe_hash, added_at)
-            VALUES (?, ?, ?, ?, 0, ?, NOW())
-            ON DUPLICATE KEY UPDATE dedupe_hash = VALUES(dedupe_hash)
+            INSERT INTO email_list_entries
+                (list_id, vendor_id, email, name, first_name, last_name, metadata_json, country, source, status, is_unsubscribed, dedupe_hash, added_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 0, ?, NOW())
+            ON DUPLICATE KEY UPDATE email = VALUES(email)
         ");
         foreach ((array)$rows as $row) {
             $email = strtolower(trim($row['email'] ?? ''));
             if (!filter_var($email, FILTER_VALIDATE_EMAIL)) continue;
             $hash = sha1($email);
+            $first = trim((string)($row['first_name'] ?? '')) ?: null;
+            $last = trim((string)($row['last_name'] ?? '')) ?: null;
+            $name = trim((string)($row['name'] ?? ''));
+            if ($name === '') {
+                $name = trim(($first ?? '') . ' ' . ($last ?? ''));
+            }
+            $country = isset($row['country']) ? strtoupper(substr(trim((string)$row['country']), 0, 2)) : null;
+            if ($country === '') $country = null;
             $stmt->execute([
                 $list_id,
+                $vendor_id ?: null,
                 $email,
-                $row['name'] ?? null,
+                $name !== '' ? $name : null,
+                $first,
+                $last,
                 isset($row['metadata']) ? json_encode($row['metadata']) : null,
+                $country,
+                isset($row['source']) && $row['source'] !== '' ? substr((string)$row['source'], 0, 100) : null,
                 $hash,
             ]);
             if ($stmt->rowCount() === 1) $inserted++;

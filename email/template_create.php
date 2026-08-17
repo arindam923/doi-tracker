@@ -52,50 +52,73 @@ unset($_SESSION['form_data']);
 
 
 <div class="tf-page">
-    <div class="tf-card">
-        <div class="tf-card-header">
-            <div>
-                <h5 class="tf-card-title">New Email Template</h5>
-                <p class="tf-card-subtitle">Create a reusable HTML email template for campaigns.</p>
-            </div>
-        </div>
-        <div class="tf-card-body">
-            <form method="POST" class="tf-form" novalidate>
-                <?php echo csrf_field(); ?>
-                <div class="tf-form-row">
-                    <div class="tf-field col-12">
-                        <label for="name" class="tf-label">Template Name <span class="tf-required" aria-hidden="true">*</span></label>
-                        <input type="text" id="name" name="name" class="form-control" value="<?php echo sanitize($form_data['name'] ?? ''); ?>" required placeholder="e.g. Welcome Series">
-                    </div>
-                </div>
-                <div class="tf-form-row">
-                    <div class="tf-field col-12">
-                        <label for="subject" class="tf-label">Subject <span class="tf-required" aria-hidden="true">*</span></label>
-                        <input type="text" id="subject" name="subject" class="form-control" value="<?php echo sanitize($form_data['subject'] ?? ''); ?>" required placeholder="e.g. Welcome to {{company}}">
-                    </div>
-                </div>
-                <div class="tf-form-row">
-                    <div class="tf-field col-12">
-                        <label for="html_body" class="tf-label">HTML Body <span class="tf-required" aria-hidden="true">*</span></label>
-                        <textarea id="html_body" name="html_body" class="form-control" rows="14" required placeholder="<html>...</html>"><?php echo sanitize($form_data['html_body'] ?? ''); ?></textarea>
-                        <p class="tf-help">Supports standard HTML. Example merge fields: <code>{{name}}</code>, <code>{{email}}</code>, <code>{{country}}</code>.</p>
-                    </div>
-                </div>
-                <div class="tf-form-row">
-                    <div class="tf-field col-12">
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="is_default" name="is_default" value="1" <?php echo !empty($form_data['is_default']) ? 'checked' : ''; ?>>
-                            <label class="form-check-label" for="is_default">Make this the default template</label>
-                        </div>
-                    </div>
-                </div>
-                <div class="form-actions">
-                    <a href="<?php echo BASE_URL; ?>/email/templates.php" class="btn btn-secondary">Cancel</a>
-                    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg" aria-hidden="true"></i> Create Template</button>
-                </div>
-            </form>
+    <div class="tf-page-header">
+        <div>
+            <h1>New email template</h1>
+            <p>HTML for DOI and campaign sends. Preview updates as you type.</p>
         </div>
     </div>
+    <form method="POST" class="tf-form" novalidate>
+        <?php echo csrf_field(); ?>
+        <div class="tf-tpl-editor">
+            <div class="tf-card">
+                <div class="tf-card-body">
+                    <div class="tf-form-row">
+                        <div class="tf-field col-12">
+                            <label for="name" class="tf-label">Template name <span class="tf-required" aria-hidden="true">*</span></label>
+                            <input type="text" id="name" name="name" class="form-control" value="<?php echo sanitize($form_data['name'] ?? ''); ?>" required placeholder="e.g. DOI — Confirm your email">
+                        </div>
+                    </div>
+                    <div class="tf-form-row">
+                        <div class="tf-field col-12">
+                            <label for="subject" class="tf-label">Subject <span class="tf-required" aria-hidden="true">*</span></label>
+                            <input type="text" id="subject" name="subject" class="form-control" value="<?php echo sanitize($form_data['subject'] ?? ''); ?>" required placeholder="e.g. {{first_name}}, confirm your email">
+                        </div>
+                    </div>
+                    <div class="tf-form-row">
+                        <div class="tf-field col-12">
+                            <label for="html_body" class="tf-label">HTML body <span class="tf-required" aria-hidden="true">*</span></label>
+                            <textarea id="html_body" name="html_body" class="form-control" rows="18" required placeholder="<html>...</html>"><?php echo sanitize($form_data['html_body'] ?? ''); ?></textarea>
+                            <p class="tf-help">Merge fields: <code>{{name}}</code>, <code>{{first_name}}</code>, <code>{{email}}</code>, <code>{{country}}</code>, <code>{{unsubscribe}}</code>.</p>
+                        </div>
+                    </div>
+                    <div class="tf-form-row">
+                        <div class="tf-field col-12">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="is_default" name="is_default" value="1" <?php echo !empty($form_data['is_default']) ? 'checked' : ''; ?>>
+                                <label class="form-check-label" for="is_default">Make this the default template</label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-actions">
+                        <a href="<?php echo BASE_URL; ?>/email/templates.php" class="btn btn-secondary">Cancel</a>
+                        <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg" aria-hidden="true"></i> Create template</button>
+                    </div>
+                </div>
+            </div>
+            <div class="tf-tpl-live">
+                <div class="tf-card">
+                    <div class="tf-card-header">
+                        <h5 class="tf-card-title">Live preview</h5>
+                    </div>
+                    <div class="tf-card-body">
+                        <iframe id="tplPreview" title="Template preview" sandbox=""></iframe>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </form>
 </div>
+<script>
+(function () {
+    const source = document.getElementById('html_body');
+    const frame = document.getElementById('tplPreview');
+    function paint() {
+        frame.srcdoc = source.value || '<p style="font-family:sans-serif;color:#78716c;padding:2rem;">Start typing HTML to preview.</p>';
+    }
+    source.addEventListener('input', paint);
+    paint();
+})();
+</script>
 
 <?php require_once __DIR__ . '/../helpers/layout_footer.php'; ?>

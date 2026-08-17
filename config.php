@@ -74,6 +74,8 @@ if (!$__is_tracking) {
 // ─── Load Helpers ───
 require_once __DIR__ . '/helpers/functions.php';
 require_once __DIR__ . '/helpers/constants.php';
+require_once __DIR__ . '/helpers/dedupe.php';
+require_once __DIR__ . '/helpers/email.php';
 if (!$__is_tracking) {
     require_once __DIR__ . '/helpers/csrf.php';
     require_once __DIR__ . '/helpers/auth_middleware.php';

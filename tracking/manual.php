@@ -13,9 +13,22 @@ if (!$project) {
     redirect(BASE_URL . '/projects/list.php');
 }
 
-$vendors = $pdo->prepare("SELECT pv.vendor_id AS id, gv.vendor_name, pv.payout AS vendor_cpi FROM project_vendor pv JOIN global_vendors gv ON gv.id = pv.vendor_id WHERE pv.project_id = ? ORDER BY gv.vendor_name");
-$vendors->execute([$project_id]);
-$vendors = $vendors->fetchAll();
+$vendors = [];
+try {
+    $vlist = $pdo->prepare("SELECT pv.vendor_id AS id, gv.vendor_name, pv.payout AS vendor_cpi FROM project_vendor pv JOIN global_vendors gv ON gv.id = pv.vendor_id WHERE pv.project_id = ? ORDER BY gv.vendor_name");
+    $vlist->execute([$project_id]);
+    $vendors = $vlist->fetchAll();
+} catch (Throwable $e) {
+    error_log('manual vendor list: ' . $e->getMessage());
+    try {
+        $vlist = $pdo->prepare("SELECT pv.vendor_id AS id, gv.vendor_name, pv.vendor_cpi FROM project_vendor pv JOIN global_vendors gv ON gv.id = pv.vendor_id WHERE pv.project_id = ? ORDER BY gv.vendor_name");
+        $vlist->execute([$project_id]);
+        $vendors = $vlist->fetchAll();
+    } catch (Throwable $e2) {
+        error_log('manual vendor list fallback: ' . $e2->getMessage());
+        $vendors = [];
+    }
+}
 
 $currency = $project['currency'] ?? 'USD';
 
@@ -34,70 +47,133 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $sub1 = substr(trim($_POST['sub1'] ?? ''), 0, 200);
     $sub2 = substr(trim($_POST['sub2'] ?? ''), 0, 200);
 
-    if (!$vendor_id || empty($reason)) {
+    if (!$vendor_id || $reason === '') {
         set_flash('danger', 'Vendor and reason are required.');
         redirect(BASE_URL . '/tracking/manual.php?project_id=' . $project_id);
     }
 
     $click_id = $custom_click_id ?: bin2hex(random_bytes(16));
+    $existing = null;
 
-    if ($custom_click_id) {
-        $check = $pdo->prepare("SELECT * FROM clicks WHERE click_id = ?");
-        $check->execute([$click_id]);
-        $existing = $check->fetch();
+    try {
+        if ($custom_click_id) {
+            $check = $pdo->prepare("SELECT * FROM clicks WHERE click_id = ?");
+            $check->execute([$click_id]);
+            $existing = $check->fetch();
+            if ($check) {
+                $check->closeCursor();
+            }
 
-        if ($existing) {
-            if ($existing['is_converted']) {
-                set_flash('danger', 'This click is already converted.');
+            if ($existing) {
+                if (!empty($existing['is_converted'])) {
+                    set_flash('danger', 'This click is already converted.');
+                    redirect(BASE_URL . '/tracking/manual.php?project_id=' . $project_id);
+                }
+                $vendor_id = (int)$existing['vendor_id'];
+            }
+        }
+
+        $vstmt = $pdo->prepare("SELECT * FROM project_vendor WHERE vendor_id = ? AND project_id = ?");
+        $vstmt->execute([$vendor_id, $project_id]);
+        $vendor = $vstmt->fetch();
+        if ($vstmt) {
+            $vstmt->closeCursor();
+        }
+
+        if (!$vendor) {
+            set_flash('danger', 'Vendor not found or does not belong to this project.');
+            redirect(BASE_URL . '/tracking/manual.php?project_id=' . $project_id);
+        }
+
+        if (function_exists('tf_daily_completes')) {
+            if ((int)($project['daily_cap'] ?? 0) > 0 && tf_daily_completes($pdo, $project_id) >= (int)$project['daily_cap']) {
+                set_flash('danger', 'Campaign daily conversion cap has been reached.');
                 redirect(BASE_URL . '/tracking/manual.php?project_id=' . $project_id);
             }
-            $vendor_id = $existing['vendor_id'];
+            if ((int)($vendor['daily_cap'] ?? 0) > 0 && tf_daily_completes($pdo, $project_id, $vendor_id) >= (int)$vendor['daily_cap']) {
+                set_flash('danger', 'This vendor has reached its daily conversion cap.');
+                redirect(BASE_URL . '/tracking/manual.php?project_id=' . $project_id);
+            }
         }
-    }
 
-    $vstmt = $pdo->prepare("SELECT pv.payout AS vendor_cpi FROM project_vendor pv WHERE pv.vendor_id = ? AND pv.project_id = ?");
-    $vstmt->execute([$vendor_id, $project_id]);
-    $vendor = $vstmt->fetch();
+        $revenue = $project['client_cpi'];
+        $cost = $vendor['payout'] ?? $vendor['vendor_cpi'] ?? 0;
+        $profit = $revenue - $cost;
+        $now = date('Y-m-d H:i:s');
 
-    if (!$vendor) {
-        set_flash('danger', 'Vendor not found or does not belong to this project.');
+        if (!$custom_click_id || empty($existing)) {
+            tf_record_click($pdo, [
+                'click_id' => $click_id,
+                'project_id' => $project_id,
+                'vendor_id' => $vendor_id,
+                'ip_address' => 'manual',
+                'user_agent' => 'manual',
+            ]);
+            try {
+                $pdo->prepare("UPDATE projects SET clicks_count = clicks_count + 1 WHERE id = ?")->execute([$project_id]);
+            } catch (Throwable $e) {
+                error_log('manual clicks_count: ' . $e->getMessage());
+            }
+        }
+        try {
+            $pdo->prepare("UPDATE clicks SET is_converted = 1 WHERE click_id = ?")->execute([$click_id]);
+        } catch (Throwable $e) {
+            error_log('manual mark converted: ' . $e->getMessage());
+        }
+
+        tf_record_conversion($pdo, [
+            'click_id' => $click_id,
+            'project_id' => $project_id,
+            'vendor_id' => $vendor_id,
+            'status' => 'complete',
+            'client_revenue' => $revenue,
+            'sale_amount' => $sale_amount,
+            'currency' => $currency,
+            'vendor_cost' => $cost,
+            'payout' => $cost,
+            'profit' => $profit,
+            'transaction_id' => $transaction_id,
+            'click_time' => $now,
+            'time_diff_seconds' => 0,
+            'is_manual' => 1,
+            'sub1' => $sub1,
+            'sub2' => $sub2,
+            'sub3' => '',
+            'sub4' => '',
+            'sub5' => '',
+        ]);
+
+        $pdo->prepare("UPDATE projects SET completes_count = completes_count + 1 WHERE id = ?")->execute([$project_id]);
+
+        if (($project['total_quota'] ?? 0) > 0) {
+            $count_stmt = $pdo->prepare("SELECT completes_count FROM projects WHERE id = ?");
+            $count_stmt->execute([$project_id]);
+            $row = $count_stmt->fetch();
+            if ($count_stmt) {
+                $count_stmt->closeCursor();
+            }
+            $new_count = (int)($row['completes_count'] ?? 0);
+
+            if ($new_count >= $project['total_quota']) {
+                $pdo->prepare("UPDATE projects SET status = 'hold' WHERE id = ?")->execute([$project_id]);
+                try {
+                    $pdo->prepare("UPDATE project_vendor SET status = 'hold' WHERE project_id = ? AND status = 'active'")->execute([$project_id]);
+                } catch (Throwable $e) {
+                    error_log('manual hold vendors: ' . $e->getMessage());
+                }
+            }
+        }
+
+        tf_log_event($pdo, 'manual', 'success', 'Manual conversion: ' . $reason, $project_id, $vendor_id, $click_id);
+
+        regenerate_csrf_token();
+        set_flash('success', 'Manual conversion recorded.');
+        redirect(BASE_URL . '/projects/detail.php?id=' . $project_id);
+    } catch (Throwable $e) {
+        error_log('manual conversion: ' . $e->getMessage());
+        set_flash('danger', 'Could not record conversion. Check that clicks/conversions tables match the current schema.');
         redirect(BASE_URL . '/tracking/manual.php?project_id=' . $project_id);
     }
-
-    $revenue = $project['client_cpi'];
-    $cost = $vendor['vendor_cpi'];
-    $profit = $revenue - $cost;
-
-    if (!$custom_click_id) {
-        $pdo->prepare("INSERT INTO clicks (click_id, project_id, vendor_id, ip_address, user_agent, is_converted) VALUES (?, ?, ?, 'manual', 'manual', 1)")
-            ->execute([$click_id, $project_id, $vendor_id]);
-        $pdo->prepare("UPDATE projects SET clicks_count = clicks_count + 1 WHERE id = ?")->execute([$project_id]);
-    } else {
-        $pdo->prepare("UPDATE clicks SET is_converted = 1 WHERE click_id = ?")->execute([$click_id]);
-    }
-
-    $pdo->prepare("INSERT INTO conversions (click_id, project_id, vendor_id, status, client_revenue, sale_amount, currency, vendor_cost, payout, profit, transaction_id, is_manual, sub1, sub2) VALUES (?, ?, ?, 'complete', ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)")
-        ->execute([$click_id, $project_id, $vendor_id, $revenue, $sale_amount, $currency, $cost, $cost, $profit, $transaction_id, $sub1, $sub2]);
-
-    $pdo->prepare("UPDATE projects SET completes_count = completes_count + 1 WHERE id = ?")->execute([$project_id]);
-
-    if ($project['total_quota'] > 0) {
-        $count_stmt = $pdo->prepare("SELECT completes_count FROM projects WHERE id = ?");
-        $count_stmt->execute([$project_id]);
-        $new_count = $count_stmt->fetch()['completes_count'];
-
-        if ($new_count >= $project['total_quota']) {
-            $pdo->prepare("UPDATE projects SET status = 'hold' WHERE id = ?")->execute([$project_id]);
-            $pdo->prepare("UPDATE project_vendor SET status = 'hold' WHERE project_id = ? AND status = 'active'")->execute([$project_id]);
-        }
-    }
-
-    $pdo->prepare("INSERT INTO logs (log_type, project_id, vendor_id, click_id, status, message) VALUES (?, ?, ?, ?, ?, ?)")
-        ->execute(['manual', $project_id, $vendor_id, $click_id, 'success', 'Manual conversion: ' . $reason]);
-
-    regenerate_csrf_token();
-    set_flash('success', 'Manual conversion recorded.');
-    redirect(BASE_URL . '/projects/detail.php?id=' . $project_id);
 }
 
 $page_title = 'Manual Conversion';

@@ -3,14 +3,14 @@ require_once __DIR__ . '/../config.php';
 require_role(['super_admin', 'campaign_manager']);
 
 $id = intval($_GET['id'] ?? 0);
-if (!$id) redirect(BASE_URL . '/email/campaigns.php');
+if (!$id) redirect(BASE_URL . '/projects/list.php');
 
 $stmt = $pdo->prepare("SELECT ec.*, p.project_code, p.project_name, gv.vendor_name FROM email_campaigns ec JOIN projects p ON ec.project_id = p.id JOIN global_vendors gv ON ec.vendor_id = gv.id WHERE ec.id = ?");
 $stmt->execute([$id]);
 $campaign = $stmt->fetch();
 if (!$campaign) {
     set_flash('danger', 'Campaign not found.');
-    redirect(BASE_URL . '/email/campaigns.php');
+    redirect(BASE_URL . '/projects/list.php');
 }
 
 $send_stats = $pdo->prepare("
@@ -59,11 +59,27 @@ require_once __DIR__ . '/../helpers/layout_header.php';
 <div class="campaign-hero">
     <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
         <div>
-            <div class="small text-white-50">Project <code class="text-white"><?php echo sanitize($campaign['project_code']); ?></code></div>
+            <div class="small text-white-50">Project <a class="text-white" href="<?php echo BASE_URL; ?>/projects/detail.php?id=<?php echo (int)$campaign['project_id']; ?>#email-campaigns"><code class="text-white"><?php echo sanitize($campaign['project_code']); ?></code></a></div>
             <h5 class="mb-0"><?php echo sanitize($campaign['name']); ?></h5>
             <div class="small text-white-50">Vendor: <?php echo sanitize($campaign['vendor_name']); ?> · Subject: <?php echo sanitize($campaign['subject']); ?></div>
         </div>
-        <div class="d-flex gap-2">
+        <div class="d-flex gap-2 flex-wrap">
+            <?php if (in_array($campaign['status'], ['draft', 'paused', 'scheduled'], true)): ?>
+            <form method="POST" action="<?php echo BASE_URL; ?>/email/campaign_status.php">
+                <?php echo csrf_field(); ?>
+                <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
+                <input type="hidden" name="action" value="<?php echo $campaign['status'] === 'paused' ? 'resume' : 'launch'; ?>">
+                <button type="submit" class="btn btn-light btn-sm"><i class="bi bi-play-fill"></i><?php echo $campaign['status'] === 'paused' ? 'Resume' : 'Launch'; ?></button>
+            </form>
+            <?php endif; ?>
+            <?php if ($campaign['status'] === 'running'): ?>
+            <form method="POST" action="<?php echo BASE_URL; ?>/email/campaign_status.php">
+                <?php echo csrf_field(); ?>
+                <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
+                <input type="hidden" name="action" value="pause">
+                <button type="submit" class="btn btn-warning btn-sm"><i class="bi bi-pause-fill"></i>Pause</button>
+            </form>
+            <?php endif; ?>
             <a href="<?php echo BASE_URL; ?>/email/campaign_edit.php?id=<?php echo (int)$id; ?>" class="btn btn-outline-light btn-sm"><i class="bi bi-pencil"></i>Edit</a>
             <form method="POST" action="<?php echo BASE_URL; ?>/email/campaign_delete.php" data-confirm="Delete this campaign? This cannot be undone.">
                 <?php echo csrf_field(); ?>

@@ -37,6 +37,7 @@ $sub2 = substr($_GET['sub2'] ?? '', 0, 200);
 $sub3 = substr($_GET['sub3'] ?? '', 0, 200);
 $sub4 = substr($_GET['sub4'] ?? '', 0, 200);
 $sub5 = substr($_GET['sub5'] ?? '', 0, 200);
+$email_send_id = intval($_GET['sid'] ?? 0);
 
 $ip_address = $_SERVER['REMOTE_ADDR'] ?? '';
 $user_agent = substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 1000);
@@ -106,14 +107,6 @@ try {
         }
     }
 
-    if (!empty($vendor['daily_cap']) && (int)$vendor['daily_cap'] > 0) {
-        $dcnt = tf_fetch_one($pdo, "SELECT COUNT(*) as cnt FROM clicks WHERE vendor_id = ? AND DATE(clicked_at) = CURDATE()", [$vendor_id]);
-        if ((int)($dcnt['cnt'] ?? 0) >= (int)$vendor['daily_cap']) {
-            http_response_code(429);
-            die('Vendor daily cap reached.');
-        }
-    }
-
     $target_device = $project['target_device'] ?? 'All';
     $strict_device = false;
     try {
@@ -167,6 +160,7 @@ try {
                 'sub3' => $sub3,
                 'sub4' => $sub4,
                 'sub5' => $sub5,
+                'email_send_id' => $email_send_id > 0 ? $email_send_id : null,
             ]);
             break;
         } catch (PDOException $e) {

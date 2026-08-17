@@ -1,0 +1,3 @@
+email,country,first_name,last_name,source
+jane@example.com,US,Jane,Doe,purchase
+john@example.com,GB,John,Smith,opt-in

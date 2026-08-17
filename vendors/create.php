@@ -95,6 +95,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $global_vendor_id = (int)$pdo->lastInsertId();
         }
 
+        if ($traffic_type === 'Email') {
+            ensure_vendor_email_list($pdo, $global_vendor_id, (int)($_SESSION['user_id'] ?? 0));
+        }
+
         // Attach to project if requested
         if ($project_id && $project) {
             $pv_status = ($vendor_status === 'suspended' || $vendor_status === 'blacklisted') ? 'hold' : 'active';

@@ -19,6 +19,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect(BASE_URL . '/vendors/edit_global.php?id=' . $id);
     }
 
+    if (($_POST['action'] ?? '') === 'upload_emails') {
+        if (($vendor['traffic_type'] ?? '') !== 'Email') {
+            set_flash('danger', 'Email database uploads are only available for Email vendors.');
+            redirect(BASE_URL . '/vendors/edit_global.php?id=' . $id);
+        }
+        if (!isset($_FILES['contact_file']) || $_FILES['contact_file']['error'] !== UPLOAD_ERR_OK) {
+            set_flash('danger', 'Select a valid CSV or XLSX file.');
+            redirect(BASE_URL . '/vendors/edit_global.php?id=' . $id . '#email-db');
+        }
+        $tmp = $_FILES['contact_file']['tmp_name'];
+        if (filesize($tmp) > 10 * 1024 * 1024) {
+            set_flash('danger', 'File is too large (max 10MB).');
+            redirect(BASE_URL . '/vendors/edit_global.php?id=' . $id . '#email-db');
+        }
+        try {
+            $list_id = ensure_vendor_email_list($pdo, $id, (int)($_SESSION['user_id'] ?? 0));
+            $rows = email_parse_contact_upload($tmp, $_FILES['contact_file']['name'] ?? 'upload.csv');
+            $deduped = email_dedupe($rows);
+            $inserted = upsert_list_entries($pdo, $list_id, $deduped['unique'], $id);
+            audit_log($pdo, 'upload', 'vendor_email_list', $id, null, ['inserted' => $inserted]);
+            set_flash('success', 'Imported ' . $inserted . ' new address(es). ' .
+                $deduped['dupes'] . ' duplicate(s) skipped, ' . $deduped['invalid'] . ' invalid row(s) dropped.');
+        } catch (Throwable $e) {
+            error_log('Vendor email upload failed: ' . $e->getMessage());
+            set_flash('danger', 'Import failed: ' . $e->getMessage());
+        }
+        redirect(BASE_URL . '/vendors/edit_global.php?id=' . $id . '#email-db');
+    }
+
     $vendor_name = trim($_POST['vendor_name'] ?? '');
     $company_name = trim($_POST['company_name'] ?? '');
     $contact_person = trim($_POST['contact_person'] ?? '');
@@ -43,6 +72,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $pdo->prepare("UPDATE global_vendors SET vendor_name=?, company_name=?, contact_person=?, email=?, telegram=?, skype=?, phone=?, traffic_type=?, vendor_status=?, default_payout=?, currency=?, daily_cap=?, notes=?, updated_at=NOW() WHERE id=?")
         ->execute([$vendor_name, $company_name, $contact_person, $email, $telegram, $skype, $phone, $traffic_type, $vendor_status, $default_payout, $currency, $daily_cap, $notes, $id]);
+
+    if ($traffic_type === 'Email') {
+        ensure_vendor_email_list($pdo, $id, (int)($_SESSION['user_id'] ?? 0));
+    }
 
     audit_log($pdo, 'update', 'vendor', $id, null, ['vendor_name' => $vendor_name]);
 
@@ -172,5 +205,110 @@ require_once __DIR__ . '/../helpers/layout_header.php';
         </div>
     </div>
 </div>
+
+<?php
+if (($vendor['traffic_type'] ?? '') === 'Email'):
+    $list_id = ensure_vendor_email_list($pdo, $id, (int)($_SESSION['user_id'] ?? 0));
+    $status_filter = $_GET['estatus'] ?? '';
+    $search = trim($_GET['esearch'] ?? '');
+    $epage = max(1, intval($_GET['page'] ?? 1));
+    $where = ['ele.list_id = ?'];
+    $params = [$list_id];
+    if (in_array($status_filter, ['active', 'unsubscribed', 'bounced', 'invalid'], true)) {
+        $where[] = 'ele.status = ?';
+        $params[] = $status_filter;
+    }
+    if ($search !== '') {
+        $where[] = '(ele.email LIKE ? OR ele.first_name LIKE ? OR ele.last_name LIKE ? OR ele.name LIKE ?)';
+        $like = '%' . $search . '%';
+        array_push($params, $like, $like, $like, $like);
+    }
+    $where_sql = 'WHERE ' . implode(' AND ', $where);
+    $total_contacts = email_count_scalar($pdo, "SELECT COUNT(*) FROM email_list_entries ele $where_sql", $params);
+    $epagination = paginate($total_contacts, 50, $epage);
+    $estmt = $pdo->prepare("SELECT ele.* FROM email_list_entries ele $where_sql ORDER BY ele.added_at DESC LIMIT {$epagination['per_page']} OFFSET {$epagination['offset']}");
+    $estmt->execute($params);
+    $entries = $estmt->fetchAll();
+    $list_total = email_count_scalar($pdo, 'SELECT COUNT(*) FROM email_list_entries WHERE list_id = ?', [$list_id]);
+?>
+<div class="row justify-content-center mt-4" id="email-db">
+    <div class="col-12 col-lg-10">
+        <div class="tf-card mb-4">
+            <div class="tf-card-header">
+                <div>
+                    <h5 class="mb-0 fw-semibold"><i class="bi bi-envelope-at me-1"></i>Email Database</h5>
+                    <p class="text-muted small mb-0">Upload once. Later files append new addresses and skip duplicates. Reused on every campaign for this vendor.</p>
+                </div>
+                <span class="badge bg-light text-dark border"><?php echo number_format($list_total); ?> contacts</span>
+            </div>
+            <div class="card-body">
+                <form method="POST" enctype="multipart/form-data" class="row g-2 align-items-end mb-3">
+                    <?php echo csrf_field(); ?>
+                    <input type="hidden" name="action" value="upload_emails">
+                    <div class="col-12 col-md-8">
+                        <label class="tf-label">CSV / XLSX file</label>
+                        <input type="file" name="contact_file" class="form-control" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required>
+                        <p class="form-text mb-0">Columns: <code>email</code>, <code>country</code>, <code>first_name</code>, <code>last_name</code>, <code>source</code> (header row recommended). Max 10MB.</p>
+                    </div>
+                    <div class="col-12 col-md-4">
+                        <button type="submit" class="btn btn-primary w-100"><i class="bi bi-upload"></i> Upload &amp; append</button>
+                    </div>
+                </form>
+                <form method="GET" class="row g-2 align-items-end">
+                    <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
+                    <div class="col-12 col-md-5">
+                        <input type="text" name="esearch" class="form-control form-control-sm" value="<?php echo sanitize($search); ?>" placeholder="Search email or name">
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <select name="estatus" class="form-select form-select-sm">
+                            <option value="">All statuses</option>
+                            <?php foreach (['active','unsubscribed','bounced','invalid'] as $st): ?>
+                            <option value="<?php echo $st; ?>" <?php echo $status_filter === $st ? 'selected' : ''; ?>><?php echo ucfirst($st); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="col-6 col-md-4 d-flex gap-2">
+                        <button class="btn btn-outline-primary btn-sm flex-fill" type="submit">Filter</button>
+                        <a class="btn btn-outline-secondary btn-sm" href="<?php echo BASE_URL; ?>/vendors/edit_global.php?id=<?php echo (int)$id; ?>#email-db">Reset</a>
+                    </div>
+                </form>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Email</th>
+                            <th>Country</th>
+                            <th>Name</th>
+                            <th>Source</th>
+                            <th>Status</th>
+                            <th>Uploaded</th>
+                            <th>Last sent</th>
+                            <th class="text-end">Total sent</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php if (empty($entries)): ?>
+                        <tr><td colspan="8" class="text-center py-4 text-muted">No contacts yet. Upload a list to get started.</td></tr>
+                        <?php else: foreach ($entries as $e): ?>
+                        <tr>
+                            <td><?php echo sanitize($e['email']); ?></td>
+                            <td><?php echo sanitize($e['country'] ?? '—'); ?></td>
+                            <td><?php echo sanitize(trim(($e['first_name'] ?? '') . ' ' . ($e['last_name'] ?? '')) ?: ($e['name'] ?? '—')); ?></td>
+                            <td><?php echo sanitize($e['source'] ?? '—'); ?></td>
+                            <td><?php echo status_badge($e['status'] ?? 'active'); ?></td>
+                            <td class="small text-muted"><?php echo sanitize($e['added_at'] ?? '—'); ?></td>
+                            <td class="small text-muted"><?php echo sanitize($e['last_emailed_at'] ?? '—'); ?></td>
+                            <td class="text-end"><?php echo number_format((int)($e['total_emails_sent'] ?? 0)); ?></td>
+                        </tr>
+                        <?php endforeach; endif; ?>
+                    </tbody>
+                </table>
+            </div>
+            <div class="tf-card-footer"><?php echo render_pagination($epagination, BASE_URL . '/vendors/edit_global.php?id=' . (int)$id . '&esearch=' . urlencode($search) . '&estatus=' . urlencode($status_filter)); ?></div>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
 
 <?php require_once __DIR__ . '/../helpers/layout_footer.php'; ?>

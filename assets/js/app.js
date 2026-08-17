@@ -1,38 +1,14 @@
 /**
  * Track Flow — Accessible Client-side JavaScript Helpers
- * Focus management, keyboard navigation, dropdowns, modals, toasts, copy.
+ * Focus management, keyboard navigation, dropdowns, modals, toasts.
  */
 
-// ─── Clipboard Copy ───
 function copyToClipboard(text, btn) {
-    navigator.clipboard.writeText(text).then(() => {
-        const originalHTML = btn.innerHTML;
-        btn.innerHTML = '<i class="bi bi-check-lg"></i><span class="tf-visually-hidden">Copied</span>';
-        btn.classList.add('copied');
-        btn.setAttribute('aria-label', 'Copied');
-        setTimeout(() => {
-            btn.innerHTML = originalHTML;
-            btn.classList.remove('copied');
-            btn.setAttribute('aria-label', 'Copy');
-        }, 2000);
-    }).catch(() => {
-        const textarea = document.createElement('textarea');
-        textarea.value = text;
-        textarea.style.position = 'fixed';
-        textarea.style.opacity = '0';
-        document.body.appendChild(textarea);
-        textarea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textarea);
-
-        const originalHTML = btn.innerHTML;
-        btn.innerHTML = '<i class="bi bi-check-lg"></i><span class="tf-visually-hidden">Copied</span>';
-        btn.classList.add('copied');
-        setTimeout(() => {
-            btn.innerHTML = originalHTML;
-            btn.classList.remove('copied');
-        }, 2000);
-    });
+    if (typeof tfCopyText === 'function') {
+        tfCopyText(text, btn);
+        return;
+    }
+    window.prompt('Copy this text:', text == null ? '' : String(text));
 }
 
 // ─── Toast Notification ───
@@ -303,15 +279,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 5000);
     });
 
-    // Copy buttons
-    document.querySelectorAll('[data-copy]').forEach(btn => {
-        if (!btn.hasAttribute('aria-label')) btn.setAttribute('aria-label', 'Copy to clipboard');
-        btn.addEventListener('click', (e) => {
-            e.preventDefault();
-            copyToClipboard(btn.dataset.copy, btn);
-        });
-    });
-
     // Confirm dialogs
     document.querySelectorAll('[data-confirm]').forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -543,4 +510,211 @@ document.addEventListener('DOMContentLoaded', function () {
 
         refresh();
     });
+});
+
+function tfEscapeHtml(value) {
+    return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+function tfCloseNicePanels(except) {
+    document.querySelectorAll('.tf-nice-panel').forEach((panel) => {
+        if (panel === except) return;
+        panel.hidden = true;
+        const wrap = panel.closest('.tf-nice');
+        const trigger = wrap && wrap.querySelector('.tf-nice-trigger');
+        if (trigger) trigger.setAttribute('aria-expanded', 'false');
+    });
+}
+
+function tfEnhanceSelect(select) {
+    if (!select || select.dataset.tfNice === 'off' || select.closest('.tf-nice')) return;
+
+    const isMulti = select.multiple;
+    const wrap = document.createElement('div');
+    wrap.className = 'tf-nice' + (isMulti ? ' is-multi' : '');
+    select.parentNode.insertBefore(wrap, select);
+    wrap.appendChild(select);
+    select.classList.add('tf-nice-native');
+    select.tabIndex = -1;
+
+    const optionsOf = () => Array.from(select.options);
+
+    if (!isMulti) {
+        const trigger = document.createElement('button');
+        trigger.type = 'button';
+        trigger.className = 'tf-nice-trigger';
+        trigger.setAttribute('aria-haspopup', 'listbox');
+        trigger.setAttribute('aria-expanded', 'false');
+        trigger.innerHTML = '<span class="tf-nice-trigger-label"></span><i class="bi bi-chevron-down tf-nice-chevron" aria-hidden="true"></i>';
+        wrap.appendChild(trigger);
+
+        const panel = document.createElement('div');
+        panel.className = 'tf-nice-panel';
+        panel.hidden = true;
+        panel.innerHTML = '<input type="search" class="tf-nice-search form-control" placeholder="Search…" autocomplete="off"><ul class="tf-nice-options" role="listbox"></ul>';
+        wrap.appendChild(panel);
+
+        const labelEl = trigger.querySelector('.tf-nice-trigger-label');
+        const search = panel.querySelector('.tf-nice-search');
+        const list = panel.querySelector('.tf-nice-options');
+
+        function selectedText() {
+            const opt = select.options[select.selectedIndex];
+            return opt ? opt.textContent.trim() : '';
+        }
+
+        function syncTrigger() {
+            const text = selectedText();
+            const empty = !select.value;
+            labelEl.textContent = text || 'Select…';
+            labelEl.classList.toggle('is-placeholder', empty);
+        }
+
+        function render(term) {
+            const q = (term || '').toLowerCase().trim();
+            const html = optionsOf().map((opt, idx) => {
+                const text = opt.textContent.trim();
+                if (q && !text.toLowerCase().includes(q)) return '';
+                const selected = opt.selected ? ' is-selected' : '';
+                return '<li><button type="button" class="tf-nice-option' + selected + '" data-index="' + idx + '" role="option" aria-selected="' + (opt.selected ? 'true' : 'false') + '">' + tfEscapeHtml(text) + '</button></li>';
+            }).join('');
+            list.innerHTML = html || '<li class="tf-nice-empty">No matches</li>';
+        }
+
+        trigger.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const open = panel.hidden;
+            tfCloseNicePanels(panel);
+            panel.hidden = !open;
+            trigger.setAttribute('aria-expanded', String(open));
+            if (open) {
+                render(search.value);
+                setTimeout(() => search.focus(), 0);
+            }
+        });
+
+        search.addEventListener('input', () => render(search.value));
+        search.addEventListener('click', (e) => e.stopPropagation());
+        panel.addEventListener('click', (e) => e.stopPropagation());
+
+        list.addEventListener('click', (e) => {
+            const btn = e.target.closest('.tf-nice-option');
+            if (!btn) return;
+            const opt = select.options[Number(btn.dataset.index)];
+            if (!opt) return;
+            select.selectedIndex = Number(btn.dataset.index);
+            select.dispatchEvent(new Event('change', { bubbles: true }));
+            syncTrigger();
+            tfCloseNicePanels();
+        });
+
+        select.addEventListener('change', syncTrigger);
+        syncTrigger();
+        return;
+    }
+
+    const box = document.createElement('div');
+    box.className = 'tf-nice-multi';
+    box.innerHTML = '<div class="tf-nice-chips"></div>' +
+        '<input type="search" class="tf-nice-search form-control" placeholder="Search recipients…" autocomplete="off">' +
+        '<ul class="tf-nice-options"></ul>' +
+        '<div class="tf-nice-toolbar"><span class="tf-nice-count">0 selected</span><span><button type="button" class="tf-nice-all">Select visible</button> · <button type="button" class="tf-nice-none">Clear</button></span></div>';
+    wrap.appendChild(box);
+
+    const chips = box.querySelector('.tf-nice-chips');
+    const search = box.querySelector('.tf-nice-search');
+    const list = box.querySelector('.tf-nice-options');
+    const countEl = box.querySelector('.tf-nice-count');
+
+    function selectedOptions() {
+        return optionsOf().filter((o) => o.selected && o.value !== '');
+    }
+
+    function parseLabel(text) {
+        const match = text.match(/^(.*)\(([^)]+)\)\s*$/);
+        if (!match) return { title: text, meta: '' };
+        return { title: match[1].trim(), meta: match[2].trim() };
+    }
+
+    function renderChips() {
+        const selected = selectedOptions();
+        chips.innerHTML = selected.map((opt) => {
+            const parsed = parseLabel(opt.textContent.trim());
+            return '<span class="tf-nice-chip" data-value="' + tfEscapeHtml(opt.value) + '"><span>' + tfEscapeHtml(parsed.title || opt.textContent.trim()) + '</span><button type="button" aria-label="Remove">&times;</button></span>';
+        }).join('');
+        countEl.textContent = selected.length + ' selected';
+        select.dispatchEvent(new Event('tf-nice-sync'));
+    }
+
+    function renderList() {
+        const q = search.value.toLowerCase().trim();
+        const html = optionsOf().map((opt, idx) => {
+            if (!opt.value) return '';
+            const text = opt.textContent.trim();
+            if (q && !text.toLowerCase().includes(q)) return '';
+            const parsed = parseLabel(text);
+            const selected = opt.selected ? ' is-selected' : '';
+            const meta = parsed.meta ? '<span class="tf-nice-option-meta">' + tfEscapeHtml(parsed.meta) + '</span>' : '';
+            return '<li><button type="button" class="tf-nice-option' + selected + '" data-index="' + idx + '"><span>' + tfEscapeHtml(parsed.title) + meta + '</span></button></li>';
+        }).join('');
+        list.innerHTML = html || '<li class="tf-nice-empty">No matches</li>';
+    }
+
+    function refresh() {
+        renderChips();
+        renderList();
+    }
+
+    search.addEventListener('input', renderList);
+    search.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') e.preventDefault();
+    });
+
+    list.addEventListener('click', (e) => {
+        const btn = e.target.closest('.tf-nice-option');
+        if (!btn) return;
+        const opt = select.options[Number(btn.dataset.index)];
+        if (!opt) return;
+        opt.selected = !opt.selected;
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        refresh();
+    });
+
+    chips.addEventListener('click', (e) => {
+        const btn = e.target.closest('button');
+        if (!btn) return;
+        const chip = btn.closest('.tf-nice-chip');
+        const opt = optionsOf().find((o) => o.value === chip.dataset.value);
+        if (opt) {
+            opt.selected = false;
+            select.dispatchEvent(new Event('change', { bubbles: true }));
+            refresh();
+        }
+    });
+
+    box.querySelector('.tf-nice-all').addEventListener('click', () => {
+        list.querySelectorAll('.tf-nice-option').forEach((btn) => {
+            const opt = select.options[Number(btn.dataset.index)];
+            if (opt) opt.selected = true;
+        });
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        refresh();
+    });
+    box.querySelector('.tf-nice-none').addEventListener('click', () => {
+        optionsOf().forEach((o) => { o.selected = false; });
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        refresh();
+    });
+
+    refresh();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('select.form-select').forEach(tfEnhanceSelect);
+    document.addEventListener('click', () => tfCloseNicePanels());
 });

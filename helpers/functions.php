@@ -19,6 +19,20 @@ function sanitize($input) {
 }
 
 /**
+ * Copy button that passes the raw string into tfCopyText() (defined in layout_header).
+ * Avoids data-copy attributes and app.js clipboard helpers.
+ */
+function tf_copy_button($text, $class = 'btn btn-secondary') {
+    $payload = htmlspecialchars(
+        json_encode((string)$text, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+        ENT_QUOTES,
+        'UTF-8'
+    );
+    $class = htmlspecialchars($class, ENT_QUOTES, 'UTF-8');
+    return '<button type="button" class="' . $class . '" aria-label="Copy" onclick="tfCopyText(' . $payload . ', this)"><i class="bi bi-clipboard" aria-hidden="true"></i></button>';
+}
+
+/**
  * Generate a unique click ID (32-char hex)
  */
 function generate_click_id() {
@@ -208,6 +222,22 @@ function status_badge($status) {
         'rejected' => 'bg-danger',
         'duplicate' => 'bg-light',
         'manual' => 'bg-info',
+        'draft' => 'bg-light',
+        'running' => 'bg-success',
+        'paused' => 'bg-warning',
+        'completed' => 'bg-secondary',
+        'failed' => 'bg-danger',
+        'sent' => 'bg-success',
+        'delivered' => 'bg-success',
+        'opened' => 'bg-info',
+        'clicked' => 'bg-info',
+        'converted' => 'bg-success',
+        'bounced' => 'bg-danger',
+        'unsubscribed' => 'bg-light',
+        'invalid' => 'bg-danger',
+        'queued' => 'bg-secondary',
+        'skipped' => 'bg-light',
+        'scheduled' => 'bg-info',
     ];
     $color = $colors[$status] ?? 'bg-light';
     return '<span class="badge ' . $color . '">' . ucfirst($status) . '</span>';
@@ -528,13 +558,22 @@ function tf_normalize_geo_codes($raw) {
 }
 
 function tf_country_flag_html($code, $class = 'tf-flag') {
-    $code = strtolower(substr((string)$code, 0, 2));
-    if (!preg_match('/^[a-z]{2}$/', $code)) {
+    $code = strtoupper(substr((string)$code, 0, 2));
+    if (!preg_match('/^[A-Z]{2}$/', $code)) {
         return '';
     }
-    $src = 'https://flagcdn.com/w40/' . $code . '.png';
-    $src2x = 'https://flagcdn.com/w80/' . $code . '.png';
-    return '<img src="' . htmlspecialchars($src, ENT_QUOTES, 'UTF-8') . '" srcset="' . htmlspecialchars($src2x, ENT_QUOTES, 'UTF-8') . ' 2x" alt="" class="' . htmlspecialchars($class, ENT_QUOTES, 'UTF-8') . '" width="20" height="15" loading="lazy">';
+    // Regional-indicator emoji (no CDN; CSP on InfinityFree blocks flagcdn.com).
+    if (function_exists('mb_chr')) {
+        $emoji = mb_chr(0x1F1E6 + ord($code[0]) - 65, 'UTF-8')
+               . mb_chr(0x1F1E6 + ord($code[1]) - 65, 'UTF-8');
+    } else {
+        $emoji = html_entity_decode(
+            '&#' . (127397 + ord($code[0])) . ';&#' . (127397 + ord($code[1])) . ';',
+            ENT_NOQUOTES,
+            'UTF-8'
+        );
+    }
+    return '<span class="' . htmlspecialchars($class, ENT_QUOTES, 'UTF-8') . ' tf-flag-emoji" role="img" aria-label="' . htmlspecialchars($code, ENT_QUOTES, 'UTF-8') . '">' . $emoji . '</span>';
 }
 
 /**
@@ -574,6 +613,26 @@ function tf_geo_picker_html(array $selected = []) {
 }
 
 /**
+ * Count complete conversions for today (MySQL CURDATE).
+ * Pass $vendor_id to scope to a project assignment.
+ */
+function tf_daily_completes(PDO $pdo, $project_id, $vendor_id = null) {
+    try {
+        $sql = "SELECT COUNT(*) AS cnt FROM conversions WHERE project_id = ? AND DATE(converted_at) = CURDATE() AND status = 'complete'";
+        $params = [(int)$project_id];
+        if ($vendor_id !== null && (int)$vendor_id > 0) {
+            $sql .= ' AND vendor_id = ?';
+            $params[] = (int)$vendor_id;
+        }
+        $row = tf_fetch_one($pdo, $sql, $params);
+        return (int)($row['cnt'] ?? 0);
+    } catch (Throwable $e) {
+        error_log('tf_daily_completes: ' . $e->getMessage());
+        return 0;
+    }
+}
+
+/**
  * Fetch one row and release the statement (InfinityFree/mysqlnd HY000/2014).
  */
 function tf_fetch_one(PDO $pdo, $sql, array $params = []) {
@@ -589,6 +648,7 @@ function tf_fetch_one(PDO $pdo, $sql, array $params = []) {
  */
 function tf_record_click(PDO $pdo, array $row) {
     $attempts = [
+        ['click_id','project_id','vendor_id','ip_address','user_agent','referrer','device_type','browser','os','browser_lang','isp','country_code','is_duplicate_ip','sub1','sub2','sub3','sub4','sub5','email_send_id'],
         ['click_id','project_id','vendor_id','ip_address','user_agent','referrer','device_type','browser','os','browser_lang','isp','country_code','is_duplicate_ip','sub1','sub2','sub3','sub4','sub5'],
         ['click_id','project_id','vendor_id','ip_address','user_agent','referrer','device_type','country_code','is_duplicate_ip','sub1','sub2','sub3','sub4','sub5'],
         ['click_id','project_id','vendor_id','ip_address','user_agent','referrer','device_type','country_code'],
@@ -612,6 +672,9 @@ function tf_record_click(PDO $pdo, array $row) {
             if (strpos($msg, 'Duplicate') !== false) {
                 throw $e;
             }
+            if ($cols === $attempts[0]) {
+                error_log('tf_record_click full insert failed (run migration_click_enrichment.sql): ' . $msg);
+            }
             if (strpos($msg, '1452') !== false || stripos($msg, 'foreign key') !== false) {
                 try {
                     $pdo->exec('SET FOREIGN_KEY_CHECKS=0');
@@ -623,6 +686,40 @@ function tf_record_click(PDO $pdo, array $row) {
                     $last = $e2;
                 }
             }
+        }
+    }
+    if ($last instanceof Throwable) {
+        throw $last;
+    }
+    return false;
+}
+
+/**
+ * Insert a conversion using the richest column set the live schema accepts.
+ */
+function tf_record_conversion(PDO $pdo, array $row) {
+    $attempts = [
+        ['click_id','project_id','vendor_id','status','client_revenue','sale_amount','currency','vendor_cost','payout','profit','transaction_id','click_time','time_diff_seconds','is_manual','sub1','sub2','sub3','sub4','sub5'],
+        ['click_id','project_id','vendor_id','status','client_revenue','sale_amount','currency','vendor_cost','payout','profit','transaction_id','is_manual','sub1','sub2'],
+        ['click_id','project_id','vendor_id','status','client_revenue','sale_amount','currency','vendor_cost','profit','transaction_id','click_time','time_diff_seconds','is_manual'],
+        ['click_id','project_id','vendor_id','status','client_revenue','sale_amount','currency','vendor_cost','profit','transaction_id','is_manual'],
+        ['click_id','project_id','vendor_id','status','client_revenue','vendor_cost','profit','is_manual'],
+        ['click_id','project_id','vendor_id','status','client_revenue','vendor_cost','profit'],
+    ];
+    $last = null;
+    foreach ($attempts as $cols) {
+        $placeholders = implode(',', array_fill(0, count($cols), '?'));
+        $sql = 'INSERT INTO conversions (' . implode(',', $cols) . ') VALUES (' . $placeholders . ')';
+        $vals = [];
+        foreach ($cols as $col) {
+            $vals[] = array_key_exists($col, $row) ? $row[$col] : null;
+        }
+        try {
+            $pdo->prepare($sql)->execute($vals);
+            return true;
+        } catch (PDOException $e) {
+            $last = $e;
+            error_log('tf_record_conversion attempt failed (' . implode(',', $cols) . '): ' . $e->getMessage());
         }
     }
     if ($last instanceof Throwable) {

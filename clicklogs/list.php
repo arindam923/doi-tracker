@@ -161,6 +161,9 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                     <th>Device</th>
                     <th>Browser</th>
                     <th>OS</th>
+                    <th>Lang</th>
+                    <th>ISP</th>
+                    <th>Referrer</th>
                     <th>IP</th>
                     <th>Sub1-5</th>
                     <th>Status</th>
@@ -169,16 +172,22 @@ require_once __DIR__ . '/../helpers/layout_header.php';
             </thead>
             <tbody>
                 <?php if (empty($clicks)): ?>
-                <tr><td colspan="11" class="text-center py-5 text-muted">No clicks match your filters.</td></tr>
-                <?php else: foreach ($clicks as $c): ?>
+                <tr><td colspan="14" class="text-center py-5 text-muted">No clicks match your filters.</td></tr>
+                <?php else: foreach ($clicks as $c):
+                    $ua = (string)($c['user_agent'] ?? '');
+                    $ref = (string)($c['referrer'] ?? '');
+                ?>
                 <tr>
-                    <td><code><?php echo substr(sanitize($c['click_id']), 0, 12); ?>…</code></td>
+                    <td title="<?php echo sanitize($ua); ?>"><code><?php echo substr(sanitize($c['click_id']), 0, 12); ?>…</code></td>
                     <td><a href="<?php echo BASE_URL; ?>/projects/detail.php?id=<?php echo $c['project_id']; ?>"><?php echo sanitize($c['project_code']); ?></a></td>
                     <td><?php echo sanitize($c['vendor_name']); ?></td>
                     <td><?php echo sanitize($c['country_code'] ?? 'XX'); ?></td>
-                    <td><?php echo sanitize(ucfirst($c['device_type'] ?? '')); ?></td>
+                    <td title="<?php echo sanitize($ua); ?>"><?php echo sanitize(ucfirst($c['device_type'] ?? '')); ?></td>
                     <td><?php echo sanitize($c['browser'] ?? ''); ?></td>
                     <td class="text-secondary"><?php echo sanitize($c['os'] ?? ''); ?></td>
+                    <td class="small"><?php echo sanitize($c['browser_lang'] ?? ''); ?></td>
+                    <td class="small" title="<?php echo sanitize($c['isp'] ?? ''); ?>"><?php echo sanitize($c['isp'] ?? ''); ?></td>
+                    <td class="small text-secondary" style="max-width: 180px;" title="<?php echo sanitize($ref); ?>"><?php echo $ref !== '' ? sanitize(strlen($ref) > 40 ? substr($ref, 0, 37) . '...' : $ref) : '—'; ?></td>
                     <td><code><?php echo sanitize($c['ip_address'] ?? ''); ?></code></td>
                     <td class="small text-secondary">
                         <?php $subs = array_filter([$c['sub1']??'', $c['sub2']??'', $c['sub3']??'', $c['sub4']??'', $c['sub5']??'']); echo $subs ? sanitize(implode(' · ', $subs)) : '—'; ?>

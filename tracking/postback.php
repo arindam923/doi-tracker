@@ -123,16 +123,11 @@ try {
         die('OK:QUOTA_REACHED');
     }
 
-    // Per-project daily cap
-    if (($project['daily_cap'] ?? 0) > 0) {
-        $today = $pdo->prepare("SELECT COUNT(*) as cnt FROM conversions WHERE project_id = ? AND DATE(converted_at) = CURDATE() AND status = 'complete'");
-        $today->execute([$project_id]);
-        if ($today->fetch()['cnt'] >= (int)$project['daily_cap']) {
-            $pdo->rollBack();
-            http_response_code(200);
-            log_postback($pdo, $project_id, $vendor_id, $click_id, 'rejected', 'Project daily cap reached', $payload, $ip_address, 'OK:DAILY_CAP');
-            die('OK:DAILY_CAP');
-        }
+    if (($project['daily_cap'] ?? 0) > 0 && tf_daily_completes($pdo, $project_id) >= (int)$project['daily_cap']) {
+        $pdo->rollBack();
+        http_response_code(200);
+        log_postback($pdo, $project_id, $vendor_id, $click_id, 'rejected', 'Project daily cap reached', $payload, $ip_address, 'OK:DAILY_CAP');
+        die('OK:DAILY_CAP');
     }
 
     $stmt = $pdo->prepare("SELECT pv.*, gv.vendor_status, gv.vendor_name FROM project_vendor pv JOIN global_vendors gv ON gv.id = pv.vendor_id WHERE pv.vendor_id = ? AND pv.project_id = ?");
@@ -154,6 +149,17 @@ try {
         die('OK:VENDOR_BLOCKED');
     }
 
+    if (($vendor['daily_cap'] ?? 0) > 0 && tf_daily_completes($pdo, $project_id, $vendor_id) >= (int)$vendor['daily_cap']) {
+        try {
+            $pdo->prepare("UPDATE project_vendor SET status = 'hold' WHERE vendor_id = ? AND project_id = ? AND status = 'active'")
+                ->execute([$vendor_id, $project_id]);
+        } catch (Throwable $e) {}
+        $pdo->rollBack();
+        http_response_code(200);
+        log_postback($pdo, $project_id, $vendor_id, $click_id, 'rejected', 'Vendor daily cap reached', $payload, $ip_address, 'OK:VENDOR_DAILY_CAP');
+        die('OK:VENDOR_DAILY_CAP');
+    }
+
     $revenue = $sale_amount > 0 ? $sale_amount : $project['client_cpi'];
     $cost    = $payout > 0 ? $payout : $vendor['payout'];
     $profit  = $revenue - $cost;
@@ -170,6 +176,14 @@ try {
 
     $pdo->prepare("UPDATE clicks SET is_converted = 1 WHERE click_id = ?")->execute([$click_id]);
     $pdo->prepare("UPDATE projects SET completes_count = completes_count + 1 WHERE id = ?")->execute([$project_id]);
+
+    if (!empty($click['email_send_id'])) {
+        try {
+            email_mark_engagement($pdo, (int)$click['email_send_id'], 'converted');
+        } catch (Throwable $e) {
+            error_log('email conversion hook: ' . $e->getMessage());
+        }
+    }
 
     if ($project['total_quota'] > 0) {
         $count_stmt = $pdo->prepare("SELECT completes_count FROM projects WHERE id = ?");

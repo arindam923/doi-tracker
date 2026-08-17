@@ -277,15 +277,15 @@ $project_vendors = $project_vendor_map[$p['id']] ?? [];
                     <i class="bi bi-info-circle text-muted" data-bs-toggle="tooltip" data-bs-placement="top" title="This postback URL is unique per project — the token segment identifies the campaign."></i>
                 </label>
                 <div class="input-group">
-                    <input type="text" class="form-control" style="font-family: ui-monospace, monospace; font-size: .85em;" readonly value="<?php echo sanitize($client_postback); ?>">
-                    <button class="btn btn-secondary" data-copy="<?php echo sanitize($client_postback); ?>" aria-label="Copy"><i class="bi bi-clipboard"></i></button>
+                    <input type="text" class="form-control" style="font-family: ui-monospace, monospace; font-size: .85em;" readonly onclick="this.select()" value="<?php echo sanitize($client_postback); ?>">
+                    <?php echo tf_copy_button($client_postback); ?>
                 </div>
             </div>
             <div class="mb-3">
                 <label class="tf-label">Postback Token</label>
                 <div class="input-group">
-                    <input type="text" class="form-control" style="font-family: ui-monospace, monospace; font-size: .85em;" readonly value="<?php echo sanitize($p['postback_token']); ?>">
-                    <button class="btn btn-secondary" data-copy="<?php echo sanitize($p['postback_token']); ?>" aria-label="Copy"><i class="bi bi-clipboard"></i></button>
+                    <input type="text" class="form-control" style="font-family: ui-monospace, monospace; font-size: .85em;" readonly onclick="this.select()" value="<?php echo sanitize($p['postback_token']); ?>">
+                    <?php echo tf_copy_button($p['postback_token']); ?>
                 </div>
             </div>
 
@@ -301,8 +301,8 @@ $project_vendors = $project_vendor_map[$p['id']] ?? [];
                     <?php echo status_badge($v['status']); ?>
                 </label>
                 <div class="input-group">
-                    <input type="text" class="form-control" style="font-family: ui-monospace, monospace; font-size: .85em;" readonly value="<?php echo sanitize($vendor_url); ?>">
-                    <button class="btn btn-secondary" data-copy="<?php echo sanitize($vendor_url); ?>" aria-label="Copy"><i class="bi bi-clipboard"></i></button>
+                    <input type="text" class="form-control" style="font-family: ui-monospace, monospace; font-size: .85em;" readonly onclick="this.select()" value="<?php echo sanitize($vendor_url); ?>">
+                    <?php echo tf_copy_button($vendor_url); ?>
                 </div>
             </div>
             <?php endforeach; ?>

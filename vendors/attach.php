@@ -72,6 +72,17 @@ try {
         'currency' => $currency
     ]);
 
+    audit_log($pdo, 'attach', 'project_vendor', $project_id . ':' . $global_vendor_id, null, [
+        'project_id' => $project_id,
+        'vendor_code' => $gv['vendor_code'],
+        'payout' => $payout,
+        'currency' => $currency
+    ]);
+
+    if (($gv['traffic_type'] ?? '') === 'Email') {
+        ensure_vendor_email_list($pdo, $global_vendor_id, (int)($_SESSION['user_id'] ?? 0));
+    }
+
     $pdo->commit();
     regenerate_csrf_token();
     set_flash('success', 'Vendor ' . sanitize($gv['vendor_name']) . ' attached to project.');

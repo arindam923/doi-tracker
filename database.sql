@@ -15,6 +15,9 @@
 -- ============================================================
 
 SET FOREIGN_KEY_CHECKS = 0;
+DROP TABLE IF EXISTS `email_campaign_sends`;
+DROP TABLE IF EXISTS `email_campaigns`;
+DROP TABLE IF EXISTS `email_templates`;
 DROP TABLE IF EXISTS `email_list_entries`;
 DROP TABLE IF EXISTS `email_lists`;
 DROP TABLE IF EXISTS `scheduled_reports`;
@@ -194,7 +197,9 @@ CREATE TABLE `clicks` (
   `sub3` VARCHAR(200),
   `sub4` VARCHAR(200),
   `sub5` VARCHAR(200),
+  `email_send_id` BIGINT NULL,
   INDEX idx_click_id (`click_id`),
+  INDEX idx_email_send (`email_send_id`),
   INDEX idx_project (`project_id`),
   INDEX idx_vendor (`vendor_id`),
   INDEX idx_clicked_at (`clicked_at`),
@@ -398,14 +403,17 @@ CREATE TABLE `email_lists` (
   `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_client (`client_id`),
   INDEX idx_project (`project_id`),
-  INDEX idx_vendor (`vendor_id`)
+  UNIQUE KEY uk_vendor_list (`vendor_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE `email_list_entries` (
   `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
   `list_id` INT NOT NULL,
+  `vendor_id` INT NULL,
   `email` VARCHAR(254) NOT NULL,
   `name` VARCHAR(200) NULL,
+  `first_name` VARCHAR(100) NULL,
+  `last_name` VARCHAR(100) NULL,
   `metadata_json` JSON NULL,
   `country` CHAR(2) NULL,
   `source` VARCHAR(100) NULL,
@@ -420,6 +428,8 @@ CREATE TABLE `email_list_entries` (
   INDEX idx_email (`email`),
   INDEX idx_unsub (`is_unsubscribed`),
   INDEX idx_country (`country`),
+  INDEX idx_vendor (`vendor_id`),
+  INDEX idx_list_status_country (`list_id`, `status`, `country`),
   FOREIGN KEY (`list_id`) REFERENCES `email_lists`(`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -482,7 +492,7 @@ CREATE TABLE `email_campaign_sends` (
   `campaign_id` INT NOT NULL,
   `project_id` INT NOT NULL,
   `vendor_id` INT NOT NULL,
-  `list_id` INT NOT NULL,
+  `list_id` INT NULL,
   `entry_id` BIGINT NOT NULL,
   `recipient_email` VARCHAR(254) NOT NULL,
   `recipient_name` VARCHAR(200) NULL,
