@@ -135,6 +135,7 @@ CREATE TABLE `global_vendors` (
   `telegram` VARCHAR(100) NULL,
   `skype` VARCHAR(100) NULL,
   `phone` VARCHAR(50) NULL,
+  `global_postback_url` VARCHAR(500) NULL,
   `traffic_type` ENUM('Email','Facebook','Google','Native','Push','Incent','Search','Display','Influencer','API','Other') DEFAULT 'Other',
   `vendor_status` ENUM('pending','approved','suspended','blacklisted') DEFAULT 'approved',
   `default_payout` DECIMAL(10,2) DEFAULT 0.00,

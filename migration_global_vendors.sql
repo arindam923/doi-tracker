@@ -51,6 +51,9 @@ ON DUPLICATE KEY UPDATE
 -- 2. Make project_vendor.status accept the per-project lifecycle
 --    (active/hold/closed) and add per-project postback_url.
 -- ─────────────────────────────────────────────────────────────
+ALTER TABLE global_vendors
+    ADD COLUMN IF NOT EXISTS global_postback_url VARCHAR(500) NULL AFTER phone;
+
 ALTER TABLE project_vendor
     MODIFY status ENUM('active','hold','closed') NOT NULL DEFAULT 'active',
     ADD COLUMN postback_url VARCHAR(500) NULL AFTER status;
