@@ -120,7 +120,7 @@ $notes = $notes_stmt->fetchAll();
 
 // Vendors not yet attached to this project (for the attach dropdown)
 $av_stmt = $pdo->prepare("
-    SELECT gv.id, gv.vendor_code, gv.vendor_name, gv.default_payout, gv.currency
+    SELECT gv.id, gv.vendor_code, gv.vendor_name, gv.default_payout, gv.currency, gv.global_postback_url
     FROM global_vendors gv
     WHERE gv.vendor_status = 'approved'
       AND gv.id NOT IN (SELECT pv.vendor_id FROM project_vendor pv WHERE pv.project_id = ?)
@@ -427,7 +427,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                     <?php foreach ($available_vendors as $av):
                         $opt_payout = ($av['default_payout'] > 0) ? $av['default_payout'] : $default_attach_payout;
                     ?>
-                    <option value="<?php echo (int)$av['id']; ?>" data-payout="<?php echo sanitize((string)$opt_payout); ?>">
+                    <option value="<?php echo (int)$av['id']; ?>" data-payout="<?php echo sanitize((string)$opt_payout); ?>" data-postback="<?php echo sanitize((string)($av['global_postback_url'] ?? '')); ?>">
                         <?php echo sanitize($av['vendor_name']); ?> (<?php echo sanitize($av['vendor_code']); ?>)
                     </option>
                     <?php endforeach; ?>
@@ -440,6 +440,10 @@ require_once __DIR__ . '/../helpers/layout_header.php';
             <div class="col-6 col-md-2">
                 <label class="tf-label" for="attach_daily_cap">Daily cap (completes)</label>
                 <input type="number" min="0" name="daily_cap" id="attach_daily_cap" class="form-control form-control-sm" value="0" placeholder="0 = none">
+            </div>
+            <div class="col-12 col-md-4">
+                <label class="tf-label" for="attach_postback_url">Project Override Postback URL</label>
+                <input type="url" name="postback_url" id="attach_postback_url" class="form-control form-control-sm" placeholder="Blank uses global postback">
             </div>
             <div class="col-12 col-md-3">
                 <label class="tf-label" for="attach_notes">Notes</label>
@@ -754,11 +758,20 @@ $extra_js = <<<EOT
     }
     var sel = document.getElementById('attach_global_vendor_id');
     var payout = document.getElementById('attach_payout');
+    var postback = document.getElementById('attach_postback_url');
+    if (postback) {
+        postback.addEventListener('input', function () {
+            postback.dataset.userEdited = '1';
+        });
+    }
     if (sel && payout) {
         sel.addEventListener('change', function () {
             var opt = sel.options[sel.selectedIndex];
             if (opt && opt.getAttribute('data-payout')) {
                 payout.value = opt.getAttribute('data-payout');
+            }
+            if (postback && postback.dataset.userEdited !== '1') {
+                postback.value = opt ? (opt.getAttribute('data-postback') || '') : '';
             }
         });
     }

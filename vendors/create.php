@@ -119,7 +119,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     allowed_clicks_limit = VALUES(allowed_clicks_limit),
                     daily_cap = VALUES(daily_cap),
                     notes = VALUES(notes)
-            ")->execute([$project_id, $global_vendor_id, $payout, $currency, $pv_status, $postback_url !== '' ? $postback_url : $global_postback_url, $allowed_clicks_limit, $daily_cap, (int)($_SESSION['user_id'] ?? 0), $notes]);
+            ")->execute([$project_id, $global_vendor_id, $payout, $currency, $pv_status, tf_resolve_postback_url($postback_url, $global_postback_url), $allowed_clicks_limit, $daily_cap, (int)($_SESSION['user_id'] ?? 0), $notes]);
 
             // Per-vendor short link for /c/{code}
             $suffix = strtolower(substr(preg_replace('/[^A-Za-z0-9]/', '', $vendor_name ?: $vendor_code), 0, 4));

@@ -76,6 +76,14 @@ function tf_is_valid_postback_url($url) {
 }
 
 /**
+ * Resolve a project assignment's effective postback URL.
+ */
+function tf_resolve_postback_url($override, $global) {
+    $override = trim((string)$override);
+    return $override !== '' ? $override : trim((string)$global);
+}
+
+/**
  * Generate project code: country code + YYMM + monthly sequence
  * Example: IN2607001 (country=IN, year=26, month=07, seq=001)
  * Uses a retry loop with UNIQUE constraint to handle race conditions

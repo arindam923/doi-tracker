@@ -9,7 +9,7 @@ if (!$project_id || !$vendor_id) {
 }
 
 $stmt = $pdo->prepare("
-    SELECT pv.*, gv.vendor_name, gv.vendor_code, p.project_name, p.project_code, p.daily_cap AS campaign_daily_cap, p.currency AS project_currency
+    SELECT pv.*, gv.vendor_name, gv.vendor_code, gv.global_postback_url, p.project_name, p.project_code, p.daily_cap AS campaign_daily_cap, p.currency AS project_currency
     FROM project_vendor pv
     JOIN global_vendors gv ON gv.id = pv.vendor_id
     JOIN projects p ON p.id = pv.project_id
@@ -38,6 +38,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $notes = trim($_POST['notes'] ?? '');
     if ($payout < 0) $payout = 0;
     if ($daily_cap < 0) $daily_cap = 0;
+    if (!tf_is_valid_postback_url($postback_url)) {
+        set_flash('danger', 'Project override postback URL must be a valid HTTP or HTTPS URL.');
+        redirect(BASE_URL . '/vendors/assignment_edit.php?project_id=' . $project_id . '&vendor_id=' . $vendor_id);
+    }
+    $postback_url = tf_resolve_postback_url($postback_url, $row['global_postback_url'] ?? '');
 
     $pdo->prepare("
         UPDATE project_vendor
@@ -49,10 +54,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'payout' => $row['payout'],
         'daily_cap' => $row['daily_cap'],
         'status' => $row['status'],
+        'postback_configured' => !empty($row['postback_url']),
     ], [
         'payout' => $payout,
         'daily_cap' => $daily_cap,
         'status' => $status,
+        'postback_configured' => $postback_url !== '',
     ]);
 
     regenerate_csrf_token();
@@ -108,8 +115,9 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                             </select>
                         </div>
                         <div class="col-12">
-                            <label class="tf-label" for="postback_url">Vendor postback URL</label>
+                            <label class="tf-label" for="postback_url">Project Override Postback URL</label>
                             <input type="text" id="postback_url" name="postback_url" class="form-control" value="<?php echo sanitize($row['postback_url'] ?? ''); ?>" placeholder="https://…">
+                            <div class="form-text">Global vendor postback: <code><?php echo sanitize($row['global_postback_url'] ?? 'Not configured'); ?></code>. Clear this field and save to restore the global default.</div>
                         </div>
                         <div class="col-12">
                             <label class="tf-label" for="notes">Notes</label>

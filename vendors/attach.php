@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/../helpers/email.php';
 require_role(['super_admin', 'campaign_manager']);
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -34,6 +35,12 @@ $gv = $gv_stmt->fetch();
 if (!$project || !$gv) {
     set_flash('danger', 'Project or vendor not found.');
     redirect(BASE_URL . '/vendors/global.php');
+}
+
+$postback_url = tf_resolve_postback_url($postback_url, $gv['global_postback_url'] ?? '');
+if (!tf_is_valid_postback_url($postback_url)) {
+    set_flash('danger', 'Project override postback URL must be a valid HTTP or HTTPS URL.');
+    redirect(BASE_URL . '/projects/detail.php?id=' . $project_id);
 }
 
 if ($currency === 'USD' && !empty($project['currency'])) $currency = $project['currency'];
