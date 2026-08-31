@@ -14,7 +14,7 @@ if (!$project) {
 }
 
 $vstmt = $pdo->prepare("
-    SELECT pv.*, gv.vendor_code, gv.vendor_name, gv.company_name, gv.vendor_status AS master_status,
+    SELECT pv.*, gv.vendor_code, gv.vendor_name, gv.vendor_status AS master_status,
            gv.traffic_type, gv.default_payout,
            (SELECT sl.code FROM short_links sl WHERE sl.project_id = pv.project_id AND sl.vendor_id = pv.vendor_id LIMIT 1) AS vendor_short_code
     FROM project_vendor pv

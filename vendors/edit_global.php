@@ -50,7 +50,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     $vendor_name = trim($_POST['vendor_name'] ?? '');
-    $company_name = trim($_POST['company_name'] ?? '');
     $contact_person = trim($_POST['contact_person'] ?? '');
     $email = trim($_POST['email'] ?? '');
     $telegram = trim($_POST['telegram'] ?? '');
@@ -76,8 +75,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect(BASE_URL . '/vendors/edit_global.php?id=' . $id);
     }
 
-    $pdo->prepare("UPDATE global_vendors SET vendor_name=?, company_name=?, contact_person=?, email=?, telegram=?, skype=?, phone=?, traffic_type=?, vendor_status=?, default_payout=?, currency=?, daily_cap=?, notes=?, global_postback_url=?, updated_at=NOW() WHERE id=?")
-        ->execute([$vendor_name, $company_name, $contact_person, $email, $telegram, $skype, $phone, $traffic_type, $vendor_status, $default_payout, $currency, $daily_cap, $notes, $global_postback_url, $id]);
+    $pdo->prepare("UPDATE global_vendors SET vendor_name=?, contact_person=?, email=?, telegram=?, skype=?, phone=?, traffic_type=?, vendor_status=?, default_payout=?, currency=?, daily_cap=?, notes=?, global_postback_url=?, updated_at=NOW() WHERE id=?")
+        ->execute([$vendor_name, $contact_person, $email, $telegram, $skype, $phone, $traffic_type, $vendor_status, $default_payout, $currency, $daily_cap, $notes, $global_postback_url, $id]);
 
     if ($traffic_type === 'Email') {
         ensure_vendor_email_list($pdo, $id, (int)($_SESSION['user_id'] ?? 0));
@@ -133,12 +132,6 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                                 <option value="<?php echo $key; ?>" <?php echo ($vendor['vendor_status'] ?? 'approved') === $key ? 'selected' : ''; ?>><?php echo sanitize($label); ?></option>
                                 <?php endforeach; ?>
                             </select>
-                        </div>
-
-                        <div class="col-12 col-md-8">
-                            <label for="company_name" class="tf-label">Company Name</label>
-                            <input type="text" id="company_name" name="company_name" class="form-control"
-                                   value="<?php echo sanitize($vendor['company_name'] ?? ''); ?>">
                         </div>
 
                         <div class="col-6 col-md-4">

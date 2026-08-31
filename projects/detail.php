@@ -20,7 +20,7 @@ if (empty($project['short_code'])) {
 }
 
 $vstmt = $pdo->prepare("
-    SELECT pv.*, gv.id AS global_vendor_id, gv.vendor_code, gv.vendor_name, gv.company_name, gv.traffic_type,
+    SELECT pv.*, gv.id AS global_vendor_id, gv.vendor_code, gv.vendor_name, gv.traffic_type,
            (SELECT sl.code FROM short_links sl WHERE sl.project_id = pv.project_id AND sl.vendor_id = pv.vendor_id LIMIT 1) AS vendor_short_code
     FROM project_vendor pv
     JOIN global_vendors gv ON gv.id = pv.vendor_id

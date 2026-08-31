@@ -11,9 +11,9 @@ $per_page = 10;
 $where = [];
 $params = [];
 if ($search !== '') {
-    $where[] = "(gv.vendor_code LIKE ? OR gv.vendor_name LIKE ? OR gv.company_name LIKE ? OR gv.email LIKE ?)";
+    $where[] = "(gv.vendor_code LIKE ? OR gv.vendor_name LIKE ? OR gv.email LIKE ?)";
     $needle = "%$search%";
-    $params = array_merge($params, [$needle, $needle, $needle, $needle]);
+    $params = array_merge($params, [$needle, $needle, $needle]);
 }
 if ($status_filter !== '' && array_key_exists($status_filter, tf_vendor_statuses())) {
     $where[] = "gv.vendor_status = ?";
@@ -57,7 +57,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
         <div class="row g-3 align-items-end">
             <div class="col-12 col-md-4">
                 <label for="search" class="tf-label">Search</label>
-                <input type="text" id="search" name="search" class="form-control" placeholder="Name, code, company, email..."
+                <input type="text" id="search" name="search" class="form-control" placeholder="Name, code, email..."
                        value="<?php echo sanitize($search); ?>">
             </div>
             <div class="col-6 col-md-3">
@@ -118,7 +118,6 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                 <tr>
                     <td>
                         <strong><?php echo sanitize($v['vendor_name']); ?></strong>
-                        <?php if (!empty($v['company_name'])): ?><div class="small text-secondary"><?php echo sanitize($v['company_name']); ?></div><?php endif; ?>
                         <?php if (!empty($v['email'])): ?><div class="small text-secondary"><a href="mailto:<?php echo urlencode($v['email']); ?>"><?php echo sanitize($v['email']); ?></a></div><?php endif; ?>
                     </td>
                     <td><code><?php echo sanitize($v['vendor_code']); ?></code></td>

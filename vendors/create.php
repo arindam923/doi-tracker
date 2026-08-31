@@ -21,7 +21,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     $vendor_name = trim($_POST['vendor_name'] ?? '');
-    $company_name = trim($_POST['company_name'] ?? '');
     $contact_person = trim($_POST['contact_person'] ?? '');
     $email = trim($_POST['email'] ?? '');
     $telegram = trim($_POST['telegram'] ?? '');
@@ -75,7 +74,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->prepare("
                 UPDATE global_vendors SET
                     vendor_name = COALESCE(NULLIF(?, ''), vendor_name),
-                    company_name = COALESCE(NULLIF(?, ''), company_name),
                     contact_person = COALESCE(NULLIF(?, ''), contact_person),
                     email = COALESCE(NULLIF(?, ''), email),
                     telegram = COALESCE(NULLIF(?, ''), telegram),
@@ -90,13 +88,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     global_postback_url = ?,
                     updated_at = NOW()
                 WHERE id = ?
-            ")->execute([$vendor_name, $company_name, $contact_person, $email, $telegram, $skype, $phone, $traffic_type, $vendor_status, $default_payout, $currency, $daily_cap, $notes, $global_postback_url, $global_vendor_id]);
+            ")->execute([$vendor_name, $contact_person, $email, $telegram, $skype, $phone, $traffic_type, $vendor_status, $default_payout, $currency, $daily_cap, $notes, $global_postback_url, $global_vendor_id]);
         } else {
             $pdo->prepare("
                 INSERT INTO global_vendors
-                    (vendor_code, vendor_name, company_name, contact_person, email, telegram, skype, phone, global_postback_url, traffic_type, vendor_status, default_payout, currency, daily_cap, notes, created_by, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
-            ")->execute([$vendor_code, $vendor_name, $company_name, $contact_person, $email, $telegram, $skype, $phone, $global_postback_url, $traffic_type, $vendor_status, $default_payout, $currency, $daily_cap, $notes, (int)($_SESSION['user_id'] ?? 0)]);
+                    (vendor_code, vendor_name, contact_person, email, telegram, skype, phone, global_postback_url, traffic_type, vendor_status, default_payout, currency, daily_cap, notes, created_by, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+            ")->execute([$vendor_code, $vendor_name, $contact_person, $email, $telegram, $skype, $phone, $global_postback_url, $traffic_type, $vendor_status, $default_payout, $currency, $daily_cap, $notes, (int)($_SESSION['user_id'] ?? 0)]);
             $global_vendor_id = (int)$pdo->lastInsertId();
         }
 
@@ -182,12 +180,6 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                         <div class="col-12 col-md-4">
                             <label class="tf-label">Vendor Code</label>
                             <input type="text" class="form-control" value="(auto-generated)" disabled>
-                        </div>
-
-                        <div class="col-12 col-md-8">
-                            <label for="company_name" class="tf-label">Company Name</label>
-                            <input type="text" id="company_name" name="company_name" class="form-control"
-                                   value="<?php echo sanitize($form_data['company_name'] ?? ''); ?>">
                         </div>
 
                         <div class="col-6 col-md-4">
