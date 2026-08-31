@@ -44,6 +44,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $start_date = trim($_POST['start_date'] ?? '');
     $end_date = trim($_POST['end_date'] ?? '');
     $description = trim($_POST['description'] ?? '');
+    $client_instructions = trim($_POST['client_instructions'] ?? '');
+    $optimization_notes = trim($_POST['optimization_notes'] ?? '');
+    $publisher_restrictions = trim($_POST['publisher_restrictions'] ?? '');
 
     $errors = [];
     if (empty($project_name)) $errors[] = 'Project name is required.';
@@ -68,14 +71,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             UPDATE projects SET project_name=?, client_id=?, client_survey_link=?, preview_link=?, client_cpi=?, vendor_default_cpi=?,
                 currency=?, total_quota=?, daily_cap=?, country_target=?, campaign_type=?,
                 vertical=?, conversion_type=?, target_device=?, campaign_status=?, visibility=?,
-                start_date=?, end_date=?, description=?
+                start_date=?, end_date=?, description=?, client_instructions=?, optimization_notes=?, publisher_restrictions=?
             WHERE id=?
         ");
         $stmt->execute([
             $project_name, $client_id, $client_survey_link, $preview_link, $client_cpi, $vendor_default_cpi,
             $currency, $total_quota, $daily_cap, $country_target, $campaign_type,
             $vertical, $conversion_type, $target_device, $campaign_status, $visibility,
-            $start_date ?: null, $end_date ?: null, $description, $id
+            $start_date ?: null, $end_date ?: null, $description, $client_instructions, $optimization_notes,
+            $publisher_restrictions, $id
         ]);
 
         // Sync campaign_geo
@@ -261,6 +265,21 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                         <div class="col-12">
                             <label for="description" class="tf-label">Description</label>
                             <textarea id="description" name="description" class="form-control" rows="3"><?php echo sanitize($f['description'] ?? ''); ?></textarea>
+                        </div>
+
+                        <div class="col-12">
+                            <label for="client_instructions" class="tf-label">Client Instructions</label>
+                            <textarea id="client_instructions" name="client_instructions" class="form-control" rows="3"><?php echo sanitize($f['client_instructions'] ?? ''); ?></textarea>
+                        </div>
+
+                        <div class="col-12">
+                            <label for="optimization_notes" class="tf-label">Optimization Notes</label>
+                            <textarea id="optimization_notes" name="optimization_notes" class="form-control" rows="3"><?php echo sanitize($f['optimization_notes'] ?? ''); ?></textarea>
+                        </div>
+
+                        <div class="col-12">
+                            <label for="publisher_restrictions" class="tf-label">Publisher Restrictions</label>
+                            <textarea id="publisher_restrictions" name="publisher_restrictions" class="form-control" rows="3"><?php echo sanitize($f['publisher_restrictions'] ?? ''); ?></textarea>
                         </div>
                     </div>
 
