@@ -116,7 +116,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                         </div>
                         <div class="col-12">
                             <label class="tf-label" for="postback_url">Project Override Postback URL</label>
-                            <input type="text" id="postback_url" name="postback_url" class="form-control" value="<?php echo sanitize($row['postback_url'] ?? ''); ?>" placeholder="https://…">
+                            <input type="url" id="postback_url" name="postback_url" class="form-control" value="<?php echo sanitize($row['postback_url'] ?? ''); ?>" placeholder="https://…">
                             <div class="form-text">Global vendor postback: <code><?php echo sanitize($row['global_postback_url'] ?? 'Not configured'); ?></code>. Clear this field and save to restore the global default.</div>
                         </div>
                         <div class="col-12">

@@ -302,4 +302,23 @@ require_once __DIR__ . '/../helpers/layout_header.php';
     </div>
 </div>
 
+<?php if ($project): ?>
+<script>
+(function () {
+    var globalPostback = document.getElementById('global_postback_url');
+    var projectOverride = document.getElementById('postback_url');
+    if (!globalPostback || !projectOverride) return;
+
+    var userEdited = projectOverride.value !== '';
+    projectOverride.addEventListener('input', function () {
+        userEdited = true;
+    });
+    globalPostback.addEventListener('input', function () {
+        if (!userEdited) projectOverride.value = globalPostback.value;
+    });
+    if (!userEdited) projectOverride.value = globalPostback.value;
+})();
+</script>
+<?php endif; ?>
+
 <?php require_once __DIR__ . '/../helpers/layout_footer.php'; ?>
