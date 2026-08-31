@@ -1,14 +1,19 @@
 <?php
 /**
  * TRACK FLOW — Click Tracking Engine
- * URL: /tracking/click.php?project_id=101&vendor_id=5
- *   or /c/ABC123 (rewritten to redirect.php → here)
+ * Internal click-tracking engine. Public traffic must enter through /c/CODE
+ * or /go/CODE and be resolved by redirect.php first.
  */
 
 error_reporting(E_ALL);
 ini_set('display_errors', 0);
 
 require_once __DIR__ . '/config.php';
+
+if (!defined('TF_INTERNAL_CLICK_REQUEST') || TF_INTERNAL_CLICK_REQUEST !== true) {
+    http_response_code(404);
+    die('Tracking link not found.');
+}
 
 $project_id = intval($_GET['project_id'] ?? 0);
 $vendor_id  = intval($_GET['vendor_id']  ?? 0);

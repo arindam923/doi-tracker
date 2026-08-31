@@ -13,12 +13,6 @@ if (!$project) {
     redirect(BASE_URL . '/projects/list.php');
 }
 
-// Ensure short_code is set
-if (empty($project['short_code'])) {
-    ensure_project_short_code($pdo, $id);
-    $project['short_code'] = $pdo->query("SELECT short_code FROM projects WHERE id = $id")->fetchColumn();
-}
-
 $vstmt = $pdo->prepare("
     SELECT pv.*, gv.id AS global_vendor_id, gv.vendor_code, gv.vendor_name, gv.traffic_type,
            (SELECT sl.code FROM short_links sl WHERE sl.project_id = pv.project_id AND sl.vendor_id = pv.vendor_id LIMIT 1) AS vendor_short_code
@@ -153,8 +147,6 @@ $total_profit = $rev_data['profit'];
 
 $page_title = $project['project_name'];
 $client_postback = BASE_URL . '/tracking/postback.php?click_id={click_id}&status=1&token=' . $project['postback_token'];
-$tracking_short = BASE_URL . '/c/' . $project['short_code'];
-$test_postback = BASE_URL . '/tracking/test.php?c=' . $project['short_code'];
 
 $page_actions = '
 <div class="d-flex align-items-center gap-2 flex-wrap">
@@ -314,30 +306,6 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                 <?php endif; ?>
 
                 <div class="mb-3">
-                    <label class="form-label small fw-semibold text-secondary d-flex align-items-center justify-content-between gap-2">
-                        <span>Short Tracking Link <span class="badge bg-light text-dark border">/c/<?php echo sanitize($project['short_code']); ?></span>
-                        <span class="text-muted small fw-normal">(routes to a random attached vendor)</span>
-                    </label>
-                    <div class="input-group tf-link-field">
-                        <input type="text" class="form-control" readonly onclick="this.select()" value="<?php echo sanitize($tracking_short); ?>">
-                        <?php echo tf_copy_button($tracking_short); ?>
-                        <a href="<?php echo sanitize($tracking_short); ?>" target="_blank" rel="noopener" class="btn btn-outline-secondary" title="Open in new tab"><i class="bi bi-box-arrow-up-right"></i></a>
-                        <a href="<?php echo BASE_URL; ?>/tracking/qr.php?c=<?php echo urlencode($project['short_code']); ?>" target="_blank" rel="noopener" class="btn btn-outline-secondary" title="Show QR"><i class="bi bi-qr-code"></i></a>
-                    </div>
-                </div>
-
-                <div class="mb-3">
-                    <label class="form-label small fw-semibold text-secondary d-flex align-items-center gap-2">
-                        <span>Test Link</span>
-                        <i class="bi bi-info-circle text-muted" data-bs-toggle="tooltip" data-bs-placement="top" title="Validates the link is reachable and shows the bound project/vendor, without consuming a click."></i>
-                    </label>
-                    <div class="input-group tf-link-field">
-                        <input type="text" class="form-control" readonly onclick="this.select()" value="<?php echo sanitize($test_postback); ?>">
-                        <?php echo tf_copy_button($test_postback); ?>
-                    </div>
-                </div>
-
-                <div class="mb-3">
                     <label class="form-label small fw-semibold text-secondary d-flex align-items-center gap-2">
                         <span>Client Postback URL</span>
                         <i class="bi bi-info-circle text-muted" data-bs-toggle="tooltip" data-bs-placement="top" title="Per-project. Append this URL to the client's conversion tracking setup."></i>
@@ -489,7 +457,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                 <?php else: foreach ($vendors as $v):
                     $vs = $vendor_stats[$v['vendor_id']] ?? ['clicks'=>0,'completes'=>0,'today_completes'=>0,'revenue'=>0,'cost'=>0,'profit'=>0];
                     $vccr = calc_ccr($vs['completes'], $vs['clicks']);
-                    $vlink = !empty($v['vendor_short_code']) ? (BASE_URL . '/c/' . $v['vendor_short_code']) : (BASE_URL . '/c/' . $project['short_code']);
+                    $vlink = !empty($v['vendor_short_code']) ? tracking_public_url(BASE_URL, $v['vendor_short_code']) : '';
                     $vcap = (int)($v['daily_cap'] ?? 0);
                     $today_used = (int)($vs['today_completes'] ?? 0);
                 ?>
@@ -500,8 +468,8 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                     <td class="text-end"><?php echo format_currency($v['payout'], $v['currency'] ?? $currency); ?></td>
                     <td>
                         <div class="input-group tf-link-field" style="min-width: 220px; max-width: 320px;">
-                            <input type="text" class="form-control" style="font-size: .75em;" readonly onclick="this.select()" value="<?php echo sanitize($vlink); ?>">
-                            <?php echo tf_copy_button($vlink); ?>
+                            <input type="text" class="form-control" style="font-size: .75em;" readonly onclick="this.select()" value="<?php echo sanitize($vlink ?: 'Unavailable — regenerate assignment link'); ?>">
+                            <?php if ($vlink): ?><?php echo tf_copy_button($vlink); ?><?php endif; ?>
                             <?php if (!empty($v['vendor_short_code'])): ?>
                             <a href="<?php echo BASE_URL; ?>/tracking/qr.php?c=<?php echo urlencode($v['vendor_short_code']); ?>" target="_blank" rel="noopener" class="btn btn-outline-secondary" title="QR"><i class="bi bi-qr-code"></i></a>
                             <?php endif; ?>

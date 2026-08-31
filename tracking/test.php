@@ -29,20 +29,6 @@ $stmt = $pdo->prepare("
 $stmt->execute([$code]);
 $row = $stmt->fetch();
 
-if (!$row) {
-    $stmt = $pdo->prepare("
-        SELECT p.id AS project_id, p.project_name, p.project_code, p.status AS project_status,
-               pv.vendor_id AS vendor_id, gv.vendor_name, gv.vendor_code, pv.status AS vendor_status, pv.allowed_clicks_limit
-        FROM projects p
-        JOIN project_vendor pv ON pv.project_id = p.id
-        JOIN global_vendors gv ON gv.id = pv.vendor_id
-        WHERE p.short_code = ?
-        LIMIT 1
-    ");
-    $stmt->execute([$code]);
-    $row = $stmt->fetch();
-}
-
 header('Content-Type: text/plain; charset=utf-8');
 
 if (!$row) {

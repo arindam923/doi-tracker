@@ -92,8 +92,8 @@ require_once __DIR__ . '/../helpers/layout_header.php';
         $vs = $vendor_stats[$v['vendor_id']] ?? ['clicks'=>0,'completes'=>0,'revenue'=>0,'cost'=>0,'profit'=>0];
         $vccr = calc_ccr($vs['completes'], $vs['clicks']);
         $test_link = !empty($v['vendor_short_code'])
-            ? (BASE_URL . '/tracking/test.php?c=' . $v['vendor_short_code'])
-            : (BASE_URL . '/tracking/test.php?c=' . $project['short_code']);
+            ? (BASE_URL . '/tracking/test.php?c=' . urlencode($v['vendor_short_code']))
+            : '';
         $profit_class = $vs['profit'] >= 0 ? 'is-profit-positive' : 'is-profit-negative';
     ?>
     <div class="col-12 col-md-6 col-xl-4">

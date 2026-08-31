@@ -14,17 +14,10 @@ if (!$code || !preg_match('/^[A-Za-z0-9_-]{4,32}$/', $code)) {
     die('Invalid code.');
 }
 
-$found = false;
 $stmt = $pdo->prepare("SELECT 1 FROM short_links WHERE code = ? LIMIT 1");
 $stmt->execute([$code]);
-if ($stmt->fetch()) $found = true;
+$found = (bool)$stmt->fetch();
 $stmt->closeCursor();
-if (!$found) {
-    $stmt = $pdo->prepare("SELECT 1 FROM projects WHERE short_code = ? LIMIT 1");
-    $stmt->execute([$code]);
-    if ($stmt->fetch()) $found = true;
-    $stmt->closeCursor();
-}
 if (!$found) {
     http_response_code(404);
     die('Tracking link not found.');

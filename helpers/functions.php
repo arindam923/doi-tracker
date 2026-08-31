@@ -53,6 +53,43 @@ function generate_click_id() {
 }
 
 /**
+ * Generate a cryptographically random public tracking code.
+ */
+function generate_tracking_code() {
+    return rtrim(strtr(base64_encode(random_bytes(9)), '+/', '-_'), '=');
+}
+
+/**
+ * Build the only public tracking URL format.
+ */
+function tracking_public_url($base_url, $code) {
+    return rtrim((string)$base_url, '/') . '/c/' . rawurlencode((string)$code);
+}
+
+/**
+ * Return or create the vendor-specific opaque tracking code for an assignment.
+ */
+function ensure_tracking_short_link($pdo, $project_id, $vendor_id) {
+    $stmt = $pdo->prepare('SELECT code FROM short_links WHERE project_id = ? AND vendor_id = ? LIMIT 1');
+    $stmt->execute([(int)$project_id, (int)$vendor_id]);
+    $existing = $stmt->fetchColumn();
+    if ($existing) return $existing;
+
+    for ($attempt = 0; $attempt < 5; $attempt++) {
+        $code = generate_tracking_code();
+        try {
+            $pdo->prepare('INSERT INTO short_links (code, project_id, vendor_id, created_at) VALUES (?, ?, ?, NOW())')
+                ->execute([$code, (int)$project_id, (int)$vendor_id]);
+            return $code;
+        } catch (PDOException $e) {
+            if (stripos($e->getMessage(), 'duplicate') === false) throw $e;
+        }
+    }
+
+    throw new RuntimeException('Could not generate a unique tracking code.');
+}
+
+/**
  * Generate a postback token (64-char hex)
  */
 function generate_postback_token() {

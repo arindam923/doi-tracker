@@ -55,7 +55,7 @@ $clients_list = $pdo->query("SELECT id, client_name FROM clients WHERE is_active
 $project_vendor_map = [];
 if (!empty($projects)) {
     $placeholders = implode(',', array_fill(0, count($projects), '?'));
-    $vstmt = $pdo->prepare("SELECT pv.project_id, pv.vendor_id AS id, gv.vendor_name, pv.status FROM project_vendor pv JOIN global_vendors gv ON gv.id = pv.vendor_id WHERE pv.project_id IN ($placeholders) ORDER BY gv.vendor_name");
+    $vstmt = $pdo->prepare("SELECT pv.project_id, pv.vendor_id AS id, gv.vendor_name, pv.status, sl.code AS vendor_short_code FROM project_vendor pv JOIN global_vendors gv ON gv.id = pv.vendor_id LEFT JOIN short_links sl ON sl.project_id = pv.project_id AND sl.vendor_id = pv.vendor_id WHERE pv.project_id IN ($placeholders) ORDER BY gv.vendor_name");
     $vstmt->execute(array_column($projects, 'id'));
     while ($v = $vstmt->fetch()) {
         $project_vendor_map[$v['project_id']][] = $v;
@@ -293,7 +293,7 @@ $project_vendors = $project_vendor_map[$p['id']] ?? [];
             <hr>
             <h6 class="fw-semibold mb-3">Vendor Test Links</h6>
             <?php foreach ($project_vendors as $v):
-                $vendor_url = BASE_URL . '/tracking/click.php?project_id=' . $p['id'] . '&vendor_id=' . $v['id'];
+                $vendor_url = !empty($v['vendor_short_code']) ? tracking_public_url(BASE_URL, $v['vendor_short_code']) : '';
             ?>
             <div class="mb-3">
                 <label class="form-label small fw-semibold text-secondary d-flex align-items-center gap-2">
@@ -301,8 +301,8 @@ $project_vendors = $project_vendor_map[$p['id']] ?? [];
                     <?php echo status_badge($v['status']); ?>
                 </label>
                 <div class="input-group">
-                    <input type="text" class="form-control" style="font-family: ui-monospace, monospace; font-size: .85em;" readonly onclick="this.select()" value="<?php echo sanitize($vendor_url); ?>">
-                    <?php echo tf_copy_button($vendor_url); ?>
+                    <input type="text" class="form-control" style="font-family: ui-monospace, monospace; font-size: .85em;" readonly onclick="this.select()" value="<?php echo sanitize($vendor_url ?: 'Unavailable — attach vendor to generate link'); ?>">
+                    <?php if ($vendor_url): ?><?php echo tf_copy_button($vendor_url); ?><?php endif; ?>
                 </div>
             </div>
             <?php endforeach; ?>
