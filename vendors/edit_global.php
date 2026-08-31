@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/../helpers/email.php';
 require_role(['super_admin', 'campaign_manager']);
 
 $id = intval($_GET['id'] ?? 0);
@@ -61,6 +62,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $currency = $_POST['currency'] ?? 'USD';
     $daily_cap = intval($_POST['daily_cap'] ?? 0);
     $notes = trim($_POST['notes'] ?? '');
+    $global_postback_url = trim($_POST['global_postback_url'] ?? '');
 
     if (empty($vendor_name)) {
         set_flash('danger', 'Vendor name is required.');
@@ -69,15 +71,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!in_array($traffic_type, tf_traffic_types(), true)) $traffic_type = 'Other';
     if (!array_key_exists($vendor_status, tf_vendor_statuses())) $vendor_status = 'approved';
     if (!in_array($currency, tf_currencies(), true)) $currency = 'USD';
+    if (!tf_is_valid_postback_url($global_postback_url)) {
+        set_flash('danger', 'Global postback URL must be a valid HTTP or HTTPS URL.');
+        redirect(BASE_URL . '/vendors/edit_global.php?id=' . $id);
+    }
 
-    $pdo->prepare("UPDATE global_vendors SET vendor_name=?, company_name=?, contact_person=?, email=?, telegram=?, skype=?, phone=?, traffic_type=?, vendor_status=?, default_payout=?, currency=?, daily_cap=?, notes=?, updated_at=NOW() WHERE id=?")
-        ->execute([$vendor_name, $company_name, $contact_person, $email, $telegram, $skype, $phone, $traffic_type, $vendor_status, $default_payout, $currency, $daily_cap, $notes, $id]);
+    $pdo->prepare("UPDATE global_vendors SET vendor_name=?, company_name=?, contact_person=?, email=?, telegram=?, skype=?, phone=?, traffic_type=?, vendor_status=?, default_payout=?, currency=?, daily_cap=?, notes=?, global_postback_url=?, updated_at=NOW() WHERE id=?")
+        ->execute([$vendor_name, $company_name, $contact_person, $email, $telegram, $skype, $phone, $traffic_type, $vendor_status, $default_payout, $currency, $daily_cap, $notes, $global_postback_url, $id]);
 
     if ($traffic_type === 'Email') {
         ensure_vendor_email_list($pdo, $id, (int)($_SESSION['user_id'] ?? 0));
     }
 
-    audit_log($pdo, 'update', 'vendor', $id, null, ['vendor_name' => $vendor_name]);
+    audit_log($pdo, 'update', 'vendor', $id, [
+        'vendor_name' => $vendor['vendor_name'],
+        'global_postback_configured' => !empty($vendor['global_postback_url'])
+    ], [
+        'vendor_name' => $vendor_name,
+        'global_postback_configured' => $global_postback_url !== ''
+    ]);
 
     regenerate_csrf_token();
     set_flash('success', 'Vendor updated.');
@@ -181,6 +193,14 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                             <label for="default_payout" class="tf-label">Default Payout (per conversion)</label>
                             <input type="number" id="default_payout" name="default_payout" class="form-control"
                                    value="<?php echo $vendor['default_payout']; ?>" step="0.01" min="0">
+                        </div>
+
+                        <div class="col-12">
+                            <label for="global_postback_url" class="tf-label">Global Postback URL</label>
+                            <input type="url" id="global_postback_url" name="global_postback_url" class="form-control"
+                                   value="<?php echo sanitize($vendor['global_postback_url'] ?? ''); ?>"
+                                   placeholder="https://vendor.com/postback?click_id={click_id}&status=1&payout={payout}">
+                            <p class="form-text mb-0 small">Reusable default for future project assignments. Saving blank clears the global postback.</p>
                         </div>
 
                         <div class="col-6 col-md-6">

@@ -60,6 +60,22 @@ function generate_postback_token() {
 }
 
 /**
+ * Validate an optional outbound postback URL.
+ *
+ * Blank values disable the postback. Non-blank values must be absolute HTTP(S)
+ * URLs so they can be safely handed to the outbound cURL delivery code.
+ */
+function tf_is_valid_postback_url($url) {
+    $url = trim((string)$url);
+    if ($url === '') return true;
+
+    $parts = parse_url($url);
+    return is_array($parts)
+        && in_array(strtolower($parts['scheme'] ?? ''), ['http', 'https'], true)
+        && !empty($parts['host']);
+}
+
+/**
  * Generate project code: country code + YYMM + monthly sequence
  * Example: IN2607001 (country=IN, year=26, month=07, seq=001)
  * Uses a retry loop with UNIQUE constraint to handle race conditions

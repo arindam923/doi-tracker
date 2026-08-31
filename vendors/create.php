@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/../helpers/email.php';
 require_role(['super_admin', 'campaign_manager']);
 
 $project_id = intval($_GET['project_id'] ?? 0);
@@ -32,6 +33,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $currency = $_POST['currency'] ?? $default_currency;
     $daily_cap = intval($_POST['daily_cap'] ?? 0);
     $notes = trim($_POST['notes'] ?? '');
+    $global_postback_url = trim($_POST['global_postback_url'] ?? '');
 
     // Per-project fields (only when attaching to a project)
     $payout = floatval($_POST['payout'] ?? $default_payout);
@@ -40,6 +42,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $errors = [];
     if (empty($vendor_name)) $errors[] = 'Vendor name is required.';
+    if (!tf_is_valid_postback_url($global_postback_url)) $errors[] = 'Global postback URL must be a valid HTTP or HTTPS URL.';
+    if (!tf_is_valid_postback_url($postback_url)) $errors[] = 'Project override postback URL must be a valid HTTP or HTTPS URL.';
     if (!in_array($traffic_type, tf_traffic_types(), true)) $traffic_type = 'Other';
     if (!array_key_exists($vendor_status, tf_vendor_statuses())) $vendor_status = 'approved';
     if (!in_array($currency, tf_currencies(), true)) $currency = $default_currency;
@@ -83,19 +87,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     currency = ?,
                     daily_cap = GREATEST(daily_cap, ?),
                     notes = CONCAT_WS(' | ', NULLIF(notes, ''), NULLIF(?, '')),
+                    global_postback_url = ?,
                     updated_at = NOW()
                 WHERE id = ?
-            ")->execute([$vendor_name, $company_name, $contact_person, $email, $telegram, $skype, $phone, $traffic_type, $vendor_status, $default_payout, $currency, $daily_cap, $notes, $global_vendor_id]);
+            ")->execute([$vendor_name, $company_name, $contact_person, $email, $telegram, $skype, $phone, $traffic_type, $vendor_status, $default_payout, $currency, $daily_cap, $notes, $global_postback_url, $global_vendor_id]);
         } else {
             $pdo->prepare("
                 INSERT INTO global_vendors
-                    (vendor_code, vendor_name, company_name, contact_person, email, telegram, skype, phone, traffic_type, vendor_status, default_payout, currency, daily_cap, notes, created_by, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
-            ")->execute([$vendor_code, $vendor_name, $company_name, $contact_person, $email, $telegram, $skype, $phone, $traffic_type, $vendor_status, $default_payout, $currency, $daily_cap, $notes, (int)($_SESSION['user_id'] ?? 0)]);
+                    (vendor_code, vendor_name, company_name, contact_person, email, telegram, skype, phone, global_postback_url, traffic_type, vendor_status, default_payout, currency, daily_cap, notes, created_by, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+            ")->execute([$vendor_code, $vendor_name, $company_name, $contact_person, $email, $telegram, $skype, $phone, $global_postback_url, $traffic_type, $vendor_status, $default_payout, $currency, $daily_cap, $notes, (int)($_SESSION['user_id'] ?? 0)]);
             $global_vendor_id = (int)$pdo->lastInsertId();
         }
 
-        if ($traffic_type === 'Email') {
+        if ($traffic_type === 'Email' && function_exists('ensure_vendor_email_list')) {
             ensure_vendor_email_list($pdo, $global_vendor_id, (int)($_SESSION['user_id'] ?? 0));
         }
 
@@ -114,7 +119,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     allowed_clicks_limit = VALUES(allowed_clicks_limit),
                     daily_cap = VALUES(daily_cap),
                     notes = VALUES(notes)
-            ")->execute([$project_id, $global_vendor_id, $payout, $currency, $pv_status, $postback_url, $allowed_clicks_limit, $daily_cap, (int)($_SESSION['user_id'] ?? 0), $notes]);
+            ")->execute([$project_id, $global_vendor_id, $payout, $currency, $pv_status, $postback_url !== '' ? $postback_url : $global_postback_url, $allowed_clicks_limit, $daily_cap, (int)($_SESSION['user_id'] ?? 0), $notes]);
 
             // Per-vendor short link for /c/{code}
             $suffix = strtolower(substr(preg_replace('/[^A-Za-z0-9]/', '', $vendor_name ?: $vendor_code), 0, 4));
@@ -249,6 +254,14 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                             <p class="form-text mb-0 small">Used as the default when this vendor is attached to a project.</p>
                         </div>
 
+                        <div class="col-12">
+                            <label for="global_postback_url" class="tf-label">Global Postback URL</label>
+                            <input type="url" id="global_postback_url" name="global_postback_url" class="form-control"
+                                   value="<?php echo sanitize($form_data['global_postback_url'] ?? ''); ?>"
+                                   placeholder="https://vendor.com/postback?click_id={click_id}&status=1&payout={payout}">
+                            <p class="form-text mb-0 small">Reusable default for future project assignments. Leave blank if this vendor has no global postback.</p>
+                        </div>
+
                         <div class="col-6 col-md-6">
                             <label for="daily_cap" class="tf-label">Daily Cap</label>
                             <input type="number" id="daily_cap" name="daily_cap" class="form-control"
@@ -273,11 +286,11 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                             <p class="form-text mb-0 small">0 = unlimited</p>
                         </div>
                         <div class="col-12 col-md-4">
-                            <label for="postback_url" class="tf-label">Vendor Postback URL</label>
+                            <label for="postback_url" class="tf-label">Project Override Postback URL</label>
                             <input type="url" id="postback_url" name="postback_url" class="form-control"
                                    value="<?php echo sanitize($form_data['postback_url'] ?? ''); ?>"
                                    placeholder="https://vendor.com/postback?click_id={click_id}&status=1&payout={payout}">
-                            <p class="form-text mb-0 small">Macros: <code>{click_id}</code>, <code>{payout}</code>, <code>{status}</code>, <code>{conversion_id}</code></p>
+                            <p class="form-text mb-0 small">Optional project-specific override. Blank uses the Global Postback URL. Macros: <code>{click_id}</code>, <code>{payout}</code>, <code>{status}</code>, <code>{conversion_id}</code></p>
                         </div>
                         <?php endif; ?>
 
