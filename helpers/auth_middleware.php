@@ -106,5 +106,28 @@ function require_vendor_login($pdo) {
         set_flash('danger', 'Please sign in to your vendor account.');
         redirect(BASE_URL . '/vendor_portal/auth.php');
     }
-    return current_vendor();
+
+    $vendor = current_vendor();
+    $timeout_hours = defined('SESSION_TIMEOUT_HOURS') ? SESSION_TIMEOUT_HOURS : 8;
+    if (isset($vendor['login_time']) && time() - (int)$vendor['login_time'] > $timeout_hours * 3600) {
+        unset($_SESSION['TF_VENDOR']);
+        set_flash('warning', 'Your vendor session has expired. Please sign in again.');
+        redirect(BASE_URL . '/vendor_portal/auth.php');
+    }
+    $stmt = $pdo->prepare("SELECT vpu.email, vpu.is_active, gv.vendor_code, gv.vendor_name, gv.vendor_status
+                           FROM vendor_portal_users vpu
+                           JOIN global_vendors gv ON gv.id = vpu.global_vendor_id
+                           WHERE vpu.global_vendor_id = ? LIMIT 1");
+    $stmt->execute([(int)$vendor['global_vendor_id']]);
+    $account = $stmt->fetch();
+    if (!$account || !(int)$account['is_active'] || !tf_vendor_status_allowed($account['vendor_status'])) {
+        unset($_SESSION['TF_VENDOR']);
+        set_flash('danger', 'Your vendor account is not permitted to access the portal.');
+        redirect(BASE_URL . '/vendor_portal/auth.php');
+    }
+
+    $_SESSION['TF_VENDOR']['email'] = $account['email'];
+    $_SESSION['TF_VENDOR']['vendor_code'] = $account['vendor_code'];
+    $_SESSION['TF_VENDOR']['vendor_name'] = $account['vendor_name'];
+    return $_SESSION['TF_VENDOR'];
 }

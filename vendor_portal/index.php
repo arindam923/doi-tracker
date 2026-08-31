@@ -1,218 +1,111 @@
 <?php
 require_once __DIR__ . '/../config.php';
 $vendor = require_vendor_login($pdo);
-
 $global_vendor_id = (int)$vendor['global_vendor_id'];
 
-$project_filter = intval($_GET['project_id'] ?? 0);
+$from_date = tf_vendor_date($_GET['from'] ?? '') ?: date('Y-m-d', strtotime('-29 days'));
+$to_date = tf_vendor_date($_GET['to'] ?? '') ?: date('Y-m-d');
+if ($from_date > $to_date) [$from_date, $to_date] = [$to_date, $from_date];
+$project_filter = max(0, intval($_GET['project_id'] ?? 0));
 $approval_filter = trim($_GET['approval'] ?? '');
 $page = max(1, intval($_GET['page'] ?? 1));
 $per_page = 25;
 
-$proj_sql = "SELECT p.id, p.project_code, p.project_name, pv.status AS pivot_status, pv.payout
-             FROM project_vendor pv JOIN projects p ON p.id = pv.project_id
-             WHERE pv.vendor_id = ? ORDER BY p.project_name";
-$proj_stmt = $pdo->prepare($proj_sql);
-$proj_stmt->execute([$global_vendor_id]);
-$projects = $proj_stmt->fetchAll();
+$date_clicks = " AND c.clicked_at >= ? AND c.clicked_at < DATE_ADD(?, INTERVAL 1 DAY)";
+$date_conversions = " AND cc.converted_at >= ? AND cc.converted_at < DATE_ADD(?, INTERVAL 1 DAY)";
+$project_clause = $project_filter ? ' AND p.id = ?' : '';
+$project_params = [$from_date, $to_date, $from_date, $to_date, $from_date, $to_date, $global_vendor_id];
+if ($project_filter) $project_params[] = $project_filter;
 
-// ── KPIs ───────────────────────────
-$kpi = $pdo->prepare("
-    SELECT
-        (SELECT COUNT(*) FROM clicks c WHERE c.vendor_id = ?) AS clicks,
-        (SELECT COUNT(*) FROM conversions cc WHERE cc.vendor_id = ? AND cc.status='complete') AS conversions,
-        (SELECT COUNT(*) FROM conversions cc WHERE cc.vendor_id = ? AND cc.status='complete' AND cc.approval_status='pending') AS pending,
-        (SELECT COALESCE(SUM(cc.vendor_cost),0) FROM conversions cc WHERE cc.vendor_id = ? AND cc.status='complete') AS vendor_revenue,
-        (SELECT COALESCE(SUM(cc.client_revenue),0) FROM conversions cc WHERE cc.vendor_id = ? AND cc.status='complete') AS network_cost,
-        (SELECT COALESCE(SUM(cc.profit),0) FROM conversions cc WHERE cc.vendor_id = ? AND cc.status='complete') AS network_profit
-");
-$kpi->execute([$global_vendor_id, $global_vendor_id, $global_vendor_id, $global_vendor_id, $global_vendor_id, $global_vendor_id]);
-$k = $kpi->fetch();
-$k['clicks'] = (int)($k['clicks'] ?? 0);
-$k['conversions'] = (int)($k['conversions'] ?? 0);
-$k['pending'] = (int)($k['pending'] ?? 0);
-$k['ccr'] = calc_ccr($k['conversions'], $k['clicks']);
-
-// ── 7-day chart data ───────────────────────────
-$chart = $pdo->prepare("
-    SELECT DATE(c.clicked_at) AS day, COUNT(*) AS clicks
-    FROM clicks c WHERE c.vendor_id = ? AND c.clicked_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
-    GROUP BY DATE(c.clicked_at)");
-$chart->execute([$global_vendor_id]);
-$chart_clicks = [];
-foreach ($chart->fetchAll() as $r) $chart_clicks[$r['day']] = (int)$r['clicks'];
-
-$chart2 = $pdo->prepare("
-    SELECT DATE(cc.converted_at) AS day, COUNT(*) AS convs, COALESCE(SUM(cc.vendor_cost),0) AS rev
-    FROM conversions cc WHERE cc.vendor_id = ? AND cc.status='complete' AND cc.converted_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
-    GROUP BY DATE(cc.converted_at)");
-$chart2->execute([$global_vendor_id]);
-$chart_conv = []; $chart_rev = [];
-foreach ($chart2->fetchAll() as $r) {
-    $chart_conv[$r['day']] = (int)$r['convs'];
-    $chart_rev[$r['day']]  = (float)$r['rev'];
+$campaign_stmt = $pdo->prepare("SELECT
+        p.id AS project_id, p.project_code, p.project_name, pv.payout, pv.currency,
+        sl.code AS short_code,
+        (SELECT COUNT(*) FROM clicks c WHERE c.project_id = p.id AND c.vendor_id = pv.vendor_id {$date_clicks}) AS clicks,
+        (SELECT COUNT(*) FROM conversions cc WHERE cc.project_id = p.id AND cc.vendor_id = pv.vendor_id AND cc.status = 'complete' {$date_conversions}) AS conversions,
+        (SELECT COALESCE(SUM(cc.vendor_cost), 0) FROM conversions cc WHERE cc.project_id = p.id AND cc.vendor_id = pv.vendor_id AND cc.status = 'complete' {$date_conversions}) AS vendor_revenue
+    FROM project_vendor pv
+    JOIN projects p ON p.id = pv.project_id
+    LEFT JOIN short_links sl ON sl.project_id = pv.project_id AND sl.vendor_id = pv.vendor_id
+    WHERE " . tf_vendor_assignment_sql('pv') . $project_clause . "
+    ORDER BY p.project_name");
+$campaign_stmt->execute($project_params);
+$campaigns = [];
+foreach ($campaign_stmt->fetchAll() as $row) {
+    $row['clicks'] = (int)$row['clicks'];
+    $row['conversions'] = (int)$row['conversions'];
+    $row['conversion_rate'] = calc_ccr($row['conversions'], $row['clicks']);
+    $row['vendor_revenue'] = (float)$row['vendor_revenue'];
+    $row['tracking_url'] = !empty($row['short_code']) ? BASE_URL . '/c/' . $row['short_code'] : '';
+    $row['qr_url'] = !empty($row['short_code']) ? BASE_URL . '/tracking/qr.php?c=' . urlencode($row['short_code']) : '';
+    $campaigns[] = tf_vendor_report_fields($row) + ['vendor_revenue' => $row['vendor_revenue']];
 }
 
-$labels = []; $clicks_series = []; $conv_series = []; $rev_series = [];
-for ($i = 6; $i >= 0; $i--) {
-    $d = date('Y-m-d', strtotime("-{$i} day"));
-    $labels[] = date('D', strtotime($d));
-    $clicks_series[] = $chart_clicks[$d] ?? 0;
-    $conv_series[]   = $chart_conv[$d] ?? 0;
-    $rev_series[]    = round($chart_rev[$d] ?? 0, 2);
+$totals = ['clicks' => 0, 'conversions' => 0, 'vendor_revenue' => 0.0, 'payout_enabled' => false];
+foreach ($campaigns as $campaign) {
+    $totals['clicks'] += $campaign['clicks'];
+    $totals['conversions'] += $campaign['conversions'];
+    if ((float)$campaign['payout'] > 0) $totals['vendor_revenue'] += $campaign['vendor_revenue'];
+    $totals['payout_enabled'] = $totals['payout_enabled'] || (float)$campaign['payout'] > 0;
 }
+$totals['conversion_rate'] = calc_ccr($totals['conversions'], $totals['clicks']);
 
-// ── Recent conversions ─────────────────────────────────────────
-$wheres = ["cc.vendor_id = ?", "cc.status = 'complete'"];
-$params = [$global_vendor_id];
-if ($project_filter) { $wheres[] = "cc.project_id = ?"; $params[] = $project_filter; }
-if (in_array($approval_filter, ['pending','approved','rejected'], true)) { $wheres[] = "cc.approval_status = ?"; $params[] = $approval_filter; }
+$pending_stmt = $pdo->prepare("SELECT COUNT(*) FROM conversions cc
+    JOIN project_vendor pv ON pv.project_id = cc.project_id AND pv.vendor_id = cc.vendor_id
+    WHERE " . tf_vendor_assignment_sql('pv') . " AND cc.status = 'complete' AND cc.approval_status = 'pending'
+    AND cc.converted_at >= ? AND cc.converted_at < DATE_ADD(?, INTERVAL 1 DAY)");
+$pending_stmt->execute([$global_vendor_id, $from_date, $to_date]);
+$pending = (int)$pending_stmt->fetchColumn();
+
+$wheres = ["cc.vendor_id = ?", "pv.status = 'active'", "cc.status = 'complete'", "cc.converted_at >= ?", "cc.converted_at < DATE_ADD(?, INTERVAL 1 DAY)"];
+$params = [$global_vendor_id, $from_date, $to_date];
+if ($project_filter) { $wheres[] = 'cc.project_id = ?'; $params[] = $project_filter; }
+if (in_array($approval_filter, ['pending', 'approved', 'rejected'], true)) { $wheres[] = 'cc.approval_status = ?'; $params[] = $approval_filter; }
 $where_sql = implode(' AND ', $wheres);
-
-$cnt = $pdo->prepare("SELECT COUNT(*) AS c FROM conversions cc WHERE $where_sql");
+$cnt = $pdo->prepare("SELECT COUNT(*) FROM conversions cc JOIN project_vendor pv ON pv.project_id = cc.project_id AND pv.vendor_id = cc.vendor_id WHERE {$where_sql}");
 $cnt->execute($params);
-$total = (int)$cnt->fetch()['c'];
-$pagination = paginate($total, $per_page, $page);
-
-$conv_stmt = $pdo->prepare("
-    SELECT cc.*, p.project_code
+$pagination = paginate((int)$cnt->fetchColumn(), $per_page, $page);
+$conv_stmt = $pdo->prepare("SELECT cc.vendor_cost, cc.currency, cc.approval_status, cc.converted_at, p.project_code
     FROM conversions cc JOIN projects p ON p.id = cc.project_id
-    WHERE $where_sql
-    ORDER BY cc.converted_at DESC
-    LIMIT {$pagination['per_page']} OFFSET {$pagination['offset']}");
+    JOIN project_vendor pv ON pv.project_id = cc.project_id AND pv.vendor_id = cc.vendor_id
+    WHERE {$where_sql} ORDER BY cc.converted_at DESC LIMIT {$pagination['per_page']} OFFSET {$pagination['offset']}");
 $conv_stmt->execute($params);
 $conversions = $conv_stmt->fetchAll();
 
 $page_title = 'Vendor Dashboard';
 require_once __DIR__ . '/../helpers/portal_header.php';
 ?>
+            <form method="GET" class="tf-card mb-4 p-3 d-flex flex-wrap align-items-end gap-3">
+                <div><label for="from" class="tf-label">From</label><input id="from" type="date" name="from" class="form-control" value="<?php echo htmlspecialchars($from_date, ENT_QUOTES, 'UTF-8'); ?>"></div>
+                <div><label for="to" class="tf-label">To</label><input id="to" type="date" name="to" class="form-control" value="<?php echo htmlspecialchars($to_date, ENT_QUOTES, 'UTF-8'); ?>"></div>
+                <button class="btn btn-primary" type="submit"><i class="bi bi-filter" aria-hidden="true"></i> Apply</button>
+            </form>
 
-            <!-- KPIs -->
             <div class="row g-3 mb-4">
-                <div class="col-6 col-md-4 col-lg-3 col-xl"><article class="tf-stat"><div class="tf-stat-body"><p class="tf-stat-label">Clicks</p><p class="tf-stat-value"><?php echo number_format($k['clicks']); ?></p></div><div class="tf-stat-icon is-blue" aria-hidden="true"><i class="bi bi-cursor-fill"></i></div></article></div>
-                <div class="col-6 col-md-4 col-lg-3 col-xl"><article class="tf-stat"><div class="tf-stat-body"><p class="tf-stat-label">Conversions</p><p class="tf-stat-value"><?php echo number_format($k['conversions']); ?></p></div><div class="tf-stat-icon is-indigo" aria-hidden="true"><i class="bi bi-check-circle-fill"></i></div></article></div>
-                <div class="col-6 col-md-4 col-lg-3 col-xl"><article class="tf-stat"><div class="tf-stat-body"><p class="tf-stat-label">CCR</p><p class="tf-stat-value"><?php echo $k['ccr']; ?>%</p></div><div class="tf-stat-icon is-amber" aria-hidden="true"><i class="bi bi-percent"></i></div></article></div>
-                <div class="col-6 col-md-4 col-lg-3 col-xl"><article class="tf-stat"><div class="tf-stat-body"><p class="tf-stat-label">Revenue</p><p class="tf-stat-value is-currency is-positive"><?php echo format_currency($k['vendor_revenue']); ?></p></div><div class="tf-stat-icon is-emerald" aria-hidden="true"><i class="bi bi-arrow-up-circle-fill"></i></div></article></div>
-                <div class="col-6 col-md-4 col-lg-3 col-xl"><article class="tf-stat"><div class="tf-stat-body"><p class="tf-stat-label">Network Cost</p><p class="tf-stat-value is-currency is-negative"><?php echo format_currency($k['network_cost']); ?></p></div><div class="tf-stat-icon is-red" aria-hidden="true"><i class="bi bi-arrow-down-circle-fill"></i></div></article></div>
-                <div class="col-6 col-md-4 col-lg-3 col-xl"><article class="tf-stat"><div class="tf-stat-body"><p class="tf-stat-label">Pending</p><p class="tf-stat-value is-warning"><?php echo number_format($k['pending']); ?></p></div><div class="tf-stat-icon is-amber" aria-hidden="true"><i class="bi bi-hourglass-split"></i></div></article></div>
-                <div class="col-6 col-md-4 col-lg-3 col-xl"><article class="tf-stat"><div class="tf-stat-body"><p class="tf-stat-label">Net Profit</p><p class="tf-stat-value is-currency <?php echo (float)$k['network_profit'] >= 0 ? 'is-positive' : 'is-negative'; ?>"><?php echo format_currency($k['network_profit']); ?></p></div><div class="tf-stat-icon is-slate" aria-hidden="true"><i class="bi bi-calculator-fill"></i></div></article></div>
+                <?php foreach ([
+                    ['Clicks', number_format($totals['clicks']), 'is-blue', 'bi-cursor-fill'],
+                    ['Conversions', number_format($totals['conversions']), 'is-indigo', 'bi-check-circle-fill'],
+                    ['Conversion Rate', $totals['conversion_rate'] . '%', 'is-amber', 'bi-percent'],
+                    ['Pending', number_format($pending), 'is-slate', 'bi-hourglass-split'],
+                ] as $stat): ?>
+                <div class="col-6 col-md-3"><article class="tf-stat"><div class="tf-stat-body"><p class="tf-stat-label"><?php echo $stat[0]; ?></p><p class="tf-stat-value"><?php echo $stat[1]; ?></p></div><div class="tf-stat-icon <?php echo $stat[2]; ?>"><i class="bi <?php echo $stat[3]; ?>" aria-hidden="true"></i></div></article></div>
+                <?php endforeach; ?>
+                <?php if ($totals['payout_enabled']): ?><div class="col-6 col-md-3"><article class="tf-stat"><div class="tf-stat-body"><p class="tf-stat-label">Payout</p><p class="tf-stat-value is-currency is-positive"><?php echo format_currency($totals['vendor_revenue']); ?></p></div><div class="tf-stat-icon is-emerald"><i class="bi bi-arrow-up-circle-fill" aria-hidden="true"></i></div></article></div><?php endif; ?>
             </div>
 
-            <!-- Chart -->
-            <section class="tf-chart-card mb-4" aria-labelledby="vendor-chart-title">
-                <div class="tf-chart-header">
-                    <div>
-                        <h5 id="vendor-chart-title" class="tf-card-title">Last 7 Days</h5>
-                        <p class="tf-chart-subtitle">Clicks, conversions and revenue</p>
-                    </div>
-                </div>
-                <div class="tf-chart-body">
-                    <p class="tf-visually-hidden">Last 7 days: <?php echo (int)array_sum($clicks_series); ?> clicks, <?php echo (int)array_sum($conv_series); ?> conversions.</p>
-                    <canvas id="vendorChart" role="img" aria-label="Bar and line chart showing last 7 days activity"></canvas>
-                </div>
+            <section class="tf-card mb-4" aria-labelledby="campaign-performance-title">
+                <div class="tf-card-header"><div><h5 id="campaign-performance-title" class="tf-card-title">Campaign Performance</h5><p class="tf-card-subtitle">Your active campaign assignments from <?php echo htmlspecialchars($from_date, ENT_QUOTES, 'UTF-8'); ?> to <?php echo htmlspecialchars($to_date, ENT_QUOTES, 'UTF-8'); ?>.</p></div></div>
+                <div class="tf-table-scroll"><table class="tf-table"><thead><tr><th>Campaign</th><th>Tracking Link</th><th class="is-numeric">Clicks</th><th class="is-numeric">Conversions</th><th class="is-numeric">Rate</th><?php if ($totals['payout_enabled']): ?><th class="is-numeric">Payout</th><?php endif; ?><th>QR</th></tr></thead><tbody>
+                <?php if (!$campaigns): ?><tr class="is-empty"><td colspan="<?php echo $totals['payout_enabled'] ? 7 : 6; ?>" class="text-center py-5 text-muted">No active campaigns assigned for this period.</td></tr><?php else: foreach ($campaigns as $campaign): ?><tr>
+                    <td><div class="fw-semibold"><?php echo htmlspecialchars($campaign['project_code'], ENT_QUOTES, 'UTF-8'); ?></div><div class="small text-secondary"><?php echo htmlspecialchars($campaign['project_name'], ENT_QUOTES, 'UTF-8'); ?></div></td>
+                    <td><?php if ($campaign['tracking_url']): ?><div class="input-group input-group-sm" style="min-width:240px"><input class="form-control" readonly value="<?php echo htmlspecialchars($campaign['tracking_url'], ENT_QUOTES, 'UTF-8'); ?>" onclick="this.select()"><button type="button" class="btn btn-outline-secondary" onclick="navigator.clipboard.writeText(this.previousElementSibling.value)" aria-label="Copy tracking link"><i class="bi bi-copy"></i></button></div><?php else: ?><span class="text-muted">Not available</span><?php endif; ?></td>
+                    <td class="is-numeric"><?php echo number_format($campaign['clicks']); ?></td><td class="is-numeric"><?php echo number_format($campaign['conversions']); ?></td><td class="is-numeric"><?php echo $campaign['conversion_rate']; ?>%</td>
+                    <?php if ($totals['payout_enabled']): ?><td class="is-numeric"><?php echo (float)$campaign['payout'] > 0 ? format_currency($campaign['vendor_revenue'], $campaign['currency'] ?: 'USD') : '—'; ?></td><?php endif; ?>
+                    <td><?php if ($campaign['qr_url']): ?><a class="btn btn-outline-secondary btn-sm" target="_blank" rel="noopener" href="<?php echo htmlspecialchars($campaign['qr_url'], ENT_QUOTES, 'UTF-8'); ?>" title="Show QR code"><i class="bi bi-qr-code"></i></a><?php else: ?>—<?php endif; ?></td>
+                </tr><?php endforeach; endif; ?></tbody></table></div>
             </section>
 
-            <!-- Attached projects + conversions -->
-            <div class="row g-4">
-                <div class="col-12 col-lg-3">
-                    <section class="tf-card h-100" aria-labelledby="your-projects-title">
-                        <div class="tf-card-header">
-                            <h5 id="your-projects-title" class="tf-card-title">Your Projects</h5>
-                        </div>
-                        <ul class="list-group list-group-flush">
-                            <?php if (empty($projects)): ?>
-                            <li class="list-group-item text-muted small">No projects attached yet.</li>
-                            <?php else: foreach ($projects as $p): ?>
-                            <li class="list-group-item d-flex justify-content-between align-items-center">
-                                <div>
-                                    <div class="fw-semibold small"><?php echo htmlspecialchars($p['project_code'], ENT_QUOTES, 'UTF-8'); ?></div>
-                                    <div class="text-secondary" style="font-size:.75rem"><?php echo htmlspecialchars($p['project_name'], ENT_QUOTES, 'UTF-8'); ?></div>
-                                </div>
-                                <a href="<?php echo BASE_URL; ?>/vendor_portal/index.php?project_id=<?php echo (int)$p['id']; ?>" class="btn btn-outline-primary btn-sm" aria-label="Filter by <?php echo htmlspecialchars($p['project_code'], ENT_QUOTES, 'UTF-8'); ?>"><i class="bi bi-filter" aria-hidden="true"></i></a>
-                            </li>
-                            <?php endforeach; endif; ?>
-                        </ul>
-                    </section>
-                </div>
-
-                <div class="col-12 col-lg-9">
-                    <section class="tf-card" aria-labelledby="recent-conversions-title">
-                        <div class="tf-card-header">
-                            <h5 id="recent-conversions-title" class="tf-card-title">Recent Conversions</h5>
-                            <form method="GET" class="d-flex gap-2">
-                                <?php if ($project_filter): ?><input type="hidden" name="project_id" value="<?php echo (int)$project_filter; ?>"><?php endif; ?>
-                                <label for="approval-filter" class="tf-visually-hidden">Filter by approval status</label>
-                                <select id="approval-filter" name="approval" class="form-select form-select-sm" onchange="this.form.submit()">
-                                    <option value="">All statuses</option>
-                                    <option value="pending" <?php echo $approval_filter === 'pending' ? 'selected' : ''; ?>>Pending</option>
-                                    <option value="approved" <?php echo $approval_filter === 'approved' ? 'selected' : ''; ?>>Approved</option>
-                                    <option value="rejected" <?php echo $approval_filter === 'rejected' ? 'selected' : ''; ?>>Rejected</option>
-                                </select>
-                            </form>
-                        </div>
-                        <div class="tf-table-scroll">
-                            <table class="tf-table">
-                                <thead>
-                                    <tr>
-                                        <th>Project</th>
-                                        <th class="is-numeric">Amount</th>
-                                        <th class="is-numeric">Payout</th>
-                                        <th>Status</th>
-                                        <th>Time</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <?php if (empty($conversions)): ?>
-                                    <tr class="is-empty"><td colspan="5" class="text-center py-5 text-muted">No conversions in this view.</td></tr>
-                                    <?php else: foreach ($conversions as $c): ?>
-                                    <tr>
-                                        <td><?php echo htmlspecialchars($c['project_code'], ENT_QUOTES, 'UTF-8'); ?></td>
-                                        <td class="is-numeric"><?php echo format_currency($c['sale_amount'], $c['currency'] ?? 'USD'); ?></td>
-                                        <td class="is-numeric text-success"><?php echo format_currency($c['vendor_cost'], $c['currency'] ?? 'USD'); ?></td>
-                                        <td>
-                                            <?php $cls = $c['approval_status'] === 'approved' ? 'bg-success' : ($c['approval_status'] === 'rejected' ? 'bg-danger' : 'bg-warning'); ?>
-                                            <span class="badge <?php echo $cls; ?>"><?php echo ucfirst($c['approval_status']); ?></span>
-                                        </td>
-                                        <td class="small text-secondary"><?php echo htmlspecialchars(date('M j, H:i', strtotime($c['converted_at']))); ?></td>
-                                    </tr>
-                                    <?php endforeach; endif; ?>
-                                </tbody>
-                            </table>
-                        </div>
-                        <div class="tf-card-footer">
-                            <?php echo render_pagination($pagination, BASE_URL . '/vendor_portal/index.php?' . http_build_query($_GET)); ?>
-                        </div>
-                    </section>
-                </div>
-            </div>
+            <section class="tf-card" aria-labelledby="recent-conversions-title"><div class="tf-card-header"><h5 id="recent-conversions-title" class="tf-card-title">Recent Conversions</h5><form method="GET" class="d-flex gap-2"><input type="hidden" name="from" value="<?php echo htmlspecialchars($from_date, ENT_QUOTES, 'UTF-8'); ?>"><input type="hidden" name="to" value="<?php echo htmlspecialchars($to_date, ENT_QUOTES, 'UTF-8'); ?>"><?php if ($project_filter): ?><input type="hidden" name="project_id" value="<?php echo $project_filter; ?>"><?php endif; ?><label for="approval-filter" class="tf-visually-hidden">Filter by approval status</label><select id="approval-filter" name="approval" class="form-select form-select-sm" onchange="this.form.submit()"><option value="">All statuses</option><option value="pending" <?php echo $approval_filter === 'pending' ? 'selected' : ''; ?>>Pending</option><option value="approved" <?php echo $approval_filter === 'approved' ? 'selected' : ''; ?>>Approved</option><option value="rejected" <?php echo $approval_filter === 'rejected' ? 'selected' : ''; ?>>Rejected</option></select></form></div><div class="tf-table-scroll"><table class="tf-table"><thead><tr><th>Campaign</th><?php if ($totals['payout_enabled']): ?><th class="is-numeric">Payout</th><?php endif; ?><th>Status</th><th>Time</th></tr></thead><tbody><?php if (!$conversions): ?><tr class="is-empty"><td colspan="<?php echo $totals['payout_enabled'] ? 4 : 3; ?>" class="text-center py-5 text-muted">No conversions in this view.</td></tr><?php else: foreach ($conversions as $conversion): ?><tr><td><?php echo htmlspecialchars($conversion['project_code'], ENT_QUOTES, 'UTF-8'); ?></td><?php if ($totals['payout_enabled']): ?><td class="is-numeric text-success"><?php echo format_currency($conversion['vendor_cost'], $conversion['currency'] ?: 'USD'); ?></td><?php endif; ?><td><?php $cls = $conversion['approval_status'] === 'approved' ? 'bg-success' : ($conversion['approval_status'] === 'rejected' ? 'bg-danger' : 'bg-warning'); ?><span class="badge <?php echo $cls; ?>"><?php echo ucfirst($conversion['approval_status']); ?></span></td><td class="small text-secondary"><?php echo htmlspecialchars(date('M j, H:i', strtotime($conversion['converted_at'])), ENT_QUOTES, 'UTF-8'); ?></td></tr><?php endforeach; endif; ?></tbody></table></div><div class="tf-card-footer"><?php echo render_pagination($pagination, BASE_URL . '/vendor_portal/index.php?' . http_build_query($_GET)); ?></div></section>
         </div>
     </main>
-
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-    <script>
-    const labels = <?php echo json_encode($labels); ?>;
-    const clicksData = <?php echo json_encode($clicks_series); ?>;
-    const convData = <?php echo json_encode($conv_series); ?>;
-    const revData = <?php echo json_encode($rev_series); ?>;
-
-    new Chart(document.getElementById('vendorChart'), {
-        type: 'bar',
-        data: {
-            labels,
-            datasets: [
-                { label: 'Clicks', data: clicksData, backgroundColor: 'rgba(15,118,110,.75)', borderRadius: 4, order: 2 },
-                { label: 'Conversions', data: convData, type: 'line', borderColor: '#047857', backgroundColor: 'rgba(4,120,87,.1)', fill: true, tension: .35, pointRadius: 0, order: 1 },
-                { label: 'Revenue', data: revData, type: 'line', borderColor: '#c2410c', borderDash: [4,4], fill: false, tension: .35, pointRadius: 0, order: 0 }
-            ]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
-            plugins: { legend: { position: 'bottom' } },
-            scales: { y: { beginAtZero: true } }
-        }
-    });
-    </script>
 </body>
 </html>

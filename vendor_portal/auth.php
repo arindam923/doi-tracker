@@ -15,7 +15,7 @@ if ($token !== '') {
     $stmt = $pdo->prepare("SELECT vpu.*, gv.vendor_code, gv.vendor_name, gv.vendor_status FROM vendor_portal_users vpu JOIN global_vendors gv ON gv.id = vpu.global_vendor_id WHERE vpu.magic_token = ? AND vpu.magic_expires_at > NOW() AND vpu.is_active = 1");
     $stmt->execute([$token]);
     $vendor = $stmt->fetch();
-    if ($vendor) {
+    if ($vendor && tf_vendor_status_allowed($vendor['vendor_status'])) {
         session_regenerate_id(true);
         $_SESSION['TF_VENDOR'] = [
             'global_vendor_id' => (int)$vendor['global_vendor_id'],
