@@ -673,6 +673,31 @@ $sent_n = (int)($sa['sent'] ?? 0);
         <span class="badge bg-light"><?php echo count($notes); ?></span>
     </div>
     <div class="tf-card-body">
+        <p class="text-muted small mb-3">Internal campaign guidance for the team. These notes are not visible on vendor pages.</p>
+        <div class="row g-3 mb-4">
+            <div class="col-12 col-md-4">
+                <div class="border rounded p-3 h-100">
+                    <h6 class="mb-2">Client Instructions</h6>
+                    <?php $client_instructions = trim((string)($project['client_instructions'] ?? '')); ?>
+                    <p class="mb-0" style="white-space: pre-wrap;"><?php echo $client_instructions !== '' ? sanitize($client_instructions) : 'Not added'; ?></p>
+                </div>
+            </div>
+            <div class="col-12 col-md-4">
+                <div class="border rounded p-3 h-100">
+                    <h6 class="mb-2">Optimization Notes</h6>
+                    <?php $optimization_notes = trim((string)($project['optimization_notes'] ?? '')); ?>
+                    <p class="mb-0" style="white-space: pre-wrap;"><?php echo $optimization_notes !== '' ? sanitize($optimization_notes) : 'Not added'; ?></p>
+                </div>
+            </div>
+            <div class="col-12 col-md-4">
+                <div class="border rounded p-3 h-100">
+                    <h6 class="mb-2">Publisher Restrictions</h6>
+                    <?php $publisher_restrictions = trim((string)($project['publisher_restrictions'] ?? '')); ?>
+                    <p class="mb-0" style="white-space: pre-wrap;"><?php echo $publisher_restrictions !== '' ? sanitize($publisher_restrictions) : 'Not added'; ?></p>
+                </div>
+            </div>
+        </div>
+
         <form method="POST" action="<?php echo BASE_URL; ?>/projects/notes_add.php" class="mb-3">
             <?php echo csrf_field(); ?>
             <input type="hidden" name="project_id" value="<?php echo $id; ?>">
