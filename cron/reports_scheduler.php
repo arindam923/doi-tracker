@@ -14,6 +14,7 @@
  */
 
 require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/../helpers/reporting.php';
 
 $log_dir = __DIR__ . '/../storage/logs';
 if (!is_dir($log_dir)) @mkdir($log_dir, 0755, true);
@@ -37,51 +38,20 @@ function sched_next_run($frequency, $from_ts) {
     }
 }
 
-// Build a simple bounded table given filters_json (group_by / project_id).
+// Build scheduled rows through the same reporting engine used by the UI/export.
 function build_report_rows($pdo, $filters) {
-    $group_by = ($filters['group_by'] ?? 'project');
-    $project_id = (int)($filters['project_id'] ?? 0);
-    $days = (int)($filters['days'] ?? 30);
-
-    $where = ["c.status = 'complete'", "c.converted_at >= DATE_SUB(NOW(), INTERVAL ? DAY)"];
-    $params = [$days];
-
-    $row_fields = [
-        'project' => "p.project_code AS label",
-        'vendor'  => "gv.vendor_name AS label",
-        'client'  => "cl.client_name AS label",
-        'country' => "COALESCE(cl2.country_code,'XX') AS label",
-        'device'  => "COALESCE(cl2.device_type,'unknown') AS label",
-    ];
-    if (!isset($row_fields[$group_by])) $group_by = 'project';
-    $field_sql = $row_fields[$group_by];
-
-    $joins = " JOIN projects p ON c.project_id = p.id";
-    switch ($group_by) {
-        case 'project': $group_col = 'c.project_id'; break;
-        case 'vendor':  $joins .= " JOIN global_vendors gv ON c.vendor_id = gv.id"; $group_col = 'c.vendor_id'; break;
-        case 'client':  $joins .= " JOIN clients cl ON p.client_id = cl.id"; $group_col = 'cl.id'; break;
-        case 'country': $joins .= " LEFT JOIN clicks cl2 ON c.click_id = cl2.click_id"; $group_col = 'cl2.country_code'; break;
-        default:        $joins .= " LEFT JOIN clicks cl2 ON c.click_id = cl2.click_id"; $group_col = 'cl2.device_type'; break;
-    }
-
-    if ($project_id) {
-        $where[] = "c.project_id = ?";
-        $params[] = $project_id;
-    }
-
-    $sql = "SELECT $field_sql AS label,
-                   COUNT(c.id) AS completes,
-                   ROUND(COALESCE(SUM(c.client_revenue),0),2) AS revenue,
-                   ROUND(COALESCE(SUM(c.vendor_cost),0),2) AS cost,
-                   ROUND(COALESCE(SUM(c.profit),0),2) AS profit
-            FROM conversions c $joins
-            WHERE " . implode(' AND ', $where) . "
-            GROUP BY $group_col
-            ORDER BY revenue DESC";
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute($params);
-    return $stmt->fetchAll();
+    $days = max(1, (int)($filters['days'] ?? 30));
+    $to = $filters['to'] ?? date('Y-m-d');
+    $from = $filters['from'] ?? date('Y-m-d', strtotime('-' . $days . ' days', strtotime($to)));
+    return tf_reporting_build_report($pdo, [
+        'period' => $filters['period'] ?? 'custom',
+        'group' => $filters['group_by'] ?? 'project',
+        'from' => $from,
+        'to' => $to,
+        'project_id' => $filters['project_id'] ?? 0,
+        'client_id' => $filters['client_id'] ?? 0,
+        'vendor_id' => $filters['vendor_id'] ?? 0,
+    ])['rows'];
 }
 
 $rows = $pdo->query("SELECT * FROM scheduled_reports WHERE is_active = 1 AND (next_run_at IS NULL OR next_run_at <= NOW()) LIMIT 20")->fetchAll();
@@ -100,9 +70,9 @@ foreach ($rows as $report) {
         $data = build_report_rows($pdo, $filters);
 
         $out = fopen('php://temp', 'r+');
-        fputcsv($out, ['Group', 'Completes', 'Revenue', 'Cost', 'Profit']);
+        fputcsv($out, ['Group', 'Clicks', 'Conversions', 'Rejected Leads', 'Revenue', 'Cost', 'Profit', 'ROI (%)', 'Conversion Rate (%)', 'EPC']);
         foreach ($data as $d) {
-            fputcsv($out, [$d['label'], $d['completes'], $d['revenue'], $d['cost'], $d['profit']]);
+            fputcsv($out, [$d['label'], $d['clicks'], $d['conversions'], $d['rejected_leads'], $d['revenue'], $d['cost'], $d['profit'], $d['roi'], $d['conversion_rate'], $d['epc']]);
         }
         rewind($out);
         $csv_body = stream_get_contents($out);

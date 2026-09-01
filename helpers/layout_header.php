@@ -15,7 +15,7 @@ $nav_items = [
         ['url' => '/vendors/global.php', 'icon' => 'bi-people', 'label' => 'Vendors'],
     ],
     'analytics' => [
-        ['url' => '/reports/overview.php', 'icon' => 'bi-graph-up', 'label' => 'Revenue Report'],
+        ['url' => '/reports/overview.php', 'icon' => 'bi-graph-up', 'label' => 'Reporting'],
         ['url' => '/reports/traffic_summary.php', 'icon' => 'bi-bar-chart-line', 'label' => 'Traffic Summary'],
         ['url' => '/reports/scheduled_reports.php', 'icon' => 'bi-clock', 'label' => 'Scheduled Reports'],
         ['url' => '/clicklogs/list.php', 'icon' => 'bi-cursor', 'label' => 'Click Logs'],

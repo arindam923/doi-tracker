@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/../helpers/reporting.php';
 require_login();
 
 function escape_csv($value) {
@@ -10,9 +11,10 @@ function escape_csv($value) {
     return $value;
 }
 
-$from_date = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['from'] ?? '') ? $_GET['from'] : date('Y-m-d', strtotime('-30 days'));
-$to_date   = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['to'] ?? '') ? $_GET['to'] : date('Y-m-d');
-$project_filter = intval($_GET['project_id'] ?? 0);
+$report_filters = tf_reporting_normalize_filters($_GET);
+$from_date = $report_filters['from'];
+$to_date = $report_filters['to'];
+$project_filter = $report_filters['project_id'];
 $type = $_GET['type'] ?? 'conversions'; // clicks or conversions
 
 if ($type === 'clicks') {
@@ -55,23 +57,8 @@ if ($type === 'clicks') {
     fclose($output);
 
 } else {
-    // Export conversions
-    $sql = "SELECT cv.click_id, p.project_code, gv.vendor_name, cv.status,
-            cv.client_revenue, cv.vendor_cost, cv.profit, cv.is_manual, cv.converted_at
-            FROM conversions cv
-            JOIN projects p ON cv.project_id = p.id
-            JOIN global_vendors gv ON cv.vendor_id = gv.id
-            WHERE cv.converted_at BETWEEN ? AND DATE_ADD(?, INTERVAL 1 DAY)";
-    $params = [$from_date, $to_date];
-    if ($project_filter) {
-        $sql .= " AND cv.project_id = ?";
-        $params[] = $project_filter;
-    }
-    $sql .= " ORDER BY cv.converted_at DESC";
-
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute($params);
-    $rows = $stmt->fetchAll();
+    $report = tf_reporting_build_report($pdo, $_GET);
+    $rows = $report['rows'];
 
     $filename = 'conversions_' . $from_date . '_to_' . $to_date . '.csv';
 
@@ -79,18 +66,13 @@ if ($type === 'clicks') {
     header('Content-Disposition: attachment; filename="' . $filename . '"');
 
     $output = fopen('php://output', 'w');
-    fputcsv($output, ['Click ID', 'Project Code', 'Vendor', 'Status', 'Revenue', 'Cost', 'Profit', 'Manual', 'Timestamp']);
+    fputcsv($output, ['Group By', 'Group', 'Clicks', 'Conversions', 'Rejected Leads', 'Revenue', 'Cost', 'Profit', 'ROI (%)', 'Conversion Rate (%)', 'EPC']);
     foreach ($rows as $row) {
         fputcsv($output, [
-            escape_csv($row['click_id']),
-            escape_csv($row['project_code']),
-            escape_csv($row['vendor_name']),
-            escape_csv($row['status']),
-            escape_csv($row['client_revenue']),
-            escape_csv($row['vendor_cost']),
-            escape_csv($row['profit']),
-            escape_csv($row['is_manual'] ? 'Yes' : 'No'),
-            escape_csv($row['converted_at']),
+            escape_csv($report['group_label']), escape_csv($row['label']), escape_csv($row['clicks']),
+            escape_csv($row['conversions']), escape_csv($row['rejected_leads']), escape_csv($row['revenue']),
+            escape_csv($row['cost']), escape_csv($row['profit']), escape_csv($row['roi']),
+            escape_csv($row['conversion_rate']), escape_csv($row['epc']),
         ]);
     }
     fclose($output);

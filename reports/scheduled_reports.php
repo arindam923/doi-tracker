@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/../helpers/reporting.php';
 require_role(['super_admin', 'campaign_manager']);
 
 $page = max(1, intval($_GET['page'] ?? 1));
@@ -21,13 +22,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $report_type = $_POST['report_type'] ?? 'overview';
         $group_by = $_POST['group_by'] ?? 'project';
         $frequency = $_POST['frequency'] ?? 'daily';
+        $period = $_POST['period'] ?? 'daily';
+        $from_date = $_POST['from'] ?? '';
+        $to_date = $_POST['to'] ?? '';
         $custom_cron = trim($_POST['custom_cron'] ?? '');
         $recipients_csv = trim($_POST['recipients_csv'] ?? '');
         $project_id = intval($_POST['project_id'] ?? 0);
+        $client_id = intval($_POST['client_id'] ?? 0);
+        $vendor_id = intval($_POST['vendor_id'] ?? 0);
         $filters_json = null;
 
         $allowed_groups = ['project', 'vendor', 'client', 'country', 'device'];
         if (!in_array($group_by, $allowed_groups, true)) $group_by = 'project';
+        if (!in_array($period, tf_reporting_periods(), true)) $period = 'daily';
 
         $allowed_freq = ['daily', 'weekly', 'monthly', 'custom_cron'];
         if (!in_array($frequency, $allowed_freq, true)) $frequency = 'daily';
@@ -47,6 +54,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $filters = [];
         if ($project_id > 0) $filters['project_id'] = $project_id;
         if ($group_by !== 'project') $filters['group_by'] = $group_by;
+        $normalized = tf_reporting_normalize_filters(['period' => $period, 'from' => $from_date, 'to' => $to_date, 'project_id' => $project_id, 'client_id' => $client_id, 'vendor_id' => $vendor_id], ['period' => $period]);
+        $filters['period'] = $normalized['period'];
+        $filters['from'] = $normalized['from'];
+        $filters['to'] = $normalized['to'];
+        if ($normalized['client_id']) $filters['client_id'] = $normalized['client_id'];
+        if ($normalized['vendor_id']) $filters['vendor_id'] = $normalized['vendor_id'];
         if (!empty($filters)) {
             $filters_json = json_encode($filters);
         }
@@ -77,11 +90,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 } else {
                     $is_active = 0;
                 }
+                $next_run_at = $frequency === 'daily' ? date('Y-m-d H:i:s', strtotime('+1 day')) :
+                    ($frequency === 'weekly' ? date('Y-m-d H:i:s', strtotime('+1 week')) :
+                     ($frequency === 'monthly' ? date('Y-m-d H:i:s', strtotime('+1 month')) : null));
                 $pdo->prepare("
                     UPDATE scheduled_reports SET title = ?, report_type = ?, group_by = ?, filters_json = ?, frequency = ?, custom_cron = ?, recipients_csv = ?, is_active = ?, next_run_at = ?
                     WHERE id = ?
                 ")->execute([
-                    $title, $report_type, $group_by, $filters_json, $frequency, $frequency === 'custom_cron' ? $custom_cron : null, $recipients_csv_clean, $is_active, $edit_id, $edit_id
+                    $title, $report_type, $group_by, $filters_json, $frequency, $frequency === 'custom_cron' ? $custom_cron : null, $recipients_csv_clean, $is_active, $next_run_at, $edit_id
                 ]);
                 audit_log($pdo, 'edit', 'scheduled_report', $edit_id, null, [
                     'title' => $title, 'frequency' => $frequency, 'is_active' => $is_active
@@ -112,6 +128,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // ─── Load existing data for edit ────────────────────────────────
 $edit_data = null;
+$edit_filters = [];
 if ($edit_id > 0) {
     $stmt = $pdo->prepare("SELECT * FROM scheduled_reports WHERE id = ?");
     $stmt->execute([$edit_id]);
@@ -139,6 +156,8 @@ $stmt->execute();
 $reports = $stmt->fetchAll();
 
 $projects_list = $pdo->query("SELECT id, project_code, project_name FROM projects ORDER BY project_name")->fetchAll();
+$clients_list = $pdo->query("SELECT id, client_name FROM clients ORDER BY client_name")->fetchAll();
+$vendors_list = $pdo->query("SELECT id, vendor_name FROM global_vendors ORDER BY vendor_name")->fetchAll();
 
 $page_title = 'Scheduled Reports';
 $page_actions = '<a href="' . BASE_URL . '/reports/scheduled_reports.php?action=new" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg"></i>Schedule Report</a>';
@@ -169,6 +188,12 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                     <select name="report_type" class="form-select">
                         <option value="overview" <?php echo ($edit_data['report_type'] ?? '') === 'overview' ? 'selected' : ''; ?>>Revenue Report</option>
                         <option value="traffic_summary" <?php echo ($edit_data['report_type'] ?? '') === 'traffic_summary' ? 'selected' : ''; ?>>Traffic Summary</option>
+                    </select>
+                </div>
+                <div class="col-6 col-md-3">
+                    <label class="tf-label">Report Period</label>
+                    <select name="period" class="form-select">
+                        <?php foreach (['daily'=>'Daily','weekly'=>'Weekly','monthly'=>'Monthly','custom'=>'Custom Date Range'] as $pv => $pl): ?><option value="<?php echo $pv; ?>" <?php echo ($edit_filters['period'] ?? 'daily') === $pv ? 'selected' : ''; ?>><?php echo $pl; ?></option><?php endforeach; ?>
                     </select>
                 </div>
                 <div class="col-6 col-md-3">
@@ -208,6 +233,10 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                         <?php endforeach; ?>
                     </select>
                 </div>
+                <div class="col-6 col-md-3"><label class="tf-label">From</label><input type="date" name="from" class="form-control" value="<?php echo sanitize($edit_filters['from'] ?? date('Y-m-d', strtotime('-30 days'))); ?>"></div>
+                <div class="col-6 col-md-3"><label class="tf-label">To</label><input type="date" name="to" class="form-control" value="<?php echo sanitize($edit_filters['to'] ?? date('Y-m-d')); ?>"></div>
+                <div class="col-6 col-md-3"><label class="tf-label">Client Filter</label><select name="client_id" class="form-select"><option value="0">All Clients</option><?php foreach ($clients_list as $c): ?><option value="<?php echo (int)$c['id']; ?>" <?php echo (int)($edit_filters['client_id'] ?? 0) === (int)$c['id'] ? 'selected' : ''; ?>><?php echo sanitize($c['client_name']); ?></option><?php endforeach; ?></select></div>
+                <div class="col-6 col-md-3"><label class="tf-label">Vendor Filter</label><select name="vendor_id" class="form-select"><option value="0">All Vendors</option><?php foreach ($vendors_list as $v): ?><option value="<?php echo (int)$v['id']; ?>" <?php echo (int)($edit_filters['vendor_id'] ?? 0) === (int)$v['id'] ? 'selected' : ''; ?>><?php echo sanitize($v['vendor_name']); ?></option><?php endforeach; ?></select></div>
                 <div class="col-12">
                     <label class="tf-label">Recipients (CSV) <span class="text-danger">*</span></label>
                     <input type="text" name="recipients_csv" class="form-control font-monospace small" required
