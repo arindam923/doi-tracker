@@ -144,9 +144,9 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                             <label for="global_postback_url" class="tf-label">Global Postback URL</label>
                             <input type="url" id="global_postback_url" name="global_postback_url" class="form-control font-monospace small"
                                    value="<?php echo sanitize($settings['global_postback_url'] ?? ''); ?>"
-                                   placeholder="https://example.com/pb?click={click_id}&status={status}&payout={payout}&conversion={conversion_id}&sale={sale_amount}&currency={currency}">
+                                   placeholder="https://example.com/pb?click={click_id}&status={status}&payout={payout}&tx={transaction_id}&sale={sale_amount}&currency={currency}&s1={sub1}">
                             <p class="form-text mb-0">
-                                Macros: <code>{click_id}</code>, <code>{status}</code>, <code>{payout}</code>, <code>{conversion_id}</code>, <code>{sale_amount}</code>, <code>{currency}</code>
+                                Macros: <code>{click_id}</code>, <code>{status}</code>, <code>{sale_amount}</code>, <code>{currency}</code>, <code>{payout}</code>, <code>{transaction_id}</code>, <code>{sub1}</code>…<code>{sub5}</code> (also supports <code>{conversion_id}</code>)
                             </p>
                         </div>
                     </div>

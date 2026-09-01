@@ -245,8 +245,8 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                             <label for="global_postback_url" class="tf-label">Global Postback URL</label>
                             <input type="url" id="global_postback_url" name="global_postback_url" class="form-control"
                                    value="<?php echo sanitize($form_data['global_postback_url'] ?? ''); ?>"
-                                   placeholder="https://vendor.com/postback?click_id={click_id}&status=1&payout={payout}">
-                            <p class="form-text mb-0 small">Reusable default for future project assignments. Leave blank if this vendor has no global postback.</p>
+                                   placeholder="https://vendor.com/postback?click_id={click_id}&status={status}&payout={payout}&tx={transaction_id}&s1={sub1}">
+                            <p class="form-text mb-0 small">Reusable default for future project assignments. Macros: <code>{click_id}</code>, <code>{status}</code>, <code>{sale_amount}</code>, <code>{currency}</code>, <code>{payout}</code>, <code>{transaction_id}</code>, <code>{sub1}</code>…<code>{sub5}</code>.</p>
                         </div>
 
                         <div class="col-6 col-md-6">
@@ -276,8 +276,8 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                             <label for="postback_url" class="tf-label">Project Override Postback URL</label>
                             <input type="url" id="postback_url" name="postback_url" class="form-control"
                                    value="<?php echo sanitize($form_data['postback_url'] ?? ''); ?>"
-                                   placeholder="https://vendor.com/postback?click_id={click_id}&status=1&payout={payout}">
-                            <p class="form-text mb-0 small">Optional project-specific override. Blank uses the Global Postback URL. Macros: <code>{click_id}</code>, <code>{payout}</code>, <code>{status}</code>, <code>{conversion_id}</code></p>
+                                   placeholder="https://vendor.com/postback?click_id={click_id}&status={status}&payout={payout}&tx={transaction_id}&s1={sub1}">
+                            <p class="form-text mb-0 small">Optional project-specific override. Blank uses the Global Postback URL. Supports <code>{click_id}</code>, <code>{status}</code>, <code>{sale_amount}</code>, <code>{currency}</code>, <code>{payout}</code>, <code>{transaction_id}</code>, <code>{sub1}</code>…<code>{sub5}</code>.</p>
                         </div>
                         <?php endif; ?>
 

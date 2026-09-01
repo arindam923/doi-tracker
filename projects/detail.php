@@ -412,6 +412,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
             <div class="col-12 col-md-4">
                 <label class="tf-label" for="attach_postback_url">Project Override Postback URL</label>
                 <input type="url" name="postback_url" id="attach_postback_url" class="form-control form-control-sm" placeholder="Blank uses global postback">
+                <div class="form-text small">Outbound macros: <code>{click_id}</code>, <code>{status}</code>, <code>{sale_amount}</code>, <code>{currency}</code>, <code>{payout}</code>, <code>{transaction_id}</code>, <code>{sub1}</code>…<code>{sub5}</code>.</div>
             </div>
             <div class="col-12 col-md-3">
                 <label class="tf-label" for="attach_notes">Notes</label>

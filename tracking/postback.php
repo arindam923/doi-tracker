@@ -23,7 +23,7 @@ function log_postback($pdo, $project_id, $vendor_id, $click_id, $status, $messag
 }
 
 $click_id = trim($_GET['click_id'] ?? '');
-$status   = intval($_GET['status'] ?? 0);
+$status   = intval($_GET['status'] ?? 0) === 1 ? 1 : 0;
 $token    = trim($_GET['token'] ?? '');
 $sale_amount = floatval($_GET['sale_amount'] ?? 0);
 $currency = strtoupper(trim($_GET['currency'] ?? '')) ?: 'USD';
@@ -167,17 +167,20 @@ try {
     $now = date('Y-m-d H:i:s');
     $time_diff_seconds = max(0, strtotime($now) - strtotime($click_time));
 
+    $conversion_status = $status === 1 ? 'complete' : 'rejected';
     $stmt = $pdo->prepare("
         INSERT INTO conversions (click_id, project_id, vendor_id, status, client_revenue, sale_amount, currency,
             vendor_cost, payout, profit, transaction_id, click_time, time_diff_seconds, sub1, sub2, sub3, sub4, sub5)
-        VALUES (?, ?, ?, 'complete', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ");
-    $stmt->execute([$click_id, $project_id, $vendor_id, $revenue, $sale_amount, $currency, $cost, $payout, $profit, $transaction_id, $click_time, $time_diff_seconds, $sub1, $sub2, $sub3, $sub4, $sub5]);
+    $stmt->execute([$click_id, $project_id, $vendor_id, $conversion_status, $revenue, $sale_amount, $currency, $cost, $payout, $profit, $transaction_id, $click_time, $time_diff_seconds, $sub1, $sub2, $sub3, $sub4, $sub5]);
 
     $pdo->prepare("UPDATE clicks SET is_converted = 1 WHERE click_id = ?")->execute([$click_id]);
-    $pdo->prepare("UPDATE projects SET completes_count = completes_count + 1 WHERE id = ?")->execute([$project_id]);
+    if ($conversion_status === 'complete') {
+        $pdo->prepare("UPDATE projects SET completes_count = completes_count + 1 WHERE id = ?")->execute([$project_id]);
+    }
 
-    if (!empty($click['email_send_id'])) {
+    if ($conversion_status === 'complete' && !empty($click['email_send_id'])) {
         try {
             email_mark_engagement($pdo, (int)$click['email_send_id'], 'converted');
         } catch (Throwable $e) {
@@ -185,7 +188,7 @@ try {
         }
     }
 
-    if ($project['total_quota'] > 0) {
+    if ($conversion_status === 'complete' && $project['total_quota'] > 0) {
         $count_stmt = $pdo->prepare("SELECT completes_count FROM projects WHERE id = ?");
         $count_stmt->execute([$project_id]);
         $new_count = $count_stmt->fetch()['completes_count'];
@@ -199,7 +202,7 @@ try {
         }
     }
 
-    log_postback($pdo, $project_id, $vendor_id, $click_id, 'success', 'Conversion recorded', $payload, $ip_address, 'OK:RECORDED');
+    log_postback($pdo, $project_id, $vendor_id, $click_id, 'success', ucfirst($conversion_status) . ' postback recorded', $payload, $ip_address, 'OK:RECORDED');
 
     $pdo->commit();
 } catch (Exception $e) {
@@ -213,15 +216,12 @@ try {
 $vendor_postback_status = 'no_url';
 if (!empty($vendor['postback_url'])) {
     $vendor_url = $vendor['postback_url'];
-    $macros = [
-        '{click_id}' => $click_id,
-        '{status}' => $status,
-        '{payout}' => $cost,
-        '{conversion_id}' => $transaction_id,
-        '{sale_amount}' => $sale_amount,
-        '{currency}' => $currency,
-    ];
-    $vendor_url = strtr($vendor_url, $macros);
+    $vendor_url = strtr($vendor_url, tf_postback_macros([
+        'click_id' => $click_id, 'status' => $status, 'payout' => $cost,
+        'transaction_id' => $transaction_id, 'sale_amount' => $sale_amount,
+        'currency' => $currency, 'sub1' => $sub1, 'sub2' => $sub2,
+        'sub3' => $sub3, 'sub4' => $sub4, 'sub5' => $sub5,
+    ]));
 
     if (preg_match('/^https?:\/\//', $vendor_url)) {
         $ch = curl_init();
@@ -252,15 +252,12 @@ $global_enabled = get_setting($pdo, 'global_postback_enabled', '0') === '1';
 $global_url     = trim(get_setting($pdo, 'global_postback_url', ''));
 $global_status  = 'disabled';
 if ($global_enabled && $global_url !== '') {
-    $macros = [
-        '{click_id}' => $click_id,
-        '{status}' => $status,
-        '{payout}' => $cost ?? 0,
-        '{conversion_id}' => $transaction_id,
-        '{sale_amount}' => $sale_amount,
-        '{currency}' => $currency,
-    ];
-    $fire_url = strtr($global_url, $macros);
+    $fire_url = strtr($global_url, tf_postback_macros([
+        'click_id' => $click_id, 'status' => $status, 'payout' => $cost ?? 0,
+        'transaction_id' => $transaction_id, 'sale_amount' => $sale_amount,
+        'currency' => $currency, 'sub1' => $sub1, 'sub2' => $sub2,
+        'sub3' => $sub3, 'sub4' => $sub4, 'sub5' => $sub5,
+    ]));
     if (preg_match('/^https?:\/\//', $fire_url)) {
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $fire_url);

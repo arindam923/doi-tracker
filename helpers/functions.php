@@ -121,6 +121,28 @@ function tf_resolve_postback_url($override, $global) {
 }
 
 /**
+ * Build the supported outbound postback macro map.
+ * {conversion_id} remains an alias for {transaction_id} for compatibility.
+ */
+function tf_postback_macros($values) {
+    $transaction_id = (string)($values['transaction_id'] ?? '');
+    return [
+        '{click_id}' => (string)($values['click_id'] ?? ''),
+        '{status}' => (string)($values['status'] ?? 0),
+        '{payout}' => (string)($values['payout'] ?? 0),
+        '{transaction_id}' => $transaction_id,
+        '{conversion_id}' => $transaction_id,
+        '{sale_amount}' => (string)($values['sale_amount'] ?? 0),
+        '{currency}' => (string)($values['currency'] ?? 'USD'),
+        '{sub1}' => (string)($values['sub1'] ?? ''),
+        '{sub2}' => (string)($values['sub2'] ?? ''),
+        '{sub3}' => (string)($values['sub3'] ?? ''),
+        '{sub4}' => (string)($values['sub4'] ?? ''),
+        '{sub5}' => (string)($values['sub5'] ?? ''),
+    ];
+}
+
+/**
  * Generate project code: country code + YYMM + monthly sequence
  * Example: IN2607001 (country=IN, year=26, month=07, seq=001)
  * Uses a retry loop with UNIQUE constraint to handle race conditions
