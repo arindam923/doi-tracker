@@ -33,7 +33,7 @@ $pagination = paginate($total, $per_page, $page);
 
 $stmt = $pdo->prepare("
     SELECT cv.*, p.project_code, p.project_name, gv.vendor_name,
-           c.clicked_at AS click_time, c.ip_address, c.country_code, c.device_type
+           c.clicked_at AS click_time_from_click, c.ip_address, c.country_code, c.device_type
     FROM conversions cv
     JOIN projects p ON cv.project_id = p.id
     JOIN global_vendors gv ON cv.vendor_id = gv.id
@@ -122,20 +122,22 @@ $fmt_when = static function ($dt) {
             <table class="tf-table tf-conv-table">
                 <thead>
                     <tr>
-                        <th>When</th>
-                        <th>Lag</th>
+                        <th>Click Time</th>
+                        <th>Conversion Time</th>
+                        <th>Time Difference</th>
                         <th>Campaign</th>
-                        <th>IDs</th>
                         <th class="is-numeric">Revenue</th>
                         <th class="is-numeric">Payout</th>
                         <th class="is-numeric">Profit</th>
-                        <th>State</th>
+                        <th>Status</th>
+                        <th>Transaction ID</th>
+                        <th>Click ID</th>
                     </tr>
                 </thead>
                 <tbody>
                     <?php if (empty($conversions)): ?>
                     <tr class="is-empty">
-                        <td colspan="8">
+                        <td colspan="10">
                             <div class="tf-conv-empty">
                                 <i class="bi bi-inbox" aria-hidden="true"></i>
                                 <p>No conversions match these filters.</p>
@@ -149,7 +151,9 @@ $fmt_when = static function ($dt) {
                         $profit = (float)($cv['profit'] ?? 0);
                         $cur = $cv['currency'] ?? 'USD';
                         [$conv_day, $conv_time] = $fmt_when($cv['converted_at'] ?? '');
-                        [$click_day, $click_time] = $fmt_when($cv['click_time'] ?? '');
+                        $click_raw = $cv['click_time'] ?: ($cv['click_time_from_click'] ?? '');
+                        [$click_day, $click_time] = $fmt_when($click_raw);
+                        $conversion_status = trim((string)($cv['status'] ?? 'complete')) ?: 'complete';
                         $row_class = [];
                         if (!empty($cv['is_manual'])) $row_class[] = 'is-manual';
                         $row_class[] = $profit >= 0 ? 'is-gain' : 'is-loss';
@@ -159,11 +163,14 @@ $fmt_when = static function ($dt) {
                     <tr class="<?php echo implode(' ', $row_class); ?>">
                         <td>
                             <div class="tf-conv-when">
+                                <strong><?php echo sanitize($click_day); ?></strong>
+                                <span><?php echo sanitize($click_time); ?></span>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="tf-conv-when">
                                 <strong><?php echo sanitize($conv_day); ?></strong>
                                 <span><?php echo sanitize($conv_time); ?></span>
-                                <?php if ($click_time): ?>
-                                <em>clicked <?php echo sanitize($click_day === $conv_day ? $click_time : $click_day . ' ' . $click_time); ?></em>
-                                <?php endif; ?>
                             </div>
                         </td>
                         <td><span class="tf-conv-lag"><?php echo sanitize($td_str); ?></span></td>
@@ -176,20 +183,13 @@ $fmt_when = static function ($dt) {
                                 </span>
                             </div>
                         </td>
-                        <td>
-                            <div class="tf-conv-ids">
-                                <code title="<?php echo sanitize($click_id); ?>"><?php echo sanitize(strlen($click_id) > 12 ? substr($click_id, 0, 10) . '…' : $click_id); ?></code>
-                                <?php if ($txn !== ''): ?>
-                                <code class="is-txn" title="Transaction"><?php echo sanitize(strlen($txn) > 14 ? substr($txn, 0, 12) . '…' : $txn); ?></code>
-                                <?php endif; ?>
-                            </div>
-                        </td>
                         <td class="is-numeric"><span class="tf-money is-rev"><?php echo format_currency($cv['client_revenue'] ?? 0, $cur); ?></span></td>
                         <td class="is-numeric"><span class="tf-money is-pay"><?php echo format_currency($cv['vendor_cost'] ?? 0, $cur); ?></span></td>
                         <td class="is-numeric"><span class="tf-money <?php echo $profit >= 0 ? 'is-up' : 'is-down'; ?>"><?php echo format_currency($profit, $cur); ?></span></td>
                         <td>
                             <div class="tf-conv-state">
-                                <span class="badge <?php echo $ap === 'approved' ? 'is-approved' : ($ap === 'rejected' ? 'is-danger' : 'is-warning'); ?>"><?php echo sanitize(ucfirst($ap)); ?></span>
+                                <span class="badge <?php echo $conversion_status === 'complete' ? 'is-approved' : 'is-danger'; ?>"><?php echo sanitize(ucfirst($conversion_status)); ?></span>
+                                <span class="badge <?php echo $ap === 'approved' ? 'is-approved' : ($ap === 'rejected' ? 'is-danger' : 'is-warning'); ?>">Approval: <?php echo sanitize(ucfirst($ap)); ?></span>
                                 <?php if (!empty($cv['is_manual'])): ?>
                                 <span class="badge is-accent">Manual</span>
                                 <?php else: ?>
@@ -215,6 +215,8 @@ $fmt_when = static function ($dt) {
                                 </span>
                             </div>
                         </td>
+                        <td><code class="is-txn"><?php echo $txn !== '' ? sanitize($txn) : '—'; ?></code></td>
+                        <td><code title="<?php echo sanitize($click_id); ?>"><?php echo sanitize($click_id); ?></code></td>
                     </tr>
                     <?php endforeach; endif; ?>
                 </tbody>

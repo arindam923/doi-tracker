@@ -16,7 +16,7 @@ if ($project_filter) { $where[] = "cv.project_id = ?"; $params[] = $project_filt
 if ($vendor_filter) { $where[] = "cv.vendor_id = ?"; $params[] = $vendor_filter; }
 
 $stmt = $pdo->prepare("
-    SELECT cv.*, p.project_code, gv.vendor_name, c.clicked_at, c.country_code
+    SELECT cv.*, p.project_code, gv.vendor_name, COALESCE(cv.click_time, c.clicked_at) AS clicked_at, c.country_code
     FROM conversions cv
     JOIN projects p ON cv.project_id = p.id
     JOIN global_vendors gv ON cv.vendor_id = gv.id
@@ -29,7 +29,7 @@ $stmt->execute($params);
 header('Content-Type: text/csv; charset=utf-8');
 header('Content-Disposition: attachment; filename="convlogs_' . $from_date . '_to_' . $to_date . '.csv"');
 $out = fopen('php://output', 'w');
-fputcsv($out, ['Click ID', 'Project', 'Vendor', 'Country', 'Click Time', 'Convert Time', 'Time Diff (s)', 'Status', 'Approval', 'Revenue', 'Sale Amount', 'Currency', 'Payout', 'Profit', 'Transaction ID', 'Sub1', 'Sub2', 'Sub3', 'Sub4', 'Sub5']);
+fputcsv($out, ['Click ID', 'Project', 'Vendor', 'Country', 'Click Time', 'Conversion Time', 'Time Difference (s)', 'Status', 'Approval', 'Revenue', 'Sale Amount', 'Currency', 'Payout', 'Profit', 'Transaction ID', 'Sub1', 'Sub2', 'Sub3', 'Sub4', 'Sub5']);
 while ($r = $stmt->fetch()) {
     fputcsv($out, [
         $r['click_id'], $r['project_code'], $r['vendor_name'], $r['country_code'],
