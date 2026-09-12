@@ -8,7 +8,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect(BASE_URL . '/settings/index.php');
     }
 
-    $keys = ['site_name', 'default_currency', 'session_timeout_hours', 'smtp_enabled', 'smtp_host', 'smtp_port', 'smtp_user', 'resend_api_key', 'email_from_address', 'email_from_name', 'ip_enrichment_enabled', 'global_postback_enabled', 'vendor_login_enabled', 'global_postback_url', 'strict_target_device', 'email_rate_per_minute'];
+    $keys = ['site_name', 'default_currency', 'session_timeout_hours', 'smtp_enabled', 'smtp_host', 'smtp_port', 'smtp_user', 'resend_api_key', 'email_from_address', 'email_from_name', 'ip_enrichment_enabled', 'global_postback_enabled', 'vendor_login_enabled', 'global_postback_url', 'strict_target_device', 'email_rate_per_minute', 'weekly_client_reports_enabled', 'weekly_vendor_reports_enabled', 'weekly_report_day', 'weekly_report_time'];
     foreach ($keys as $key) {
         if (isset($_POST[$key])) {
             set_setting($pdo, $key, trim($_POST[$key]));
@@ -148,6 +148,39 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                             <p class="form-text mb-0">
                                 Macros: <code>{click_id}</code>, <code>{status}</code>, <code>{sale_amount}</code>, <code>{currency}</code>, <code>{payout}</code>, <code>{transaction_id}</code>, <code>{sub1}</code>…<code>{sub5}</code> (also supports <code>{conversion_id}</code>)
                             </p>
+                        </div>
+                    </div>
+
+                    <hr class="my-4">
+
+                    <h6 class="fw-semibold mb-3">Automated Weekly Reports</h6>
+                    <p class="text-muted small mb-3">Admin-controlled weekly performance mails. When enabled, every active Client / approved Vendor with an email gets a Monday report automatically. Manual scheduled reports still work alongside.</p>
+                    <div class="row g-3">
+                        <div class="col-12 col-md-3">
+                            <label for="weekly_client_reports_enabled" class="tf-label">Client Weekly Reports</label>
+                            <select id="weekly_client_reports_enabled" name="weekly_client_reports_enabled" class="form-select">
+                                <option value="0" <?php echo ($settings['weekly_client_reports_enabled'] ?? '0') === '0' ? 'selected' : ''; ?>>Disabled</option>
+                                <option value="1" <?php echo ($settings['weekly_client_reports_enabled'] ?? '0') === '1' ? 'selected' : ''; ?>>Enabled — every Monday</option>
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-3">
+                            <label for="weekly_vendor_reports_enabled" class="tf-label">Vendor Weekly Reports</label>
+                            <select id="weekly_vendor_reports_enabled" name="weekly_vendor_reports_enabled" class="form-select">
+                                <option value="0" <?php echo ($settings['weekly_vendor_reports_enabled'] ?? '0') === '0' ? 'selected' : ''; ?>>Disabled</option>
+                                <option value="1" <?php echo ($settings['weekly_vendor_reports_enabled'] ?? '0') === '1' ? 'selected' : ''; ?>>Enabled — every Monday</option>
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-3">
+                            <label for="weekly_report_day" class="tf-label">Report Day</label>
+                            <select id="weekly_report_day" name="weekly_report_day" class="form-select">
+                                <?php foreach ([1=>'Monday',2=>'Tuesday',3=>'Wednesday',4=>'Thursday',5=>'Friday',6=>'Saturday',7=>'Sunday'] as $d=>$lbl): ?>
+                                <option value="<?php echo $d; ?>" <?php echo (int)($settings['weekly_report_day'] ?? 1) === $d ? 'selected' : ''; ?>><?php echo $lbl; ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-3">
+                            <label for="weekly_report_time" class="tf-label">Report Time (UTC)</label>
+                            <input type="time" id="weekly_report_time" name="weekly_report_time" class="form-control" value="<?php echo sanitize($settings['weekly_report_time'] ?? '09:00'); ?>">
                         </div>
                     </div>
 

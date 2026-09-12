@@ -326,7 +326,11 @@ INSERT INTO `settings` (`setting_key`, `setting_value`) VALUES
 ('strict_target_device', '0'),
 ('email_bucket_tokens', '50'),
 ('email_bucket_last_ts', '0'),
-('email_rate_per_minute', '50');
+('email_rate_per_minute', '50'),
+('weekly_client_reports_enabled', '0'),
+('weekly_vendor_reports_enabled', '0'),
+('weekly_report_day', '1'),
+('weekly_report_time', '09:00');
 
 -- ============================================================
 -- SENT EMAILS

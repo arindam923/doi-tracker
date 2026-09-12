@@ -28,13 +28,70 @@ function sched_log($msg) {
     error_log('reports_scheduler: ' . $msg);
 }
 
-function sched_next_run($frequency, $from_ts) {
+function weekly_next_run(PDO $pdo, $from_ts = null) {
+    $from_ts = $from_ts ?: time();
+    $day = max(1, min(7, (int)get_setting($pdo, 'weekly_report_day', '1')));
+    $time_str = trim((string)get_setting($pdo, 'weekly_report_time', '09:00'));
+    if (!preg_match('/^\d{2}:\d{2}$/', $time_str)) $time_str = '09:00';
+    [$hh,$mm] = array_map('intval', explode(':', $time_str));
+    $hh = max(0,min(23,$hh)); $mm = max(0,min(59,$mm));
+    $days_map = [1=>'monday',2=>'tuesday',3=>'wednesday',4=>'thursday',5=>'friday',6=>'saturday',7=>'sunday'];
+    $target = $days_map[$day];
+    $candidate = strtotime("next $target $hh:$mm:00", $from_ts);
+    if ($candidate <= $from_ts) $candidate = strtotime("+1 week", $candidate);
+    return $candidate;
+}
+
+function sched_next_run($frequency, $from_ts, PDO $pdo = null) {
     switch ($frequency) {
         case 'hourly':      return strtotime('+1 hour', $from_ts);
-        case 'weekly':      return strtotime('+1 week', $from_ts);
+        case 'weekly':      return $pdo ? weekly_next_run($pdo, $from_ts) : strtotime('+1 week', $from_ts);
         case 'monthly':     return strtotime('+1 month', $from_ts);
-        case 'custom_cron': return strtotime('+1 day', $from_ts); // best-effort
-        default:            return strtotime('+1 day', $from_ts); // daily
+        case 'custom_cron': return strtotime('+1 day', $from_ts);
+        default:            return strtotime('+1 day', $from_ts);
+    }
+}
+
+function sync_settings_driven_reports(PDO $pdo): void {
+    $day = max(1,min(7,(int)get_setting($pdo,'weekly_report_day','1')));
+    $time_str = trim((string)get_setting($pdo,'weekly_report_time','09:00'));
+    if (!preg_match('/^\d{2}:\d{2}$/',$time_str)) $time_str='09:00';
+    $next = date('Y-m-d H:i:s', weekly_next_run($pdo, time()));
+
+    $client_enabled = get_setting($pdo,'weekly_client_reports_enabled','0')==='1';
+    if ($client_enabled) {
+        foreach ($pdo->query("SELECT id, client_name, email FROM clients WHERE is_active=1 AND email IS NOT NULL AND email!=''")->fetchAll() as $c) {
+            $title = 'Auto Weekly — Client #' . $c['id'];
+            $exists = $pdo->prepare("SELECT id, recipients_csv, next_run_at FROM scheduled_reports WHERE title=? LIMIT 1");
+            $exists->execute([$title]);
+            $row = $exists->fetch();
+            $fj = json_encode(['period'=>'weekly','group_by'=>'project','client_id'=>(int)$c['id']]);
+            if ($row) {
+                $pdo->prepare("UPDATE scheduled_reports SET recipients_csv=?, filters_json=?, frequency='weekly', is_active=1, next_run_at=COALESCE(next_run_at,?) WHERE id=?")->execute([$c['email'],$fj,$next,$row['id']]);
+            } else {
+                $pdo->prepare("INSERT INTO scheduled_reports (owner_id,title,report_type,group_by,filters_json,frequency,recipients_csv,next_run_at,is_active,created_at) VALUES (1,?,'overview','project',?,'weekly',?,?,1,NOW())")->execute([$title,$fj,$c['email'],$next]);
+            }
+        }
+    } else {
+        $pdo->exec("UPDATE scheduled_reports SET is_active=0 WHERE title LIKE 'Auto Weekly — Client #%'");
+    }
+
+    $vendor_enabled = get_setting($pdo,'weekly_vendor_reports_enabled','0')==='1';
+    if ($vendor_enabled) {
+        foreach ($pdo->query("SELECT id, vendor_name, email FROM global_vendors WHERE vendor_status='approved' AND email IS NOT NULL AND email!=''")->fetchAll() as $v) {
+            $title = 'Auto Weekly — Vendor #' . $v['id'];
+            $exists = $pdo->prepare("SELECT id FROM scheduled_reports WHERE title=? LIMIT 1");
+            $exists->execute([$title]);
+            $row = $exists->fetch();
+            $fj = json_encode(['period'=>'weekly','group_by'=>'project','vendor_id'=>(int)$v['id']]);
+            if ($row) {
+                $pdo->prepare("UPDATE scheduled_reports SET recipients_csv=?, filters_json=?, frequency='weekly', is_active=1, next_run_at=COALESCE(next_run_at,?) WHERE id=?")->execute([$v['email'],$fj,$next,$row['id']]);
+            } else {
+                $pdo->prepare("INSERT INTO scheduled_reports (owner_id,title,report_type,group_by,filters_json,frequency,recipients_csv,next_run_at,is_active,created_at) VALUES (1,?,'overview','project',?,'weekly',?,?,1,NOW())")->execute([$title,$fj,$v['email'],$next]);
+            }
+        }
+    } else {
+        $pdo->exec("UPDATE scheduled_reports SET is_active=0 WHERE title LIKE 'Auto Weekly — Vendor #%'");
     }
 }
 
@@ -54,6 +111,11 @@ function build_report_rows($pdo, $filters) {
     ])['rows'];
 }
 
+try { sync_settings_driven_reports($pdo); } catch (Throwable $e) { sched_log('sync failed: '.$e->getMessage()); }
+
+try {
+    $pdo->exec("SELECT * FROM scheduled_reports WHERE is_active=1 AND next_run_at<=NOW() FOR UPDATE");
+} catch (Throwable $e) {}
 $rows = $pdo->query("SELECT * FROM scheduled_reports WHERE is_active = 1 AND (next_run_at IS NULL OR next_run_at <= NOW()) LIMIT 20")->fetchAll();
 
 if (!$rows) {
@@ -109,10 +171,11 @@ foreach ($rows as $report) {
             }
         }
 
+        $next_ts = $report['frequency']==='weekly' ? weekly_next_run($pdo, time()) : sched_next_run($report['frequency'], time(), $pdo);
         $pdo->prepare("UPDATE scheduled_reports SET last_run_at = ?, next_run_at = ? WHERE id = ?")
             ->execute([
                 $now,
-                date('Y-m-d H:i:s', sched_next_run($report['frequency'], time())),
+                date('Y-m-d H:i:s', $next_ts),
                 $report['id'],
             ]);
     } catch (Throwable $e) {
