@@ -88,7 +88,7 @@ try {
         die('OK:DUPLICATE');
     }
 
-    $stmt = $pdo->prepare("SELECT * FROM projects WHERE id = ? FOR UPDATE");
+    $stmt = $pdo->prepare("SELECT p.*, c.postback_token AS client_postback_token FROM projects p LEFT JOIN clients c ON c.id = p.client_id WHERE p.id = ? FOR UPDATE");
     $stmt->execute([$project_id]);
     $project = $stmt->fetch();
 
@@ -99,7 +99,10 @@ try {
         die('Project not found');
     }
 
-    if (!hash_equals($project['postback_token'], $token)) {
+    $valid_token = false;
+    if (!empty($project['postback_token']) && hash_equals($project['postback_token'], $token)) $valid_token = true;
+    if (!$valid_token && !empty($project['client_postback_token']) && hash_equals($project['client_postback_token'], $token)) $valid_token = true;
+    if (!$valid_token) {
         $pdo->rollBack();
         http_response_code(403);
         log_postback($pdo, $project_id, $vendor_id, $click_id, 'failed', 'Invalid token', $payload, $ip_address, '403:INVALID_TOKEN');
@@ -107,8 +110,7 @@ try {
     }
 
     if ($project['status'] !== 'live') {
-        $pdo->prepare("UPDATE clicks SET is_converted = 1 WHERE click_id = ?")->execute([$click_id]);
-        $pdo->commit();
+        $pdo->rollBack();
         http_response_code(200);
         log_postback($pdo, $project_id, $vendor_id, $click_id, 'rejected', 'Project not live (status: ' . $project['status'] . ')', $payload, $ip_address, 'OK:PROJECT_NOT_LIVE');
         die('OK:PROJECT_NOT_LIVE');
@@ -130,7 +132,7 @@ try {
         die('OK:DAILY_CAP');
     }
 
-    $stmt = $pdo->prepare("SELECT pv.*, gv.vendor_status, gv.vendor_name FROM project_vendor pv JOIN global_vendors gv ON gv.id = pv.vendor_id WHERE pv.vendor_id = ? AND pv.project_id = ?");
+    $stmt = $pdo->prepare("SELECT pv.*, gv.vendor_status, gv.vendor_name, gv.global_postback_url FROM project_vendor pv JOIN global_vendors gv ON gv.id = pv.vendor_id WHERE pv.vendor_id = ? AND pv.project_id = ?");
     $stmt->execute([$vendor_id, $project_id]);
     $vendor = $stmt->fetch();
 
@@ -214,8 +216,9 @@ try {
 
 // Fire vendor postback with macro expansion
 $vendor_postback_status = 'no_url';
-if (!empty($vendor['postback_url'])) {
-    $vendor_url = $vendor['postback_url'];
+$effective_vendor_postback_url = tf_effective_postback_url($vendor['postback_url'] ?? '', $vendor['global_postback_url'] ?? '');
+if ($effective_vendor_postback_url !== '') {
+    $vendor_url = $effective_vendor_postback_url;
     $vendor_url = strtr($vendor_url, tf_postback_macros([
         'click_id' => $click_id, 'status' => $status, 'payout' => $cost,
         'transaction_id' => $transaction_id, 'sale_amount' => $sale_amount,

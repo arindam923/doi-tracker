@@ -21,7 +21,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (($_POST['action'] ?? '') === 'upload_emails') {
-        if (($vendor['traffic_type'] ?? '') !== 'Email') {
+        if (!tf_traffic_type_includes($vendor['traffic_type'] ?? '', 'Email')) {
             set_flash('danger', 'Email database uploads are only available for Email vendors.');
             redirect(BASE_URL . '/vendors/edit_global.php?id=' . $id);
         }
@@ -55,19 +55,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $telegram = trim($_POST['telegram'] ?? '');
     $skype = trim($_POST['skype'] ?? '');
     $phone = trim($_POST['phone'] ?? '');
-    $traffic_type = $_POST['traffic_type'] ?? 'Other';
+    $traffic_type = implode(',', tf_normalize_traffic_types($_POST['traffic_type'] ?? []));
     $vendor_status = $_POST['vendor_status'] ?? 'approved';
     $default_payout = floatval($_POST['default_payout'] ?? 0);
     $currency = $_POST['currency'] ?? 'USD';
     $daily_cap = intval($_POST['daily_cap'] ?? 0);
     $notes = trim($_POST['notes'] ?? '');
     $global_postback_url = trim($_POST['global_postback_url'] ?? '');
+    $push_to_all = isset($_POST['push_to_all']) && $_POST['push_to_all'] === '1';
 
     if (empty($vendor_name)) {
         set_flash('danger', 'Vendor name is required.');
         redirect(BASE_URL . '/vendors/edit_global.php?id=' . $id);
     }
-    if (!in_array($traffic_type, tf_traffic_types(), true)) $traffic_type = 'Other';
     if (!array_key_exists($vendor_status, tf_vendor_statuses())) $vendor_status = 'approved';
     if (!in_array($currency, tf_currencies(), true)) $currency = 'USD';
     if (!tf_is_valid_postback_url($global_postback_url)) {
@@ -78,7 +78,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $pdo->prepare("UPDATE global_vendors SET vendor_name=?, contact_person=?, email=?, telegram=?, skype=?, phone=?, traffic_type=?, vendor_status=?, default_payout=?, currency=?, daily_cap=?, notes=?, global_postback_url=?, updated_at=NOW() WHERE id=?")
         ->execute([$vendor_name, $contact_person, $email, $telegram, $skype, $phone, $traffic_type, $vendor_status, $default_payout, $currency, $daily_cap, $notes, $global_postback_url, $id]);
 
-    if ($traffic_type === 'Email') {
+    if ($push_to_all) {
+        $prev_url = trim((string)($vendor['global_postback_url'] ?? ''));
+        if ($global_postback_url !== '') {
+            $cleared = $pdo->prepare("UPDATE project_vendor pv JOIN global_vendors gv ON gv.id = pv.vendor_id SET pv.postback_url = NULL WHERE pv.vendor_id = ? AND pv.postback_url = gv.global_postback_url")->execute([$id]);
+            $cnt = $pdo->prepare("SELECT ROW_COUNT()")->execute() ? 0 : 0;
+            try { $cnt_stmt = $pdo->query("SELECT ROW_COUNT()"); $cnt = (int)$cnt_stmt->fetchColumn(); } catch (Throwable $e) {}
+        } else {
+            $cnt = 0;
+        }
+        audit_log($pdo, 'update', 'vendor', $id, ['push_to_all' => false], ['push_to_all' => true, 'global_postback_url' => $global_postback_url !== '' ? 'set' : 'cleared']);
+        set_flash('success', 'Vendor updated.' . ($global_postback_url !== '' ? ' Overrides that matched the global URL were cleared — assignments now inherit the current global postback.' : ''));
+        regenerate_csrf_token();
+        redirect(BASE_URL . '/vendors/global.php');
+    }
+
+    if (tf_traffic_type_includes($traffic_type, 'Email')) {
         ensure_vendor_email_list($pdo, $id, (int)($_SESSION['user_id'] ?? 0));
     }
 
@@ -136,11 +151,12 @@ require_once __DIR__ . '/../helpers/layout_header.php';
 
                         <div class="col-6 col-md-4">
                             <label for="traffic_type" class="tf-label">Traffic Type</label>
-                            <select id="traffic_type" name="traffic_type" class="form-select">
+                            <select id="traffic_type" name="traffic_type[]" class="form-select" multiple size="5">
                                 <?php foreach (tf_traffic_types() as $t): ?>
-                                <option value="<?php echo $t; ?>" <?php echo ($vendor['traffic_type'] ?? 'Other') === $t ? 'selected' : ''; ?>><?php echo sanitize($t); ?></option>
+                                <option value="<?php echo $t; ?>" <?php echo tf_traffic_type_includes($vendor['traffic_type'] ?? '', $t) ? 'selected' : ''; ?>><?php echo sanitize($t); ?></option>
                                 <?php endforeach; ?>
                             </select>
+                            <p class="form-text mb-0 small">Hold Ctrl/Cmd to select multiple traffic types.</p>
                         </div>
 
                         <div class="col-6 col-md-4">
@@ -189,11 +205,28 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                         </div>
 
                         <div class="col-12">
-                            <label for="global_postback_url" class="tf-label">Global Postback URL</label>
-                            <input type="url" id="global_postback_url" name="global_postback_url" class="form-control"
-                                   value="<?php echo sanitize($vendor['global_postback_url'] ?? ''); ?>"
-                                   placeholder="https://vendor.com/postback?click_id={click_id}&status={status}&payout={payout}&tx={transaction_id}&s1={sub1}">
-                            <p class="form-text mb-0 small">Reusable default for future project assignments. Supports <code>{click_id}</code>, <code>{status}</code>, <code>{sale_amount}</code>, <code>{currency}</code>, <code>{payout}</code>, <code>{transaction_id}</code>, <code>{sub1}</code>…<code>{sub5}</code>. Saving blank clears the global postback.</p>
+                            <label for="global_postback_url" class="tf-label">Global Postback URL — reusable for all campaigns</label>
+                            <div class="input-group">
+                                <input type="url" id="global_postback_url" name="global_postback_url" class="form-control"
+                                       value="<?php echo sanitize($vendor['global_postback_url'] ?? ''); ?>"
+                                       placeholder="https://vendor.com/postback?click_id={click_id}&status={status}&payout={payout}&tx={transaction_id}&s1={sub1}">
+                                <?php if (!empty($vendor['global_postback_url'])) echo tf_copy_button($vendor['global_postback_url'], 'btn btn-outline-secondary'); ?>
+                            </div>
+                            <p class="form-text mb-0 small">Reusable default for every project assignment. Blank assignments inherit this URL instantly via <code>tf_effective_postback_url()</code>. Supports <code>{click_id}</code>, <code>{status}</code>, <code>{sale_amount}</code>, <code>{currency}</code>, <code>{payout}</code>, <code>{transaction_id}</code>, <code>{sub1}</code>…<code>{sub5}</code>. Saving blank clears the global postback.</p>
+                            <div class="form-check mt-2">
+                                <input class="form-check-input" type="checkbox" value="1" id="push_to_all" name="push_to_all">
+                                <label class="form-check-label small" for="push_to_all">Push to all assignments now — clear project overrides that exactly match this global URL so they inherit future changes</label>
+                            </div>
+                            <?php
+                            $override_cnt = 0;
+                            try {
+                                $oc = $pdo->prepare("SELECT COUNT(*) FROM project_vendor WHERE vendor_id = ? AND postback_url IS NOT NULL AND postback_url <> ''");
+                                $oc->execute([$id]);
+                                $override_cnt = (int)$oc->fetchColumn();
+                            } catch (Throwable $e) {}
+                            if ($override_cnt > 0): ?>
+                            <p class="small text-muted mt-1"><?php echo $override_cnt; ?> assignment(s) currently have a project-specific override.</p>
+                            <?php endif; ?>
                         </div>
 
                         <div class="col-6 col-md-6">
@@ -220,7 +253,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
 </div>
 
 <?php
-if (($vendor['traffic_type'] ?? '') === 'Email'):
+if (tf_traffic_type_includes($vendor['traffic_type'] ?? '', 'Email')):
     $list_id = ensure_vendor_email_list($pdo, $id, (int)($_SESSION['user_id'] ?? 0));
     $status_filter = $_GET['estatus'] ?? '';
     $search = trim($_GET['esearch'] ?? '');

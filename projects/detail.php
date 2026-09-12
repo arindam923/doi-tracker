@@ -14,7 +14,7 @@ if (!$project) {
 }
 
 $vstmt = $pdo->prepare("
-    SELECT pv.*, gv.id AS global_vendor_id, gv.vendor_code, gv.vendor_name, gv.traffic_type,
+    SELECT pv.*, gv.id AS global_vendor_id, gv.vendor_code, gv.vendor_name, gv.traffic_type, gv.global_postback_url,
            (SELECT sl.code FROM short_links sl WHERE sl.project_id = pv.project_id AND sl.vendor_id = pv.vendor_id LIMIT 1) AS vendor_short_code
     FROM project_vendor pv
     JOIN global_vendors gv ON gv.id = pv.vendor_id
@@ -145,8 +145,28 @@ $total_revenue = $rev_data['rev'];
 $total_cost = $rev_data['cost'];
 $total_profit = $rev_data['profit'];
 
+$client_row = tf_fetch_one($pdo, "SELECT postback_token FROM clients WHERE id = ?", [(int)$project['client_id']]);
+$client_postback_token = $client_row['postback_token'] ?? null;
+if (empty($client_postback_token)) $client_postback_token = ensure_client_postback_token($pdo, (int)$project['client_id'], null);
+$client_default_postback = build_client_postback_url(BASE_URL, $client_postback_token);
 $page_title = $project['project_name'];
 $client_postback = BASE_URL . '/tracking/postback.php?click_id={click_id}&status=1&token=' . $project['postback_token'];
+$offer_vendor_links = [];
+foreach ($vendors as $offer_vendor) {
+    $short_code = trim((string)($offer_vendor['vendor_short_code'] ?? ''));
+    $tracking_link = $short_code !== '' ? tracking_public_url(BASE_URL, $short_code) : '';
+    $offer_vendor_links[] = [
+        'id' => (string)$offer_vendor['vendor_id'],
+        'name' => (string)$offer_vendor['vendor_name'],
+        'tracking' => $tracking_link,
+        'test' => $short_code !== '' ? rtrim(BASE_URL, '/') . '/tracking/test.php?c=' . rawurlencode($short_code) : '',
+        'postback' => trim((string)($offer_vendor['global_postback_url'] ?? '')),
+    ];
+}
+$offer_vendor_json = json_encode(
+    $offer_vendor_links,
+    JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
+);
 
 $page_actions = '
 <div class="d-flex align-items-center gap-2 flex-wrap">
@@ -282,54 +302,69 @@ require_once __DIR__ . '/../helpers/layout_header.php';
     </div>
 
     <div class="col-12 col-lg-6">
-        <div class="tf-card h-100">
-            <div class="tf-card-header"><h5 class="tf-card-title">Offer Links &amp; Tokens</h5></div>
+        <div class="tf-card h-100 tf-offer-link-hub">
+            <div class="tf-card-header tf-offer-link-header">
+                <div>
+                    <div class="tf-offer-link-kicker"><i class="bi bi-link-45deg"></i> Campaign access</div>
+                    <h5 class="tf-card-title mb-1">Offer Details</h5>
+                    <p class="tf-offer-link-subtitle mb-0">Everything your team needs to share, test, and track this offer.</p>
+                </div>
+                <span class="tf-offer-link-count"><i class="bi bi-grid-3x3-gap"></i> 6 links</span>
+            </div>
             <div class="tf-card-body">
-
-                <div class="mb-3">
-                    <label class="tf-label">Landing Page (Client Link)</label>
-                    <div class="input-group tf-link-field">
-                        <input type="text" class="form-control" readonly onclick="this.select()" value="<?php echo sanitize($project['client_survey_link'] ?? ''); ?>">
-                        <?php echo tf_copy_button($project['client_survey_link'] ?? ''); ?>
-                    </div>
-                </div>
-
-                <?php if (!empty($project['preview_link'])): ?>
-                <div class="mb-3">
-                    <label class="tf-label">Preview Link</label>
-                    <div class="input-group tf-link-field">
-                        <input type="text" class="form-control" readonly onclick="this.select()" value="<?php echo sanitize($project['preview_link']); ?>">
-                        <?php echo tf_copy_button($project['preview_link']); ?>
-                        <a href="<?php echo sanitize($project['preview_link']); ?>" target="_blank" rel="noopener" class="btn btn-outline-secondary" title="Open preview"><i class="bi bi-box-arrow-up-right"></i></a>
-                    </div>
-                </div>
-                <?php endif; ?>
-
-                <div class="mb-3">
-                    <label class="form-label small fw-semibold text-secondary d-flex align-items-center gap-2">
-                        <span>Client Postback URL</span>
-                        <i class="bi bi-info-circle text-muted" data-bs-toggle="tooltip" data-bs-placement="top" title="Per-project. Append this URL to the client's conversion tracking setup."></i>
-                    </label>
-                    <div class="input-group tf-link-field">
-                        <input type="text" class="form-control" readonly onclick="this.select()" value="<?php echo sanitize($client_postback); ?>">
-                        <?php echo tf_copy_button($client_postback); ?>
-                    </div>
-                    <details class="mt-2"><summary class="small text-muted cursor-pointer">More parameters</summary>
-                        <div class="small text-muted mt-2" style="font-family: ui-monospace, monospace;">
-                            <code>sale_amount</code>, <code>currency</code>, <code>payout</code>, <code>transaction_id</code>, <code>sub1</code>…<code>sub5</code><br>
-                            See <a href="<?php echo BASE_URL; ?>/tracking/help.php" target="_blank">Postback Help</a> for full reference.
+                <div class="tf-offer-link-featured">
+                    <div class="tf-offer-link-tile is-primary">
+                        <div class="tf-offer-link-tile-top">
+                            <span class="tf-offer-link-icon"><i class="bi bi-window"></i></span>
+                            <span class="tf-offer-link-type">Client Link</span>
                         </div>
-                    </details>
-                </div>
+                        <div class="tf-offer-link-name">Landing Page</div>
+                        <div class="tf-offer-link-value" title="<?php echo sanitize($project['client_survey_link'] ?? ''); ?>"><?php echo sanitize($project['client_survey_link'] ?? 'Unavailable'); ?></div>
+                        <div class="tf-offer-link-actions">
+                            <?php echo tf_copy_button($project['client_survey_link'] ?? '', 'btn btn-light btn-sm'); ?>
+                            <?php if (!empty($project['client_survey_link'])): ?><a href="<?php echo sanitize($project['client_survey_link']); ?>" target="_blank" rel="noopener" class="btn btn-light btn-sm" aria-label="Open landing page"><i class="bi bi-arrow-up-right"></i></a><?php endif; ?>
+                        </div>
+                    </div>
 
-                <div class="mb-0">
-                    <label class="tf-label">Postback Token</label>
-                    <div class="input-group tf-link-field">
-                        <input type="text" class="form-control" readonly onclick="this.select()" value="<?php echo sanitize($project['postback_token']); ?>">
-                        <?php echo tf_copy_button($project['postback_token']); ?>
+                    <div class="tf-offer-link-tile">
+                        <div class="tf-offer-link-tile-top">
+                            <span class="tf-offer-link-icon"><i class="bi bi-eye"></i></span>
+                            <span class="tf-offer-link-type">Share safely</span>
+                        </div>
+                        <div class="tf-offer-link-name">Preview Link</div>
+                        <div class="tf-offer-link-value" title="<?php echo sanitize($project['preview_link'] ?? ''); ?>"><?php echo sanitize($project['preview_link'] ?? 'Not configured'); ?></div>
+                        <div class="tf-offer-link-actions">
+                            <?php if (!empty($project['preview_link'])): ?><?php echo tf_copy_button($project['preview_link'], 'btn btn-outline-secondary btn-sm'); ?><a href="<?php echo sanitize($project['preview_link']); ?>" target="_blank" rel="noopener" class="btn btn-outline-secondary btn-sm" aria-label="Open preview link"><i class="bi bi-arrow-up-right"></i></a><?php else: ?><span class="small text-muted">Add from Edit Project</span><?php endif; ?>
+                        </div>
                     </div>
                 </div>
 
+                <details class="tf-offer-link-details" <?php echo count($offer_vendor_links) === 1 ? 'open' : ''; ?>>
+                    <summary><span><i class="bi bi-broadcast-pin"></i> Tracking &amp; callbacks</span><span class="tf-offer-link-summary-note"><?php echo count($offer_vendor_links) ? count($offer_vendor_links) . ' vendor' . (count($offer_vendor_links) === 1 ? '' : 's') : 'Attach a vendor to generate links'; ?></span></summary>
+                    <div class="tf-offer-link-details-body">
+                        <?php if ($offer_vendor_links): ?>
+                        <label class="tf-label mb-2" for="offer_vendor_select">Vendor channel</label>
+                        <select class="form-select form-select-sm tf-offer-vendor-select" id="offer_vendor_select" aria-label="Select vendor channel">
+                            <?php foreach ($offer_vendor_links as $index => $offer_vendor): ?><option value="<?php echo (int)$index; ?>"><?php echo sanitize($offer_vendor['name']); ?></option><?php endforeach; ?>
+                        </select>
+                        <div class="tf-offer-secondary-links" id="offer_vendor_links" aria-live="polite"></div>
+                        <script type="application/json" id="offer-vendor-data"><?php echo $offer_vendor_json; ?></script>
+                        <?php else: ?><div class="tf-offer-empty"><i class="bi bi-link-45deg"></i><span>Attach a vendor to generate Tracking Link, Test Link, and Global Postback URL.</span></div><?php endif; ?>
+
+                        <div class="tf-offer-utility-row" style="background: var(--tf-primary-50, #eef2ff); border: 1px solid var(--tf-primary-200, #c7d2fe);">
+                            <div><span class="tf-offer-utility-label"><i class="bi bi-star-fill text-warning"></i> Client Default Postback URL — reusable for all campaigns</span><span class="tf-offer-utility-value">One link for this client across every project (via <code>click_id</code>). Same token as on the <a href="<?php echo BASE_URL; ?>/clients/edit.php?id=<?php echo (int)$project['client_id']; ?>">client page</a>.</span><span class="tf-offer-utility-value tf-offer-mono small"><?php echo sanitize($client_default_postback); ?></span></div>
+                            <?php echo tf_copy_button($client_default_postback, 'btn btn-primary btn-sm'); ?>
+                        </div>
+                        <div class="tf-offer-utility-row">
+                            <div><span class="tf-offer-utility-label">Project Postback URL (legacy)</span><span class="tf-offer-utility-value">Project-specific fallback — still works.</span><span class="tf-offer-utility-value tf-offer-mono small"><?php echo sanitize($client_postback); ?></span></div>
+                            <?php echo tf_copy_button($client_postback, 'btn btn-outline-secondary btn-sm'); ?>
+                        </div>
+                        <div class="tf-offer-utility-row">
+                            <div><span class="tf-offer-utility-label">Postback Tokens</span><span class="tf-offer-utility-value tf-offer-mono small">Client default: <?php echo sanitize($client_postback_token); ?><br>Project: <?php echo sanitize($project['postback_token']); ?></span></div>
+                            <div class="d-flex gap-1"><?php echo tf_copy_button($client_postback_token, 'btn btn-outline-secondary btn-sm'); ?><?php echo tf_copy_button($project['postback_token'], 'btn btn-outline-secondary btn-sm'); ?></div>
+                        </div>
+                    </div>
+                </details>
             </div>
         </div>
     </div>
@@ -412,7 +447,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
             <div class="col-12 col-md-4">
                 <label class="tf-label" for="attach_postback_url">Project Override Postback URL</label>
                 <input type="url" name="postback_url" id="attach_postback_url" class="form-control form-control-sm" placeholder="Blank uses global postback">
-                <div class="form-text small">Outbound macros: <code>{click_id}</code>, <code>{status}</code>, <code>{sale_amount}</code>, <code>{currency}</code>, <code>{payout}</code>, <code>{transaction_id}</code>, <code>{sub1}</code>…<code>{sub5}</code>.</div>
+                <div class="form-text small">Leave blank to use the selected vendor's current global postback. You may enter a project-specific override. Outbound macros: <code>{click_id}</code>, <code>{status}</code>, <code>{sale_amount}</code>, <code>{currency}</code>, <code>{payout}</code>, <code>{transaction_id}</code>, <code>{sub1}</code>…<code>{sub5}</code>.</div>
             </div>
             <div class="col-12 col-md-3">
                 <label class="tf-label" for="attach_notes">Notes</label>
@@ -750,6 +785,64 @@ $extra_js = <<<EOT
             if (drawProjectChart() || tries > 20) clearInterval(t);
         }, 150);
     }
+
+    var offerVendorSelect = document.getElementById('offer_vendor_select');
+    var offerVendorLinks = document.getElementById('offer_vendor_links');
+    var offerVendorData = document.getElementById('offer-vendor-data');
+    function renderOfferVendorLinks() {
+        if (!offerVendorSelect || !offerVendorLinks || !offerVendorData) return;
+        var vendors = [];
+        try { vendors = JSON.parse(offerVendorData.textContent || '[]'); } catch (error) { vendors = []; }
+        var vendor = vendors[parseInt(offerVendorSelect.value || '0', 10)] || {};
+        var links = [
+            { label: 'Tracking Link', icon: 'bi-bullseye', value: vendor.tracking, open: true },
+            { label: 'Test Link', icon: 'bi-shield-check', value: vendor.test, open: true },
+            { label: 'Global Postback URL', icon: 'bi-arrow-repeat', value: vendor.postback, open: false }
+        ];
+        offerVendorLinks.innerHTML = '';
+        links.forEach(function (link) {
+            var row = document.createElement('div');
+            row.className = 'tf-offer-secondary-link';
+            var meta = document.createElement('div');
+            meta.className = 'tf-offer-secondary-meta';
+            meta.innerHTML = '<span class="tf-offer-secondary-icon"><i class="bi ' + link.icon + '"></i></span><span class="tf-offer-utility-label"></span>';
+            meta.querySelector('.tf-offer-utility-label').textContent = link.label;
+            var value = document.createElement('div');
+            value.className = 'tf-offer-secondary-value';
+            value.textContent = link.value || 'Not configured';
+            if (link.value) value.title = link.value;
+            var actions = document.createElement('div');
+            actions.className = 'tf-offer-link-actions';
+            if (link.value) {
+                var copy = document.createElement('button');
+                copy.type = 'button';
+                copy.className = 'btn btn-outline-secondary btn-sm';
+                copy.setAttribute('aria-label', 'Copy ' + link.label);
+                copy.innerHTML = '<i class="bi bi-clipboard" aria-hidden="true"></i>';
+                copy.addEventListener('click', function () { if (typeof tfCopyText === 'function') tfCopyText(link.value, copy); });
+                actions.appendChild(copy);
+                if (link.open) {
+                    var open = document.createElement('a');
+                    open.href = link.value;
+                    open.target = '_blank';
+                    open.rel = 'noopener';
+                    open.className = 'btn btn-outline-secondary btn-sm';
+                    open.setAttribute('aria-label', 'Open ' + link.label);
+                    open.innerHTML = '<i class="bi bi-arrow-up-right"></i>';
+                    actions.appendChild(open);
+                }
+            }
+            row.appendChild(meta);
+            row.appendChild(value);
+            row.appendChild(actions);
+            offerVendorLinks.appendChild(row);
+        });
+    }
+    if (offerVendorSelect) {
+        offerVendorSelect.addEventListener('change', renderOfferVendorLinks);
+        renderOfferVendorLinks();
+    }
+
     var sel = document.getElementById('attach_global_vendor_id');
     var payout = document.getElementById('attach_payout');
     var postback = document.getElementById('attach_postback_url');
@@ -765,7 +858,10 @@ $extra_js = <<<EOT
                 payout.value = opt.getAttribute('data-payout');
             }
             if (postback && postback.dataset.userEdited !== '1') {
-                postback.value = opt ? (opt.getAttribute('data-postback') || '') : '';
+                postback.value = '';
+                postback.placeholder = opt && opt.getAttribute('data-postback')
+                    ? opt.getAttribute('data-postback')
+                    : 'Blank uses global postback';
             }
         });
     }

@@ -9,7 +9,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     $client_name = trim($_POST['client_name'] ?? '');
-    $client_code = strtoupper(trim($_POST['client_code'] ?? ''));
     $contact_person = trim($_POST['contact_person'] ?? '');
     $email = trim($_POST['email'] ?? '');
     $phone = trim($_POST['phone'] ?? '');
@@ -23,13 +22,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $errors = [];
     if (empty($client_name)) $errors[] = 'Client name is required.';
-    if (empty($client_code)) $errors[] = 'Client code is required.';
-    if (strlen($client_code) < 2 || strlen($client_code) > 20) $errors[] = 'Client code must be 2-20 characters.';
 
+    // Auto-generate client code: first 4 letters of name + 4 random digits
     if (empty($errors)) {
-        $check = $pdo->prepare("SELECT id FROM clients WHERE client_code = ?");
-        $check->execute([$client_code]);
-        if ($check->fetch()) $errors[] = 'Client code already exists. Please choose a different one.';
+        $base = strtoupper(preg_replace('/[^a-zA-Z]/', '', $client_name));
+        $base = substr($base, 0, 4);
+        if (strlen($base) < 2) $base = str_pad($base, 2, 'X');
+
+        $max_attempts = 50;
+        for ($i = 0; $i < $max_attempts; $i++) {
+            $client_code = $base . str_pad(mt_rand(0, 9999), 4, '0', STR_PAD_LEFT);
+            $check = $pdo->prepare("SELECT id FROM clients WHERE client_code = ?");
+            $check->execute([$client_code]);
+            if (!$check->fetch()) break;
+        }
     }
 
     if (!empty($errors)) {
@@ -38,8 +44,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect(BASE_URL . '/clients/create.php');
     }
 
-    $stmt = $pdo->prepare("INSERT INTO clients (client_name, client_code, contact_person, email, phone, skype, telegram, country, default_currency, payment_terms, billing_address, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-    $stmt->execute([$client_name, $client_code, $contact_person, $email, $phone, $skype, $telegram, $country, $default_currency, $payment_terms, $billing_address, $notes]);
+    $postback_token = generate_postback_token();
+    $stmt = $pdo->prepare("INSERT INTO clients (client_name, client_code, postback_token, contact_person, email, phone, skype, telegram, country, default_currency, payment_terms, billing_address, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    $stmt->execute([$client_name, $client_code, $postback_token, $contact_person, $email, $phone, $skype, $telegram, $country, $default_currency, $payment_terms, $billing_address, $notes]);
 
     audit_log($pdo, 'create', 'client', $pdo->lastInsertId(), null, ['client_name' => $client_name]);
 
@@ -66,27 +73,21 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                     <?php echo csrf_field(); ?>
 
                     <div class="row g-3">
-                        <div class="col-12 col-md-8">
+                        <div class="col-12">
                             <label for="client_name" class="tf-label">Client Name <span class="text-danger">*</span></label>
                             <input type="text" id="client_name" name="client_name" class="form-control"
                                    value="<?php echo sanitize($form_data['client_name'] ?? ''); ?>" required>
                         </div>
 
-                        <div class="col-12 col-md-4">
-                            <label for="client_code" class="tf-label">Client Code <span class="text-danger">*</span></label>
-                            <input type="text" id="client_code" name="client_code" class="form-control"
-                                   value="<?php echo sanitize($form_data['client_code'] ?? ''); ?>"
-                                   maxlength="20" style="text-transform: uppercase;" required>
-                            <p class="form-text">Short code (e.g. EASD, QCVA)</p>
-                        </div>
 
-                        <div class="col-12 col-md-6">
+
+                        <div class="col-12 col-md-4">
                             <label for="contact_person" class="tf-label">Contact Person</label>
                             <input type="text" id="contact_person" name="contact_person" class="form-control"
                                    value="<?php echo sanitize($form_data['contact_person'] ?? ''); ?>">
                         </div>
 
-                        <div class="col-12 col-md-6">
+                        <div class="col-12 col-md-4">
                             <label for="email" class="tf-label">Email</label>
                             <input type="email" id="email" name="email" class="form-control"
                                    value="<?php echo sanitize($form_data['email'] ?? ''); ?>">

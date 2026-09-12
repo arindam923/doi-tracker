@@ -21,7 +21,7 @@ if ($status_filter !== '' && array_key_exists($status_filter, tf_vendor_statuses
     $params[] = $status_filter;
 }
 if ($traffic_filter !== '' && in_array($traffic_filter, tf_traffic_types(), true)) {
-    $where[] = "gv.traffic_type = ?";
+    $where[] = "FIND_IN_SET(?, gv.traffic_type)";
     $params[] = $traffic_filter;
 }
 $where_sql = $where ? 'WHERE ' . implode(' AND ', $where) : '';
@@ -128,7 +128,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                     <td>
                         <div class="fw-semibold"><?php echo sanitize($g['vendor_name']); ?></div>
                     </td>
-                    <td><?php echo sanitize($g['traffic_type']); ?></td>
+                    <td><?php echo sanitize(str_replace(',', ', ', $g['traffic_type'] ?? '')); ?></td>
                     <td><?php echo status_badge($g['vendor_status']); ?></td>
                     <td class="text-center"><?php echo (int)$g['attached_projects']; ?></td>
                     <td class="text-end"><?php echo number_format((int)$g['total_clicks']); ?></td>

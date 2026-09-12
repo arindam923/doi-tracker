@@ -26,7 +26,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $telegram = trim($_POST['telegram'] ?? '');
     $skype = trim($_POST['skype'] ?? '');
     $phone = trim($_POST['phone'] ?? '');
-    $traffic_type = $_POST['traffic_type'] ?? 'Other';
+    $traffic_type = implode(',', tf_normalize_traffic_types($_POST['traffic_type'] ?? []));
     $vendor_status = $_POST['vendor_status'] ?? 'approved';
     $default_payout = floatval($_POST['default_payout'] ?? 0);
     $currency = $_POST['currency'] ?? $default_currency;
@@ -43,7 +43,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($vendor_name)) $errors[] = 'Vendor name is required.';
     if (!tf_is_valid_postback_url($global_postback_url)) $errors[] = 'Global postback URL must be a valid HTTP or HTTPS URL.';
     if (!tf_is_valid_postback_url($postback_url)) $errors[] = 'Project override postback URL must be a valid HTTP or HTTPS URL.';
-    if (!in_array($traffic_type, tf_traffic_types(), true)) $traffic_type = 'Other';
     if (!array_key_exists($vendor_status, tf_vendor_statuses())) $vendor_status = 'approved';
     if (!in_array($currency, tf_currencies(), true)) $currency = $default_currency;
 
@@ -98,7 +97,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $global_vendor_id = (int)$pdo->lastInsertId();
         }
 
-        if ($traffic_type === 'Email' && function_exists('ensure_vendor_email_list')) {
+        if (tf_traffic_type_includes($traffic_type, 'Email') && function_exists('ensure_vendor_email_list')) {
             ensure_vendor_email_list($pdo, $global_vendor_id, (int)($_SESSION['user_id'] ?? 0));
         }
 
@@ -117,7 +116,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     allowed_clicks_limit = VALUES(allowed_clicks_limit),
                     daily_cap = VALUES(daily_cap),
                     notes = VALUES(notes)
-            ")->execute([$project_id, $global_vendor_id, $payout, $currency, $pv_status, tf_resolve_postback_url($postback_url, $global_postback_url), $allowed_clicks_limit, $daily_cap, (int)($_SESSION['user_id'] ?? 0), $notes]);
+            ")->execute([$project_id, $global_vendor_id, $payout, $currency, $pv_status, $postback_url, $allowed_clicks_limit, $daily_cap, (int)($_SESSION['user_id'] ?? 0), $notes]);
 
             ensure_tracking_short_link($pdo, $project_id, $global_vendor_id);
         }
@@ -179,11 +178,12 @@ require_once __DIR__ . '/../helpers/layout_header.php';
 
                         <div class="col-6 col-md-4">
                             <label for="traffic_type" class="tf-label">Traffic Type</label>
-                            <select id="traffic_type" name="traffic_type" class="form-select">
-                                <?php $tt = $form_data['traffic_type'] ?? 'Other'; foreach (tf_traffic_types() as $t): ?>
-                                <option value="<?php echo $t; ?>" <?php echo $tt === $t ? 'selected' : ''; ?>><?php echo sanitize($t); ?></option>
+                            <select id="traffic_type" name="traffic_type[]" class="form-select" multiple size="5">
+                                <?php $tt = tf_normalize_traffic_types($form_data['traffic_type'] ?? []); foreach (tf_traffic_types() as $t): ?>
+                                <option value="<?php echo $t; ?>" <?php echo in_array($t, $tt, true) ? 'selected' : ''; ?>><?php echo sanitize($t); ?></option>
                                 <?php endforeach; ?>
                             </select>
+                            <p class="form-text mb-0 small">Hold Ctrl/Cmd to select multiple traffic types.</p>
                         </div>
 
                         <div class="col-6 col-md-4">
@@ -277,7 +277,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                             <input type="url" id="postback_url" name="postback_url" class="form-control"
                                    value="<?php echo sanitize($form_data['postback_url'] ?? ''); ?>"
                                    placeholder="https://vendor.com/postback?click_id={click_id}&status={status}&payout={payout}&tx={transaction_id}&s1={sub1}">
-                            <p class="form-text mb-0 small">Optional project-specific override. Blank uses the Global Postback URL. Supports <code>{click_id}</code>, <code>{status}</code>, <code>{sale_amount}</code>, <code>{currency}</code>, <code>{payout}</code>, <code>{transaction_id}</code>, <code>{sub1}</code>…<code>{sub5}</code>.</p>
+                            <p class="form-text mb-0 small">Optional project-specific override. Blank uses the Global Postback URL and follows future global changes. Supports <code>{click_id}</code>, <code>{status}</code>, <code>{sale_amount}</code>, <code>{currency}</code>, <code>{payout}</code>, <code>{transaction_id}</code>, <code>{sub1}</code>…<code>{sub5}</code>.</p>
                         </div>
                         <?php endif; ?>
 
@@ -309,9 +309,9 @@ require_once __DIR__ . '/../helpers/layout_header.php';
         userEdited = true;
     });
     globalPostback.addEventListener('input', function () {
-        if (!userEdited) projectOverride.value = globalPostback.value;
+        if (!userEdited) projectOverride.placeholder = globalPostback.value || 'Blank uses global postback';
     });
-    if (!userEdited) projectOverride.value = globalPostback.value;
+    if (!userEdited) projectOverride.placeholder = globalPostback.value || 'Blank uses global postback';
 })();
 </script>
 <?php endif; ?>

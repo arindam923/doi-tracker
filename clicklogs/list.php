@@ -2,56 +2,23 @@
 require_once __DIR__ . '/../config.php';
 require_role(['super_admin', 'campaign_manager']);
 
-$search = trim($_GET['search'] ?? '');
-$vendor_filter = intval($_GET['vendor_id'] ?? 0);
-$project_filter = intval($_GET['project_id'] ?? 0);
-$country_filter = trim($_GET['country'] ?? '');
-$device_filter = trim($_GET['device'] ?? '');
-$browser_filter = trim($_GET['browser'] ?? '');
-$isp_filter = trim($_GET['isp'] ?? '');
-$click_id_filter = trim($_GET['click_id'] ?? '');
-$from_date = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['from'] ?? '') ? $_GET['from'] : date('Y-m-d', strtotime('-7 days'));
-$to_date   = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['to'] ?? '') ? $_GET['to'] : date('Y-m-d');
+$filters = tf_clicklogs_filters($_GET);
+$from_date = $filters['from'];
+$to_date = $filters['to'];
+$vendor_filter = $filters['vendor_id'];
+$project_filter = $filters['project_id'];
+$country_filter = $filters['country'];
+$device_filter = $filters['device'];
+$browser_filter = $filters['browser'];
+$os_filter = $filters['os'];
+$isp_filter = $filters['isp'];
+$ip_filter = $filters['ip_address'];
+$click_id_filter = $filters['click_id'];
 $page = max(1, intval($_GET['page'] ?? 1));
 $per_page = 50;
 
-$where = ["c.clicked_at BETWEEN ? AND DATE_ADD(?, INTERVAL 1 DAY)"];
-$params = [$from_date, $to_date];
-
-if ($search) {
-    $where[] = "(c.click_id LIKE ? OR c.ip_address LIKE ? OR c.user_agent LIKE ?)";
-    $params[] = "%$search%"; $params[] = "%$search%"; $params[] = "%$search%";
-}
-if ($vendor_filter) {
-    $where[] = "c.vendor_id = ?";
-    $params[] = $vendor_filter;
-}
-if ($project_filter) {
-    $where[] = "c.project_id = ?";
-    $params[] = $project_filter;
-}
-if ($country_filter !== '') {
-    $where[] = "c.country_code = ?";
-    $params[] = strtoupper(substr($country_filter, 0, 2));
-}
-if ($device_filter !== '') {
-    $where[] = "c.device_type = ?";
-    $params[] = $device_filter;
-}
-if ($browser_filter !== '') {
-    $where[] = "c.browser LIKE ?";
-    $params[] = "%$browser_filter%";
-}
-if ($isp_filter !== '') {
-    $where[] = "c.isp LIKE ?";
-    $params[] = "%$isp_filter%";
-}
-if ($click_id_filter) {
-    $where[] = "c.click_id = ?";
-    $params[] = $click_id_filter;
-}
-
-$where_sql = 'WHERE ' . implode(' AND ', $where);
+$where_sql = $filters['where_sql'];
+$params = $filters['params'];
 
 $count = $pdo->prepare("SELECT COUNT(*) as cnt FROM clicks c $where_sql");
 $count->execute($params);
@@ -83,15 +50,15 @@ require_once __DIR__ . '/../helpers/layout_header.php';
 <div class="tf-card mb-4">
     <form method="GET" class="card-body">
         <div class="row g-2 align-items-end">
-            <div class="col-12 col-md-2">
+            <div class="col-12 col-sm-6 col-md-3">
                 <label class="tf-label">From</label>
                 <input type="date" name="from" class="form-control form-control-sm" value="<?php echo $from_date; ?>">
             </div>
-            <div class="col-12 col-md-2">
+            <div class="col-12 col-sm-6 col-md-3">
                 <label class="tf-label">To</label>
                 <input type="date" name="to" class="form-control form-control-sm" value="<?php echo $to_date; ?>">
             </div>
-            <div class="col-12 col-md-2">
+            <div class="col-12 col-sm-6 col-md-3">
                 <label class="tf-label">Project</label>
                 <select name="project_id" class="form-select form-select-sm">
                     <option value="">All</option>
@@ -100,7 +67,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                     <?php endforeach; ?>
                 </select>
             </div>
-            <div class="col-12 col-md-2">
+            <div class="col-12 col-sm-6 col-md-3">
                 <label class="tf-label">Vendor</label>
                 <select name="vendor_id" class="form-select form-select-sm">
                     <option value="">All</option>
@@ -109,11 +76,11 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                     <?php endforeach; ?>
                 </select>
             </div>
-            <div class="col-6 col-md-1">
+            <div class="col-12 col-sm-6 col-md-2">
                 <label class="tf-label">Country</label>
                 <input type="text" name="country" maxlength="2" class="form-control form-control-sm" value="<?php echo sanitize($country_filter); ?>" placeholder="US">
             </div>
-            <div class="col-6 col-md-1">
+            <div class="col-12 col-sm-6 col-md-2">
                 <label class="tf-label">Device</label>
                 <select name="device" class="form-select form-select-sm">
                     <option value="">All</option>
@@ -122,19 +89,23 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                     <option value="tablet" <?php echo $device_filter === 'tablet' ? 'selected' : ''; ?>>Tablet</option>
                 </select>
             </div>
-            <div class="col-6 col-md-1">
+            <div class="col-12 col-sm-6 col-md-2">
                 <label class="tf-label">Browser</label>
                 <input type="text" name="browser" class="form-control form-control-sm" value="<?php echo sanitize($browser_filter); ?>" placeholder="Chrome">
             </div>
-            <div class="col-6 col-md-1">
+            <div class="col-12 col-sm-6 col-md-2">
+                <label class="tf-label">Operating System</label>
+                <input type="text" name="os" class="form-control form-control-sm" value="<?php echo sanitize($os_filter); ?>" placeholder="Windows">
+            </div>
+            <div class="col-12 col-sm-6 col-md-2">
                 <label class="tf-label">ISP</label>
                 <input type="text" name="isp" class="form-control form-control-sm" value="<?php echo sanitize($isp_filter); ?>" placeholder="Comcast">
             </div>
-            <div class="col-6 col-md-1">
-                <label class="tf-label">IP / UA</label>
-                <input type="text" name="search" class="form-control form-control-sm" value="<?php echo sanitize($search); ?>" placeholder="...">
+            <div class="col-12 col-sm-6 col-md-2">
+                <label class="tf-label">IP Address</label>
+                <input type="text" name="ip_address" class="form-control form-control-sm" value="<?php echo sanitize($ip_filter); ?>" placeholder="192.0.2.1">
             </div>
-            <div class="col-6 col-md-1">
+            <div class="col-12 col-sm-6 col-md-2">
                 <label class="tf-label">Click ID</label>
                 <input type="text" name="click_id" class="form-control form-control-sm" value="<?php echo sanitize($click_id_filter); ?>">
             </div>
@@ -178,7 +149,12 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                     $ref = (string)($c['referrer'] ?? '');
                 ?>
                 <tr>
-                    <td title="<?php echo sanitize($ua); ?>"><code><?php echo substr(sanitize($c['click_id']), 0, 12); ?>…</code></td>
+                    <td>
+                        <span class="d-inline-flex align-items-center gap-1" data-full-click-id="<?php echo sanitize($c['click_id']); ?>">
+                            <code title="<?php echo sanitize($c['click_id']); ?>"><?php echo substr(sanitize($c['click_id']), 0, 12); ?>…</code>
+                            <?php echo tf_copy_button($c['click_id'], 'btn btn-link btn-sm p-0 text-secondary'); ?>
+                        </span>
+                    </td>
                     <td><a href="<?php echo BASE_URL; ?>/projects/detail.php?id=<?php echo $c['project_id']; ?>"><?php echo sanitize($c['project_code']); ?></a></td>
                     <td><?php echo sanitize($c['vendor_name']); ?></td>
                     <td><?php echo sanitize($c['country_code'] ?? 'XX'); ?></td>

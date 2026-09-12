@@ -18,7 +18,9 @@ if (!$code || !preg_match('/^[A-Za-z0-9_-]{4,32}$/', $code)) {
 
 $stmt = $pdo->prepare("
     SELECT p.id AS project_id, p.project_name, p.project_code, p.status AS project_status,
-           pv.vendor_id AS vendor_id, gv.vendor_name, gv.vendor_code, pv.status AS vendor_status, pv.allowed_clicks_limit
+           pv.vendor_id AS vendor_id, gv.vendor_name, gv.vendor_code,
+           pv.status AS vendor_status, gv.vendor_status AS master_vendor_status,
+           pv.allowed_clicks_limit
     FROM short_links sl
     JOIN projects p ON p.id = sl.project_id
     JOIN project_vendor pv ON pv.project_id = sl.project_id AND pv.vendor_id = sl.vendor_id
@@ -38,10 +40,16 @@ if (!$row) {
     exit;
 }
 
-echo "✅ Link is active\n\n";
+$project_live = $row['project_status'] === 'live';
+$assignment_active = $row['vendor_status'] === 'active';
+$master_vendor_approved = $row['master_vendor_status'] === 'approved';
+$link_active = $project_live && $assignment_active && $master_vendor_approved;
+
+echo ($link_active ? "✅ Link is active" : "❌ Link is inactive") . "\n\n";
 echo "Project: {$row['project_name']} ({$row['project_code']})\n";
 echo "Project Status: {$row['project_status']}\n";
 echo "Vendor: {$row['vendor_name']}\n";
-echo "Vendor Status: {$row['vendor_status']}\n";
+echo "Vendor Assignment Status: {$row['vendor_status']}\n";
+echo "Master Vendor Status: {$row['master_vendor_status']}\n";
 echo "Click Limit: " . (($row['allowed_clicks_limit'] ?? 0) > 0 ? number_format($row['allowed_clicks_limit']) : 'unlimited') . "\n";
 echo "\nThis is a validation check — no click was recorded.\n";

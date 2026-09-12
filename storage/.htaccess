@@ -1,2 +1,1 @@
-# Deny direct access to all stored files
-Require all denied
+Deny from all

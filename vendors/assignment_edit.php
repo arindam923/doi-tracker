@@ -42,8 +42,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         set_flash('danger', 'Project override postback URL must be a valid HTTP or HTTPS URL.');
         redirect(BASE_URL . '/vendors/assignment_edit.php?project_id=' . $project_id . '&vendor_id=' . $vendor_id);
     }
-    $postback_url = tf_resolve_postback_url($postback_url, $row['global_postback_url'] ?? '');
-
     $pdo->prepare("
         UPDATE project_vendor
         SET payout = ?, daily_cap = ?, status = ?, postback_url = ?, notes = ?
@@ -117,7 +115,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                         <div class="col-12">
                             <label class="tf-label" for="postback_url">Project Override Postback URL</label>
                             <input type="url" id="postback_url" name="postback_url" class="form-control" value="<?php echo sanitize($row['postback_url'] ?? ''); ?>" placeholder="https://…">
-                            <div class="form-text">Global vendor postback: <code><?php echo sanitize($row['global_postback_url'] ?? 'Not configured'); ?></code>. Supports <code>{click_id}</code>, <code>{status}</code>, <code>{sale_amount}</code>, <code>{currency}</code>, <code>{payout}</code>, <code>{transaction_id}</code>, and <code>{sub1}</code>…<code>{sub5}</code>. Clear this field and save to restore the global default.</div>
+                            <div class="form-text">Global vendor postback: <code><?php echo sanitize($row['global_postback_url'] ?? 'Not configured'); ?></code>. Leave this field blank to use the current global URL. Supports <code>{click_id}</code>, <code>{status}</code>, <code>{sale_amount}</code>, <code>{currency}</code>, <code>{payout}</code>, <code>{transaction_id}</code>, and <code>{sub1}</code>…<code>{sub5}</code>.</div>
                         </div>
                         <div class="col-12">
                             <label class="tf-label" for="notes">Notes</label>

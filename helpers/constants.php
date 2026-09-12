@@ -62,7 +62,7 @@ if (!defined('TF_CONSTANTS_LOADED')) {
     // ─── Vendor Traffic Types (Item #16) ────────────────────────
     $GLOBALS['TF_TRAFFIC_TYPES'] = [
         'Email', 'Facebook', 'Google', 'Native', 'Push',
-        'Incent', 'Search', 'Display', 'Influencer', 'API', 'Other',
+        'Incent', 'Search', 'Display', 'Influencer', 'API',
     ];
 
     // ─── Vendor Status (Item #17) ───────────────────────────────

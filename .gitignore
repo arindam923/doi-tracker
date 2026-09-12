@@ -1,7 +1,14 @@
-# Secrets — never commit
-/env.php
+# Secrets — never commit (env.php at any depth — root + doi-tracker)
+env.php
+**/env.php
 /config.php
 /tracking/config.php
+
+# Dumps & backups — never commit live data
+backups/
+*.sql.gz
+export.sql
+backup-*.sql
 
 # Local artifacts
 storage/logs/*.log

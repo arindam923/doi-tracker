@@ -1,12 +1,18 @@
 -- ============================================================
--- TRACK FLOW — Complete Database Schema (v2.0)
+-- TRACK FLOW — Complete Database Schema (v3.0)
 -- Fresh-install schema. Single file, run once in phpMyAdmin → SQL tab.
 --
--- Includes:
---   • Base tables (users, clients, projects, global_vendors, clicks, conversions, logs, etc.)
---   • All v2.0 enhancements (extended enums, new columns, new tables)
---   • Global vendor model: global_vendors master + project_vendor pivot (no legacy vendors table)
---   • Default admin user with a real bcrypt password hash
+-- Consolidates:
+--   • Base schema + all v2.x migrations (campaign_notes, click_enrichment,
+--     client_default_postback, global_vendors, live_global_vendor_postback,
+--     vendor_email)
+--   • Fixes: conversions.payout + sub1-5, correct FKs, explicit collation
+--   • Dropped legacy `vendors` table (replaced by global_vendors+project_vendor)
+--
+-- How to use (InfinityFree / phpMyAdmin):
+--   1. Create empty DB → Import → Choose this file → Go
+--   2. No migrations needed afterwards
+--   3. Booking: https://arindam.freepage.cc → admin / Admin@123 (change immediately)
 --
 -- Default admin login:
 --   Username: admin
@@ -14,7 +20,9 @@
 --   ⚠️  Change this password immediately after first login.
 -- ============================================================
 
+SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
+DROP TABLE IF EXISTS `vendors`;
 DROP TABLE IF EXISTS `email_campaign_sends`;
 DROP TABLE IF EXISTS `email_campaigns`;
 DROP TABLE IF EXISTS `email_templates`;
@@ -47,44 +55,45 @@ CREATE TABLE `users` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `username` VARCHAR(100) NOT NULL UNIQUE,
   `password` VARCHAR(255) NOT NULL,
-  `email` VARCHAR(150),
+  `email` VARCHAR(150) DEFAULT NULL,
   `role` ENUM('super_admin','campaign_manager','viewer') DEFAULT 'campaign_manager',
   `is_active` TINYINT DEFAULT 1,
-  `last_login` DATETIME,
+  `last_login` DATETIME DEFAULT NULL,
   `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- Default admin user
--- Username: admin
--- Password: Admin@123
+-- Username: admin  Password: Admin@123
 -- IMPORTANT: Change this password immediately after first login!
 -- To generate a new hash: php -r "echo password_hash('YourPassword', PASSWORD_DEFAULT);"
 INSERT INTO `users` (`username`, `password`, `email`, `role`) VALUES
 ('admin', '$2y$12$80oy/IXijDqg4EYZplVAWu.E1P2.PT0NcIpt7FWO3ju63TdLRt9Ce', 'admin@ternfluenzy.com', 'super_admin');
 
 -- ============================================================
--- CLIENTS
+-- CLIENTS — includes postback_token (migration_client_default_postback)
 -- ============================================================
 CREATE TABLE `clients` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `client_name` VARCHAR(200) NOT NULL,
   `client_code` VARCHAR(20) NOT NULL UNIQUE,
-  `contact_person` VARCHAR(150),
-  `email` VARCHAR(150),
-  `phone` VARCHAR(50),
-  `skype` VARCHAR(100),
-  `telegram` VARCHAR(100),
-  `country` VARCHAR(100),
+  `postback_token` VARCHAR(100) DEFAULT NULL,
+  `contact_person` VARCHAR(150) DEFAULT NULL,
+  `email` VARCHAR(150) DEFAULT NULL,
+  `phone` VARCHAR(50) DEFAULT NULL,
+  `skype` VARCHAR(100) DEFAULT NULL,
+  `telegram` VARCHAR(100) DEFAULT NULL,
+  `country` VARCHAR(100) DEFAULT NULL,
   `default_currency` VARCHAR(10) DEFAULT 'USD',
-  `payment_terms` VARCHAR(100),
-  `billing_address` TEXT,
-  `notes` TEXT,
+  `payment_terms` VARCHAR(100) DEFAULT NULL,
+  `billing_address` TEXT DEFAULT NULL,
+  `notes` TEXT DEFAULT NULL,
   `is_active` TINYINT DEFAULT 1,
-  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_postback_token (`postback_token`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ============================================================
--- PROJECTS
+-- PROJECTS — includes short_code, campaign_notes columns
 -- ============================================================
 CREATE TABLE `projects` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
@@ -92,8 +101,8 @@ CREATE TABLE `projects` (
   `short_code` VARCHAR(12) UNIQUE,
   `project_name` VARCHAR(300) NOT NULL,
   `client_id` INT NOT NULL,
-  `client_survey_link` VARCHAR(500),
-  `preview_link` VARCHAR(500) NULL,
+  `client_survey_link` VARCHAR(500) DEFAULT NULL,
+  `preview_link` VARCHAR(500) DEFAULT NULL,
   `postback_token` VARCHAR(100) NOT NULL,
   `client_cpi` DECIMAL(10,2) DEFAULT 0.00,
   `currency` VARCHAR(10) DEFAULT 'USD',
@@ -109,52 +118,54 @@ CREATE TABLE `projects` (
   `status` ENUM('live','hold','closed','archived') DEFAULT 'live',
   `visibility` ENUM('private','public','invite_only') DEFAULT 'private',
   `campaign_status` ENUM('draft','pending_approval','testing','live','paused','completed','archived') DEFAULT 'live',
-  `country_target` VARCHAR(100),
-  `start_date` DATE,
-  `end_date` DATE,
-  `description` TEXT,
-  `client_instructions` TEXT NULL,
-  `optimization_notes` TEXT NULL,
-  `publisher_restrictions` TEXT NULL,
-  `created_by` INT,
+  `country_target` VARCHAR(100) DEFAULT NULL,
+  `start_date` DATE DEFAULT NULL,
+  `end_date` DATE DEFAULT NULL,
+  `description` TEXT DEFAULT NULL,
+  `client_instructions` TEXT DEFAULT NULL,
+  `optimization_notes` TEXT DEFAULT NULL,
+  `publisher_restrictions` TEXT DEFAULT NULL,
+  `created_by` INT DEFAULT NULL,
   `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
   `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_client (`client_id`),
   INDEX idx_status (`status`),
   INDEX idx_campaign_status (`campaign_status`),
-  FOREIGN KEY (`client_id`) REFERENCES `clients`(`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  CONSTRAINT fk_projects_client FOREIGN KEY (`client_id`) REFERENCES `clients`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ============================================================
--- GLOBAL VENDORS (source of truth — master vendor library)
+-- GLOBAL VENDORS — master library (replaces legacy `vendors`)
+-- Includes global_postback_url (migration_global_vendors)
 -- ============================================================
 CREATE TABLE `global_vendors` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `vendor_code` VARCHAR(20) NOT NULL UNIQUE,
   `vendor_name` VARCHAR(200) NOT NULL,
-  `company_name` VARCHAR(200) NULL,
-  `contact_person` VARCHAR(150) NULL,
-  `email` VARCHAR(150) NULL,
-  `telegram` VARCHAR(100) NULL,
-  `skype` VARCHAR(100) NULL,
-  `phone` VARCHAR(50) NULL,
-  `global_postback_url` VARCHAR(500) NULL,
-  `traffic_type` ENUM('Email','Facebook','Google','Native','Push','Incent','Search','Display','Influencer','API','Other') DEFAULT 'Other',
+  `company_name` VARCHAR(200) DEFAULT NULL,
+  `contact_person` VARCHAR(150) DEFAULT NULL,
+  `email` VARCHAR(150) DEFAULT NULL,
+  `telegram` VARCHAR(100) DEFAULT NULL,
+  `skype` VARCHAR(100) DEFAULT NULL,
+  `phone` VARCHAR(50) DEFAULT NULL,
+  `global_postback_url` VARCHAR(500) DEFAULT NULL,
+  `traffic_type` VARCHAR(255) DEFAULT NULL,
   `vendor_status` ENUM('pending','approved','suspended','blacklisted') DEFAULT 'approved',
   `default_payout` DECIMAL(10,2) DEFAULT 0.00,
   `currency` VARCHAR(10) DEFAULT 'USD',
   `daily_cap` INT DEFAULT 0,
-  `notes` TEXT NULL,
-  `created_by` INT NULL,
+  `notes` TEXT DEFAULT NULL,
+  `created_by` INT DEFAULT NULL,
   `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
   `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_status (`vendor_status`),
   INDEX idx_traffic (`traffic_type`),
   INDEX idx_email (`email`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ============================================================
--- PROJECT ↔ VENDOR PIVOT (per-project assignment config)
+-- PROJECT ↔ VENDOR PIVOT — per-project assignment
+-- status=active/hold/closed + postback_url override (migration_global_vendors)
 -- ============================================================
 CREATE TABLE `project_vendor` (
   `project_id` INT NOT NULL,
@@ -162,46 +173,46 @@ CREATE TABLE `project_vendor` (
   `payout` DECIMAL(10,2) DEFAULT 0.00,
   `currency` VARCHAR(10) DEFAULT 'USD',
   `status` ENUM('active','hold','closed') DEFAULT 'active',
-  `postback_url` VARCHAR(500),
+  `postback_url` VARCHAR(500) DEFAULT NULL,
   `allowed_clicks_limit` INT DEFAULT 0,
   `daily_cap` INT DEFAULT 0,
-  `assigned_by` INT NULL,
+  `assigned_by` INT DEFAULT NULL,
   `assigned_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
-  `notes` TEXT NULL,
+  `notes` TEXT DEFAULT NULL,
   PRIMARY KEY (`project_id`, `vendor_id`),
   INDEX idx_vendor (`vendor_id`),
   INDEX idx_status (`status`),
-  FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON DELETE CASCADE,
-  FOREIGN KEY (`vendor_id`) REFERENCES `global_vendors`(`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  CONSTRAINT fk_pv_project FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT fk_pv_vendor FOREIGN KEY (`vendor_id`) REFERENCES `global_vendors`(`id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ============================================================
--- CLICKS
+-- CLICKS — includes full forensic columns (migration_click_enrichment)
 -- ============================================================
 CREATE TABLE `clicks` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `click_id` VARCHAR(64) NOT NULL UNIQUE,
   `project_id` INT NOT NULL,
   `vendor_id` INT NOT NULL,
-  `ip_address` VARCHAR(45),
-  `user_agent` TEXT,
-  `referrer` VARCHAR(500),
-  `country_detected` VARCHAR(100),
-  `country_code` CHAR(2),
-  `device_type` VARCHAR(50),
-  `browser` VARCHAR(50),
-  `os` VARCHAR(50),
-  `browser_lang` VARCHAR(20),
-  `isp` VARCHAR(150),
+  `ip_address` VARCHAR(45) DEFAULT NULL,
+  `user_agent` TEXT DEFAULT NULL,
+  `referrer` VARCHAR(500) DEFAULT NULL,
+  `country_detected` VARCHAR(100) DEFAULT NULL,
+  `country_code` CHAR(2) DEFAULT NULL,
+  `device_type` VARCHAR(50) DEFAULT NULL,
+  `browser` VARCHAR(50) DEFAULT NULL,
+  `os` VARCHAR(50) DEFAULT NULL,
+  `browser_lang` VARCHAR(20) DEFAULT NULL,
+  `isp` VARCHAR(150) DEFAULT NULL,
   `clicked_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
   `is_converted` TINYINT DEFAULT 0,
   `is_duplicate_ip` TINYINT DEFAULT 0,
-  `sub1` VARCHAR(200),
-  `sub2` VARCHAR(200),
-  `sub3` VARCHAR(200),
-  `sub4` VARCHAR(200),
-  `sub5` VARCHAR(200),
-  `email_send_id` BIGINT NULL,
+  `sub1` VARCHAR(200) DEFAULT NULL,
+  `sub2` VARCHAR(200) DEFAULT NULL,
+  `sub3` VARCHAR(200) DEFAULT NULL,
+  `sub4` VARCHAR(200) DEFAULT NULL,
+  `sub5` VARCHAR(200) DEFAULT NULL,
+  `email_send_id` BIGINT DEFAULT NULL,
   INDEX idx_click_id (`click_id`),
   INDEX idx_email_send (`email_send_id`),
   INDEX idx_project (`project_id`),
@@ -210,12 +221,12 @@ CREATE TABLE `clicks` (
   INDEX idx_country_code (`country_code`),
   INDEX idx_browser (`browser`),
   INDEX idx_os (`os`),
-  FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`),
-  FOREIGN KEY (`vendor_id`) REFERENCES `global_vendors`(`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  CONSTRAINT fk_clicks_project FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT fk_clicks_vendor FOREIGN KEY (`vendor_id`) REFERENCES `global_vendors`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ============================================================
--- CONVERSIONS
+-- CONVERSIONS — v3 adds payout + sub1-5 (missing in v2/export)
 -- ============================================================
 CREATE TABLE `conversions` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
@@ -226,41 +237,50 @@ CREATE TABLE `conversions` (
   `client_revenue` DECIMAL(10,2) DEFAULT 0.00,
   `sale_amount` DECIMAL(10,2) DEFAULT 0.00,
   `currency` VARCHAR(10) DEFAULT 'USD',
-  `transaction_id` VARCHAR(100),
-  `click_time` DATETIME,
-  `time_diff_seconds` INT,
+  `transaction_id` VARCHAR(100) DEFAULT NULL,
+  `click_time` DATETIME DEFAULT NULL,
+  `time_diff_seconds` INT DEFAULT NULL,
   `vendor_cost` DECIMAL(10,2) DEFAULT 0.00,
+  `payout` DECIMAL(10,2) DEFAULT 0.00,
   `profit` DECIMAL(10,2) DEFAULT 0.00,
-  `rejection_reason` VARCHAR(200),
+  `sub1` VARCHAR(200) DEFAULT NULL,
+  `sub2` VARCHAR(200) DEFAULT NULL,
+  `sub3` VARCHAR(200) DEFAULT NULL,
+  `sub4` VARCHAR(200) DEFAULT NULL,
+  `sub5` VARCHAR(200) DEFAULT NULL,
+  `rejection_reason` VARCHAR(200) DEFAULT NULL,
   `is_manual` TINYINT DEFAULT 0,
   `approval_status` ENUM('pending','approved','rejected') DEFAULT 'approved',
   `converted_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_click_id (`click_id`),
   INDEX idx_project (`project_id`),
+  INDEX idx_vendor (`vendor_id`),
   INDEX idx_converted_at (`converted_at`),
   INDEX idx_approval_status (`approval_status`),
-  INDEX idx_transaction_id (`transaction_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  INDEX idx_transaction_id (`transaction_id`),
+  CONSTRAINT fk_conv_project FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT fk_conv_vendor FOREIGN KEY (`vendor_id`) REFERENCES `global_vendors`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ============================================================
 -- LOGS
 -- ============================================================
 CREATE TABLE `logs` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
-  `log_type` VARCHAR(50),
-  `project_id` INT,
-  `vendor_id` INT,
-  `click_id` VARCHAR(64),
-  `status` VARCHAR(20),
-  `message` TEXT,
-  `payload` TEXT,
-  `ip_address` VARCHAR(45),
-  `response_sent` VARCHAR(200),
+  `log_type` VARCHAR(50) DEFAULT NULL,
+  `project_id` INT DEFAULT NULL,
+  `vendor_id` INT DEFAULT NULL,
+  `click_id` VARCHAR(64) DEFAULT NULL,
+  `status` VARCHAR(20) DEFAULT NULL,
+  `message` TEXT DEFAULT NULL,
+  `payload` TEXT DEFAULT NULL,
+  `ip_address` VARCHAR(45) DEFAULT NULL,
+  `response_sent` VARCHAR(200) DEFAULT NULL,
   `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_project (`project_id`),
   INDEX idx_created_at (`created_at`),
   INDEX idx_log_type (`log_type`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ============================================================
 -- RATE LIMITS
@@ -274,7 +294,7 @@ CREATE TABLE `rate_limits` (
   `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY `ip_action` (`ip_address`, `action`),
   INDEX idx_locked_until (`locked_until`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ============================================================
 -- SETTINGS
@@ -282,9 +302,9 @@ CREATE TABLE `rate_limits` (
 CREATE TABLE `settings` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `setting_key` VARCHAR(100) NOT NULL UNIQUE,
-  `setting_value` TEXT,
+  `setting_value` TEXT DEFAULT NULL,
   `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 INSERT INTO `settings` (`setting_key`, `setting_value`) VALUES
 ('site_name', 'Track Flow'),
@@ -292,6 +312,10 @@ INSERT INTO `settings` (`setting_key`, `setting_value`) VALUES
 ('quota_buffer_percent', '0'),
 ('session_timeout_hours', '8'),
 ('smtp_enabled', '0'),
+('smtp_host', ''),
+('smtp_port', '587'),
+('smtp_user', ''),
+('smtp_pass', ''),
 ('resend_api_key', ''),
 ('email_from_address', 'noreply@yourdomain.com'),
 ('email_from_name', 'Track Flow'),
@@ -310,26 +334,26 @@ INSERT INTO `settings` (`setting_key`, `setting_value`) VALUES
 CREATE TABLE `sent_emails` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `recipient_email` VARCHAR(150) NOT NULL,
-  `recipient_name` VARCHAR(200),
-  `client_id` INT,
+  `recipient_name` VARCHAR(200) DEFAULT NULL,
+  `client_id` INT DEFAULT NULL,
   `subject` VARCHAR(300) NOT NULL,
   `body` TEXT NOT NULL,
   `status` ENUM('sent','failed','queued','retrying') DEFAULT 'queued',
-  `resend_id` VARCHAR(100),
-  `error_message` TEXT,
+  `resend_id` VARCHAR(100) DEFAULT NULL,
+  `error_message` TEXT DEFAULT NULL,
   `retry_count` INT DEFAULT 0,
-  `scheduled_for` DATETIME NULL,
-  `batch_id` VARCHAR(50) NULL,
-  `sent_by` INT,
+  `scheduled_for` DATETIME DEFAULT NULL,
+  `batch_id` VARCHAR(50) DEFAULT NULL,
+  `sent_by` INT DEFAULT NULL,
   `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_client (`client_id`),
   INDEX idx_created_at (`created_at`),
   INDEX idx_status_sched (`status`, `scheduled_for`),
   INDEX idx_batch (`batch_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ============================================================
--- SHORT LINKS
+-- SHORT LINKS — opaque /c/CODE
 -- ============================================================
 CREATE TABLE `short_links` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
@@ -339,9 +363,9 @@ CREATE TABLE `short_links` (
   `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_project (`project_id`),
   INDEX idx_vendor (`vendor_id`),
-  FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON DELETE CASCADE,
-  FOREIGN KEY (`vendor_id`) REFERENCES `global_vendors`(`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  CONSTRAINT fk_sl_project FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT fk_sl_vendor FOREIGN KEY (`vendor_id`) REFERENCES `global_vendors`(`id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ============================================================
 -- CAMPAIGN GEO
@@ -350,12 +374,12 @@ CREATE TABLE `campaign_geo` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `project_id` INT NOT NULL,
   `country_code` CHAR(2) NOT NULL,
-  `country_name` VARCHAR(100),
+  `country_name` VARCHAR(100) DEFAULT NULL,
   `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY uk_project_country (`project_id`, `country_code`),
   INDEX idx_country_code (`country_code`),
-  FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  CONSTRAINT fk_geo_project FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ============================================================
 -- CAMPAIGN NOTES
@@ -364,31 +388,31 @@ CREATE TABLE `campaign_notes` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `project_id` INT NOT NULL,
   `body` TEXT NOT NULL,
-  `created_by` INT,
+  `created_by` INT DEFAULT NULL,
   `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_project (`project_id`),
-  FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  CONSTRAINT fk_notes_project FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ============================================================
 -- AUDIT LOGS
 -- ============================================================
 CREATE TABLE `audit_logs` (
   `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
-  `actor_id` INT NULL,
+  `actor_id` INT DEFAULT NULL,
   `action` VARCHAR(100) NOT NULL,
   `entity_type` VARCHAR(50) NOT NULL,
   `entity_id` VARCHAR(100) NOT NULL,
-  `before_json` JSON NULL,
-  `after_json` JSON NULL,
-  `ip_address` VARCHAR(45) NULL,
-  `user_agent` VARCHAR(500) NULL,
+  `before_json` JSON DEFAULT NULL,
+  `after_json` JSON DEFAULT NULL,
+  `ip_address` VARCHAR(45) DEFAULT NULL,
+  `user_agent` VARCHAR(500) DEFAULT NULL,
   `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_actor (`actor_id`),
   INDEX idx_entity (`entity_type`, `entity_id`),
   INDEX idx_created_at (`created_at`),
   INDEX idx_action (`action`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ============================================================
 -- EMAIL LISTS
@@ -397,35 +421,35 @@ CREATE TABLE `email_lists` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `name` VARCHAR(200) NOT NULL,
   `source` VARCHAR(100) DEFAULT 'manual',
-  `client_id` INT NULL,
-  `project_id` INT NULL,
-  `vendor_id` INT NULL,
+  `client_id` INT DEFAULT NULL,
+  `project_id` INT DEFAULT NULL,
+  `vendor_id` INT DEFAULT NULL,
   `is_deduped` TINYINT(1) DEFAULT 0,
   `record_count` INT DEFAULT 0,
-  `description` TEXT NULL,
-  `created_by` INT NULL,
+  `description` TEXT DEFAULT NULL,
+  `created_by` INT DEFAULT NULL,
   `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_client (`client_id`),
   INDEX idx_project (`project_id`),
   UNIQUE KEY uk_vendor_list (`vendor_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 CREATE TABLE `email_list_entries` (
   `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
   `list_id` INT NOT NULL,
-  `vendor_id` INT NULL,
+  `vendor_id` INT DEFAULT NULL,
   `email` VARCHAR(254) NOT NULL,
-  `name` VARCHAR(200) NULL,
-  `first_name` VARCHAR(100) NULL,
-  `last_name` VARCHAR(100) NULL,
-  `metadata_json` JSON NULL,
-  `country` CHAR(2) NULL,
-  `source` VARCHAR(100) NULL,
+  `name` VARCHAR(200) DEFAULT NULL,
+  `first_name` VARCHAR(100) DEFAULT NULL,
+  `last_name` VARCHAR(100) DEFAULT NULL,
+  `metadata_json` JSON DEFAULT NULL,
+  `country` CHAR(2) DEFAULT NULL,
+  `source` VARCHAR(100) DEFAULT NULL,
   `status` ENUM('active','unsubscribed','bounced','invalid') DEFAULT 'active',
   `is_unsubscribed` TINYINT(1) DEFAULT 0,
   `dedupe_hash` CHAR(40) NOT NULL,
   `added_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
-  `last_emailed_at` DATETIME NULL,
+  `last_emailed_at` DATETIME DEFAULT NULL,
   `total_emails_sent` INT DEFAULT 0,
   UNIQUE KEY uk_list_dedupe (`list_id`, `dedupe_hash`),
   INDEX idx_list (`list_id`),
@@ -434,8 +458,8 @@ CREATE TABLE `email_list_entries` (
   INDEX idx_country (`country`),
   INDEX idx_vendor (`vendor_id`),
   INDEX idx_list_status_country (`list_id`, `status`, `country`),
-  FOREIGN KEY (`list_id`) REFERENCES `email_lists`(`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  CONSTRAINT fk_entries_list FOREIGN KEY (`list_id`) REFERENCES `email_lists`(`id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ============================================================
 -- EMAIL TEMPLATES
@@ -446,10 +470,10 @@ CREATE TABLE `email_templates` (
   `subject` VARCHAR(300) NOT NULL,
   `html_body` TEXT NOT NULL,
   `is_default` TINYINT(1) DEFAULT 0,
-  `created_by` INT NULL,
+  `created_by` INT DEFAULT NULL,
   `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
   `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ============================================================
 -- EMAIL CAMPAIGNS
@@ -458,12 +482,12 @@ CREATE TABLE `email_campaigns` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `project_id` INT NOT NULL,
   `vendor_id` INT NOT NULL,
-  `template_id` INT NULL,
+  `template_id` INT DEFAULT NULL,
   `name` VARCHAR(200) NOT NULL,
   `subject` VARCHAR(300) NOT NULL,
   `html_body` TEXT NOT NULL,
-  `from_name` VARCHAR(150) NULL,
-  `from_email` VARCHAR(150) NULL,
+  `from_name` VARCHAR(150) DEFAULT NULL,
+  `from_email` VARCHAR(150) DEFAULT NULL,
   `daily_limit` INT DEFAULT 1000,
   `total_limit` INT DEFAULT 0,
   `sent_count` INT DEFAULT 0,
@@ -476,17 +500,17 @@ CREATE TABLE `email_campaigns` (
   `failed_count` INT DEFAULT 0,
   `status` ENUM('draft','scheduled','running','paused','completed','failed') DEFAULT 'draft',
   `is_multi_step` TINYINT(1) DEFAULT 0,
-  `started_at` DATETIME NULL,
-  `completed_at` DATETIME NULL,
-  `created_by` INT NULL,
+  `started_at` DATETIME DEFAULT NULL,
+  `completed_at` DATETIME DEFAULT NULL,
+  `created_by` INT DEFAULT NULL,
   `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
   `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_project (`project_id`),
   INDEX idx_vendor (`vendor_id`),
   INDEX idx_status (`status`),
-  FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON DELETE CASCADE,
-  FOREIGN KEY (`vendor_id`) REFERENCES `global_vendors`(`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  CONSTRAINT fk_ec_project FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT fk_ec_vendor FOREIGN KEY (`vendor_id`) REFERENCES `global_vendors`(`id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ============================================================
 -- EMAIL CAMPAIGN SENDS
@@ -496,27 +520,27 @@ CREATE TABLE `email_campaign_sends` (
   `campaign_id` INT NOT NULL,
   `project_id` INT NOT NULL,
   `vendor_id` INT NOT NULL,
-  `list_id` INT NULL,
+  `list_id` INT DEFAULT NULL,
   `entry_id` BIGINT NOT NULL,
   `recipient_email` VARCHAR(254) NOT NULL,
-  `recipient_name` VARCHAR(200) NULL,
-  `country` CHAR(2) NULL,
+  `recipient_name` VARCHAR(200) DEFAULT NULL,
+  `country` CHAR(2) DEFAULT NULL,
   `status` ENUM('queued','sent','delivered','opened','clicked','converted','bounced','failed','skipped') DEFAULT 'queued',
-  `resend_id` VARCHAR(100) NULL,
-  `sent_at` DATETIME NULL,
-  `opened_at` DATETIME NULL,
-  `clicked_at` DATETIME NULL,
-  `converted_at` DATETIME NULL,
-  `error_message` TEXT NULL,
+  `resend_id` VARCHAR(100) DEFAULT NULL,
+  `sent_at` DATETIME DEFAULT NULL,
+  `opened_at` DATETIME DEFAULT NULL,
+  `clicked_at` DATETIME DEFAULT NULL,
+  `converted_at` DATETIME DEFAULT NULL,
+  `error_message` TEXT DEFAULT NULL,
   `retry_count` INT DEFAULT 0,
   `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY uk_campaign_recipient (`campaign_id`, `recipient_email`),
   INDEX idx_campaign (`campaign_id`),
   INDEX idx_list (`list_id`),
   INDEX idx_status (`status`),
-  FOREIGN KEY (`campaign_id`) REFERENCES `email_campaigns`(`id`) ON DELETE CASCADE,
-  FOREIGN KEY (`list_id`) REFERENCES `email_lists`(`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  CONSTRAINT fk_ecs_campaign FOREIGN KEY (`campaign_id`) REFERENCES `email_campaigns`(`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT fk_ecs_list FOREIGN KEY (`list_id`) REFERENCES `email_lists`(`id`) ON DELETE SET NULL ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ============================================================
 -- CLIENT DOCUMENTS
@@ -524,19 +548,19 @@ CREATE TABLE `email_campaign_sends` (
 CREATE TABLE `client_documents` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `client_id` INT NOT NULL,
-  `project_id` INT NULL,
+  `project_id` INT DEFAULT NULL,
   `document_type` VARCHAR(50) DEFAULT 'Other',
   `original_filename` VARCHAR(255) NOT NULL,
   `stored_filename` VARCHAR(255) NOT NULL,
   `file_size` BIGINT DEFAULT 0,
-  `mime_type` VARCHAR(100) NULL,
-  `uploaded_by` INT NULL,
-  `notes` TEXT NULL,
+  `mime_type` VARCHAR(100) DEFAULT NULL,
+  `uploaded_by` INT DEFAULT NULL,
+  `notes` TEXT DEFAULT NULL,
   `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_client (`client_id`),
   INDEX idx_project (`project_id`),
   INDEX idx_doc_type (`document_type`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ============================================================
 -- SCHEDULED REPORTS
@@ -547,18 +571,18 @@ CREATE TABLE `scheduled_reports` (
   `title` VARCHAR(255) NOT NULL,
   `report_type` VARCHAR(50) DEFAULT 'overview',
   `group_by` VARCHAR(50) DEFAULT 'project',
-  `filters_json` JSON NULL,
+  `filters_json` JSON DEFAULT NULL,
   `frequency` ENUM('daily','weekly','monthly','custom_cron') DEFAULT 'daily',
-  `custom_cron` VARCHAR(50) NULL,
-  `recipients_csv` TEXT NULL,
-  `last_run_at` DATETIME NULL,
-  `next_run_at` DATETIME NULL,
+  `custom_cron` VARCHAR(50) DEFAULT NULL,
+  `recipients_csv` TEXT DEFAULT NULL,
+  `last_run_at` DATETIME DEFAULT NULL,
+  `next_run_at` DATETIME DEFAULT NULL,
   `is_active` TINYINT(1) DEFAULT 1,
   `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_owner (`owner_id`),
   INDEX idx_next_run (`next_run_at`),
   INDEX idx_active (`is_active`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ============================================================
 -- VENDOR PORTAL USERS
@@ -567,18 +591,18 @@ CREATE TABLE `vendor_portal_users` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `global_vendor_id` INT NOT NULL UNIQUE,
   `email` VARCHAR(150) NOT NULL,
-  `password_hash` VARCHAR(255) NULL,
-  `reset_token` VARCHAR(255) NULL,
-  `reset_expires_at` DATETIME NULL,
-  `magic_token` VARCHAR(255) NULL,
-  `magic_expires_at` DATETIME NULL,
-  `last_login_at` DATETIME NULL,
+  `password_hash` VARCHAR(255) DEFAULT NULL,
+  `reset_token` VARCHAR(255) DEFAULT NULL,
+  `reset_expires_at` DATETIME DEFAULT NULL,
+  `magic_token` VARCHAR(255) DEFAULT NULL,
+  `magic_expires_at` DATETIME DEFAULT NULL,
+  `last_login_at` DATETIME DEFAULT NULL,
   `is_active` TINYINT(1) DEFAULT 1,
   `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
   `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  FOREIGN KEY (`global_vendor_id`) REFERENCES `global_vendors`(`id`) ON DELETE CASCADE,
-  INDEX idx_email (`email`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  INDEX idx_email (`email`),
+  CONSTRAINT fk_vpu_vendor FOREIGN KEY (`global_vendor_id`) REFERENCES `global_vendors`(`id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ============================================================
 -- Done. Fresh database is ready.

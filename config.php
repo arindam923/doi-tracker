@@ -36,7 +36,7 @@ try {
         [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            PDO::ATTR_EMULATE_PREPARES => true,
+            PDO::ATTR_EMULATE_PREPARES => false,
         ]
     );
 } catch (PDOException $e) {
@@ -73,6 +73,7 @@ if (!$__is_tracking) {
 
 // ─── Load Helpers ───
 require_once __DIR__ . '/helpers/functions.php';
+require_once __DIR__ . '/helpers/clicklogs.php';
 require_once __DIR__ . '/helpers/constants.php';
 require_once __DIR__ . '/helpers/vendor_portal.php';
 require_once __DIR__ . '/helpers/dedupe.php';

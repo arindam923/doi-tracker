@@ -17,6 +17,9 @@ expect_true(!tf_is_valid_postback_url('https:///missing-host'), 'URL without a h
 expect_true(tf_resolve_postback_url('', 'https://vendor.example/global'), 'blank override uses global URL');
 expect_true(tf_resolve_postback_url('https://project.example/pb', 'https://vendor.example/global') === 'https://project.example/pb', 'project override wins');
 expect_true(tf_resolve_postback_url('', '') === '', 'blank override and blank global remain blank');
+expect_true(tf_effective_postback_url('', 'https://vendor.example/global') === 'https://vendor.example/global', 'blank assignment inherits the current global URL');
+expect_true(tf_effective_postback_url('https://project.example/pb', 'https://vendor.example/global') === 'https://project.example/pb', 'explicit assignment override wins over the global URL');
+expect_true(tf_effective_postback_url('', 'https://vendor.example/changed') === 'https://vendor.example/changed', 'blank assignment follows a changed global URL');
 
 $macros = tf_postback_macros([
     'click_id' => 'click123',

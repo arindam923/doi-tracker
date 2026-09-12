@@ -20,7 +20,7 @@ if ($status_filter !== '' && array_key_exists($status_filter, tf_vendor_statuses
     $params[] = $status_filter;
 }
 if ($traffic_filter !== '' && in_array($traffic_filter, tf_traffic_types(), true)) {
-    $where[] = "gv.traffic_type = ?";
+    $where[] = "FIND_IN_SET(?, gv.traffic_type)";
     $params[] = $traffic_filter;
 }
 $where_sql = $where ? 'WHERE ' . implode(' AND ', $where) : '';
@@ -121,7 +121,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                         <?php if (!empty($v['email'])): ?><div class="small text-secondary"><a href="mailto:<?php echo urlencode($v['email']); ?>"><?php echo sanitize($v['email']); ?></a></div><?php endif; ?>
                     </td>
                     <td><code><?php echo sanitize($v['vendor_code']); ?></code></td>
-                    <td><?php echo sanitize($v['traffic_type']); ?></td>
+                    <td><?php echo sanitize(str_replace(',', ', ', $v['traffic_type'] ?? '')); ?></td>
                     <td><?php echo status_badge($v['vendor_status']); ?></td>
                     <td class="text-end"><?php echo format_currency($v['default_payout'], $v['currency'] ?? 'USD'); ?></td>
                     <td class="text-center"><span class="badge bg-light"><?php echo (int)$v['attached_projects']; ?></span></td>

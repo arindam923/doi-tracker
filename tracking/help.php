@@ -11,7 +11,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
         <h5 class="mb-0 fw-semibold">Postback URL Reference</h5>
     </div>
     <div class="card-body">
-        <p class="text-muted">Give the client or conversion platform the URL shown on the project page. Replace each value with the matching macro from its system. Track Flow records the values and can pass them on to the vendor postback. The <code>token</code> is unique per project and is shown on the project's detail page.</p>
+        <p class="text-muted">Give the client ONE reusable URL from its <a href="<?php echo BASE_URL; ?>/clients/list.php">client page</a> — it works for every project of that client via <code>click_id</code> lookup. A legacy per-project URL still works as fallback. Track Flow records the values and can pass them on to the vendor global/default postback (blank assignment = inherit).</p>
 
         <h6 class="mt-4 fw-semibold">Required parameters</h6>
         <table class="table table-sm">
@@ -19,7 +19,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
             <tbody>
                 <tr><td><code>click_id</code></td><td>The 32-char hex ID we sent when the user clicked our tracking link.</td></tr>
                 <tr><td><code>status</code></td><td>1 = accepted conversion; 0 = rejected conversion (recorded but not counted as a completion).</td></tr>
-                <tr><td><code>token</code></td><td>Per-project secret token (shown in the project detail page).</td></tr>
+                <tr><td><code>token</code></td><td>Client default token (reusable across all its projects) <em>or</em> per-project token (shown on project / client pages). Either is accepted via <code>click_id</code> lookup.</td></tr>
             </tbody>
         </table>
 
@@ -43,7 +43,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
         <pre class="bg-light p-3 rounded small" style="font-family: ui-monospace, monospace;">https://yourdomain.com/tracking/postback.php
   ?click_id=REPLACE_ME
   &amp;status=1
-  &amp;token=REPLACE_WITH_PROJECT_TOKEN
+  &amp;token=REPLACE_WITH_CLIENT_DEFAULT_OR_PROJECT_TOKEN
   &amp;sale_amount=10.00
   &amp;currency=USD
   &amp;payout=2.00
@@ -53,7 +53,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
   &amp;sub3=campaign_42</pre>
 
         <div class="alert alert-info small mt-3 mb-0">
-            <strong>New user setup:</strong> copy the project postback URL, replace <code>REPLACE_ME</code> and the token, then map your platform's click ID and conversion fields to the parameters above. Keep <code>status=1</code> for a successful conversion and send <code>status=0</code> for a rejection.
+            <strong>New user setup:</strong> copy the <strong>client default postback URL</strong> (one per client) and reuse it for every campaign — no per-project setup needed. Replace <code>REPLACE_ME</code> and the token, then map your platform's click ID and conversion fields to the parameters above. Keep <code>status=1</code> for success and <code>status=0</code> for rejection. Vendor side: set one <strong>Global Postback URL</strong> per vendor; leave project assignments blank to inherit.
         </div>
 
         <h6 class="mt-4 fw-semibold">Response codes</h6>

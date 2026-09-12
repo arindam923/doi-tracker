@@ -189,7 +189,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                 <div><?php echo status_badge($v['status']); ?></div>
                 <div class="small text-muted">
                     <?php if (!empty($v['traffic_type'])): ?>
-                    <i class="bi bi-broadcast"></i> <?php echo sanitize($v['traffic_type']); ?>
+                    <i class="bi bi-broadcast"></i> <?php echo sanitize(str_replace(',', ', ', $v['traffic_type'] ?? '')); ?>
                     <?php endif; ?>
                 </div>
             </div>

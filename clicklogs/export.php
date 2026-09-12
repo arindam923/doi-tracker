@@ -2,20 +2,11 @@
 require_once __DIR__ . '/../config.php';
 require_role(['super_admin', 'campaign_manager']);
 
-$search = trim($_GET['search'] ?? '');
-$vendor_filter = intval($_GET['vendor_id'] ?? 0);
-$project_filter = intval($_GET['project_id'] ?? 0);
-$country_filter = trim($_GET['country'] ?? '');
-$from_date = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['from'] ?? '') ? $_GET['from'] : date('Y-m-d', strtotime('-7 days'));
-$to_date   = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['to'] ?? '') ? $_GET['to'] : date('Y-m-d');
-
-$where = ["c.clicked_at BETWEEN ? AND DATE_ADD(?, INTERVAL 1 DAY)"];
-$params = [$from_date, $to_date];
-
-if ($search) { $where[] = "(c.click_id LIKE ? OR c.ip_address LIKE ?)"; $params[] = "%$search%"; $params[] = "%$search%"; }
-if ($vendor_filter) { $where[] = "c.vendor_id = ?"; $params[] = $vendor_filter; }
-if ($project_filter) { $where[] = "c.project_id = ?"; $params[] = $project_filter; }
-if ($country_filter !== '') { $where[] = "c.country_code = ?"; $params[] = strtoupper(substr($country_filter, 0, 2)); }
+$filters = tf_clicklogs_filters($_GET);
+$from_date = $filters['from'];
+$to_date = $filters['to'];
+$where_sql = $filters['where_sql'];
+$params = $filters['params'];
 
 $stmt = $pdo->prepare("
     SELECT c.click_id, c.clicked_at, p.project_code, gv.vendor_name, c.ip_address,
@@ -24,7 +15,7 @@ $stmt = $pdo->prepare("
     FROM clicks c
     JOIN global_vendors gv ON c.vendor_id = gv.id
     JOIN projects p ON c.project_id = p.id
-    WHERE " . implode(' AND ', $where) . "
+    $where_sql
     ORDER BY c.clicked_at DESC
 ");
 $stmt->execute($params);

@@ -88,17 +88,14 @@ try {
         "SELECT pv.*, gv.vendor_status, gv.vendor_name
          FROM project_vendor pv
          JOIN global_vendors gv ON gv.id = pv.vendor_id
-         WHERE pv.vendor_id = ? AND pv.project_id = ? AND pv.status = 'active'",
+         WHERE pv.vendor_id = ? AND pv.project_id = ?
+           AND pv.status = 'active'
+           AND gv.vendor_status = 'approved'",
         [$vendor_id, $project_id]
     );
     if (!$vendor) {
         http_response_code(410);
         die('Invalid or inactive traffic source.');
-    }
-
-    if (!empty($vendor['vendor_status']) && in_array($vendor['vendor_status'], ['suspended', 'blacklisted'], true)) {
-        http_response_code(410);
-        die('This vendor is suspended.');
     }
 
     if (!empty($vendor['allowed_clicks_limit']) && (int)$vendor['allowed_clicks_limit'] > 0) {

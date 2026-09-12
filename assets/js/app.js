@@ -146,8 +146,10 @@ function positionDropdown(trigger, menu) {
     const wasHidden = menu.hidden;
     if (wasHidden) {
         menu.style.visibility = 'hidden';
-        menu.hidden = false;
     }
+    // Reveal before measuring. The floating CSS owns visibility and prevents
+    // responsive/card rules from leaving the menu display:none while open.
+    menu.hidden = false;
 
     const rect = trigger.getBoundingClientRect();
     const gutter = 8;

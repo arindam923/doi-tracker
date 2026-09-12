@@ -35,5 +35,14 @@ assert_true(strpos($list_source, '/tracking/click.php?project_id=') === false, '
 
 $click_source = file_get_contents(__DIR__ . '/../tracking/click.php');
 assert_true(strpos($click_source, 'TF_INTERNAL_CLICK_REQUEST') !== false, 'click engine rejects direct public requests');
+assert_true(strpos($click_source, "FROM projects WHERE id = ? AND status = 'live'") !== false, 'click engine requires a live project');
+assert_true(strpos($click_source, "pv.status = 'active'") !== false, 'click engine requires an active vendor assignment');
+assert_true(strpos($click_source, "gv.vendor_status = 'approved'") !== false, 'click engine requires an approved master vendor');
+
+$validator_source = file_get_contents(__DIR__ . '/../tracking/test.php');
+assert_true(strpos($validator_source, "project_status'] === 'live'") !== false, 'link validator checks project status');
+assert_true(strpos($validator_source, "vendor_status'] === 'active'") !== false, 'link validator checks assignment status');
+assert_true(strpos($validator_source, "master_vendor_status'] === 'approved'") !== false, 'link validator checks master vendor status');
+assert_true(strpos($validator_source, 'echo "✅ Link is active\\n\\n";') === false, 'link validator does not always claim active');
 
 echo "All opaque tracking link tests passed.\n";

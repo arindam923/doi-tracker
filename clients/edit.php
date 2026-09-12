@@ -13,9 +13,22 @@ if (!$client) {
     redirect(BASE_URL . '/clients/list.php');
 }
 
+if (empty($client['postback_token'])) {
+    $client['postback_token'] = ensure_client_postback_token($pdo, $id, null);
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!validate_csrf_token($_POST['csrf_token'] ?? '')) {
         set_flash('danger', 'Invalid form submission.');
+        redirect(BASE_URL . '/clients/edit.php?id=' . $id);
+    }
+
+    if (($_POST['action'] ?? '') === 'regenerate_postback') {
+        $new_token = generate_postback_token();
+        $pdo->prepare("UPDATE clients SET postback_token = ? WHERE id = ?")->execute([$new_token, $id]);
+        audit_log($pdo, 'update', 'client', $id, ['postback_token' => '••••redacted••••'], ['postback_token' => '••••redacted••••']);
+        regenerate_csrf_token();
+        set_flash('success', 'Client default postback token regenerated. Update your postback URL with clients.');
         redirect(BASE_URL . '/clients/edit.php?id=' . $id);
     }
 
@@ -143,6 +156,32 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                         <div class="col-12">
                             <label for="notes" class="tf-label">Notes</label>
                             <textarea id="notes" name="notes" class="form-control" rows="3"><?php echo sanitize($client['notes'] ?? ''); ?></textarea>
+                        </div>
+                    </div>
+
+                    <?php
+$default_postback_token = $client['postback_token'] ?? ensure_client_postback_token($pdo, $id, null);
+$default_postback_url = build_client_postback_url(BASE_URL, $default_postback_token);
+$client_project_count = (int)($pdo->prepare("SELECT COUNT(*) FROM projects WHERE client_id = ?")->execute([$id]) ? 0 : 0);
+try { $cp = $pdo->prepare("SELECT COUNT(*) FROM projects WHERE client_id = ?"); $cp->execute([$id]); $client_project_count = (int)$cp->fetchColumn(); } catch (Throwable $e) {}
+?>
+                    <div class="border rounded-3 p-3 mt-4 bg-light">
+                        <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
+                            <div>
+                                <h6 class="fw-semibold mb-1"><i class="bi bi-link-45deg"></i> Default Postback Link (reusable for all campaigns)</h6>
+                                <p class="small text-muted mb-2">One link for this client across every project. Uses the client token — works for all <strong><?php echo $client_project_count; ?></strong> project(s) via <code>click_id</code> lookup. Keep the legacy project token as fallback.</p>
+                                <div class="input-group">
+                                    <input type="text" class="form-control font-monospace small" readonly value="<?php echo sanitize($default_postback_url); ?>" onclick="this.select()">
+                                    <?php echo tf_copy_button($default_postback_url, 'btn btn-outline-secondary'); ?>
+                                </div>
+                                <div class="small text-muted mt-1">Token: <code class="small"><?php echo sanitize($default_postback_token); ?></code></div>
+                                <div class="small text-muted">Add optional params: <code>&sale_amount={sale_amount}&currency={currency}&payout={payout}&transaction_id={transaction_id}&sub1={sub1}…sub5</code></div>
+                            </div>
+                            <form method="POST" class="ms-auto">
+                                <?php echo csrf_field(); ?>
+                                <input type="hidden" name="action" value="regenerate_postback">
+                                <button type="submit" class="btn btn-outline-danger btn-sm" data-confirm="Regenerate client postback token? Existing integrations using the old URL will fail until updated."><i class="bi bi-arrow-repeat"></i> Regenerate</button>
+                            </form>
                         </div>
                     </div>
 

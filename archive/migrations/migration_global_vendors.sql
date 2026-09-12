@@ -52,6 +52,7 @@ ON DUPLICATE KEY UPDATE
 --    (active/hold/closed) and add per-project postback_url.
 -- ─────────────────────────────────────────────────────────────
 ALTER TABLE global_vendors
+    MODIFY COLUMN traffic_type VARCHAR(255) NULL,
     ADD COLUMN IF NOT EXISTS global_postback_url VARCHAR(500) NULL AFTER phone;
 
 ALTER TABLE project_vendor
@@ -80,6 +81,16 @@ ON DUPLICATE KEY UPDATE
     allowed_clicks_limit = VALUES(allowed_clicks_limit),
     daily_cap = VALUES(daily_cap),
     notes = VALUES(notes);
+
+-- Assignments created by the old implementation stored a copy of the global
+-- URL. Normalize only exact matches so they inherit future global edits;
+-- differing URLs remain explicit project overrides.
+UPDATE project_vendor pv
+JOIN global_vendors gv ON gv.id = pv.vendor_id
+SET pv.postback_url = NULL
+WHERE pv.postback_url IS NOT NULL
+  AND gv.global_postback_url IS NOT NULL
+  AND pv.postback_url = gv.global_postback_url;
 
 -- ─────────────────────────────────────────────────────────────
 -- 4. Remap fact tables: vendor_id → global_vendors.id

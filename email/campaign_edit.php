@@ -13,7 +13,7 @@ if (!$campaign) {
         redirect(BASE_URL . '/email/campaign_detail.php?id=' . $id);
 }
 
-$vendors = $pdo->prepare("SELECT pv.vendor_id AS id, gv.vendor_name FROM project_vendor pv JOIN global_vendors gv ON gv.id = pv.vendor_id WHERE pv.project_id = ? AND gv.traffic_type = 'Email' ORDER BY gv.vendor_name");
+$vendors = $pdo->prepare("SELECT pv.vendor_id AS id, gv.vendor_name FROM project_vendor pv JOIN global_vendors gv ON gv.id = pv.vendor_id WHERE pv.project_id = ? AND FIND_IN_SET('Email', gv.traffic_type) ORDER BY gv.vendor_name");
 $vendors->execute([$campaign['project_id']]);
 $vendors = $vendors->fetchAll();
 

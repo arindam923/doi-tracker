@@ -18,6 +18,23 @@ function sanitize($input) {
     return htmlspecialchars(trim($input), ENT_QUOTES, 'UTF-8');
 }
 
+function tf_normalize_traffic_types($value) {
+    $values = is_array($value) ? $value : preg_split('/\s*,\s*/', (string)$value, -1, PREG_SPLIT_NO_EMPTY);
+    $allowed = tf_traffic_types();
+    $selected = [];
+    foreach ($values as $traffic_type) {
+        $traffic_type = trim((string)$traffic_type);
+        if (in_array($traffic_type, $allowed, true) && !in_array($traffic_type, $selected, true)) {
+            $selected[] = $traffic_type;
+        }
+    }
+    return array_values(array_intersect($allowed, $selected));
+}
+
+function tf_traffic_type_includes($value, $traffic_type) {
+    return in_array($traffic_type, tf_normalize_traffic_types($value), true);
+}
+
 /**
  * Copy button that passes the raw string into tfCopyText() (defined in layout_header).
  * Avoids data-copy attributes and app.js clipboard helpers.
@@ -96,6 +113,29 @@ function generate_postback_token() {
     return bin2hex(random_bytes(32));
 }
 
+function build_client_postback_url($base_url, $token) {
+    return rtrim((string)$base_url, '/') . '/tracking/postback.php?click_id={click_id}&status=1&token=' . rawurlencode((string)$token);
+}
+
+function ensure_client_postback_token($pdo, $client_id, $existing = null) {
+    if (!empty($existing)) return $existing;
+    $stmt = $pdo->prepare("SELECT postback_token FROM clients WHERE id = ?");
+    $stmt->execute([(int)$client_id]);
+    $row = $stmt->fetch();
+    if ($row && !empty($row['postback_token'])) return $row['postback_token'];
+    $token = generate_postback_token();
+    for ($i = 0; $i < 3; $i++) {
+        try {
+            $pdo->prepare("UPDATE clients SET postback_token = ? WHERE id = ?")->execute([$token, (int)$client_id]);
+            return $token;
+        } catch (PDOException $e) {
+            if (stripos($e->getMessage(), 'duplicate') === false) throw $e;
+            $token = generate_postback_token();
+        }
+    }
+    return $token;
+}
+
 /**
  * Validate an optional outbound postback URL.
  *
@@ -118,6 +158,14 @@ function tf_is_valid_postback_url($url) {
 function tf_resolve_postback_url($override, $global) {
     $override = trim((string)$override);
     return $override !== '' ? $override : trim((string)$global);
+}
+
+/**
+ * Resolve the URL used for delivery while preserving the assignment override
+ * as a separate value in storage.
+ */
+function tf_effective_postback_url($override, $global) {
+    return tf_resolve_postback_url($override, $global);
 }
 
 /**
@@ -726,89 +774,33 @@ function tf_fetch_one(PDO $pdo, $sql, array $params = []) {
     return $row ?: null;
 }
 
-/**
- * Insert a click using the richest column set the live schema accepts.
- */
 function tf_record_click(PDO $pdo, array $row) {
-    $attempts = [
-        ['click_id','project_id','vendor_id','ip_address','user_agent','referrer','device_type','browser','os','browser_lang','isp','country_code','is_duplicate_ip','sub1','sub2','sub3','sub4','sub5','email_send_id'],
-        ['click_id','project_id','vendor_id','ip_address','user_agent','referrer','device_type','browser','os','browser_lang','isp','country_code','is_duplicate_ip','sub1','sub2','sub3','sub4','sub5'],
-        ['click_id','project_id','vendor_id','ip_address','user_agent','referrer','device_type','country_code','is_duplicate_ip','sub1','sub2','sub3','sub4','sub5'],
-        ['click_id','project_id','vendor_id','ip_address','user_agent','referrer','device_type','country_code'],
-        ['click_id','project_id','vendor_id','ip_address','user_agent','device_type'],
-        ['click_id','project_id','vendor_id'],
+    $sql = 'INSERT INTO clicks (click_id,project_id,vendor_id,ip_address,user_agent,referrer,device_type,browser,os,browser_lang,isp,country_code,is_duplicate_ip,sub1,sub2,sub3,sub4,sub5,email_send_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)';
+    $vals = [
+        $row['click_id'] ?? null, (int)($row['project_id'] ?? 0), (int)($row['vendor_id'] ?? 0),
+        $row['ip_address'] ?? null, $row['user_agent'] ?? null, $row['referrer'] ?? null,
+        $row['device_type'] ?? null, $row['browser'] ?? null, $row['os'] ?? null,
+        $row['browser_lang'] ?? null, $row['isp'] ?? null, $row['country_code'] ?? null,
+        (int)($row['is_duplicate_ip'] ?? 0),
+        $row['sub1'] ?? null, $row['sub2'] ?? null, $row['sub3'] ?? null, $row['sub4'] ?? null, $row['sub5'] ?? null,
+        $row['email_send_id'] ?? null,
     ];
-    $last = null;
-    foreach ($attempts as $cols) {
-        $placeholders = implode(',', array_fill(0, count($cols), '?'));
-        $sql = 'INSERT INTO clicks (' . implode(',', $cols) . ') VALUES (' . $placeholders . ')';
-        $vals = [];
-        foreach ($cols as $col) {
-            $vals[] = $row[$col] ?? null;
-        }
-        try {
-            $pdo->prepare($sql)->execute($vals);
-            return true;
-        } catch (PDOException $e) {
-            $last = $e;
-            $msg = $e->getMessage();
-            if (strpos($msg, 'Duplicate') !== false) {
-                throw $e;
-            }
-            if ($cols === $attempts[0]) {
-                error_log('tf_record_click full insert failed (run migration_click_enrichment.sql): ' . $msg);
-            }
-            if (strpos($msg, '1452') !== false || stripos($msg, 'foreign key') !== false) {
-                try {
-                    $pdo->exec('SET FOREIGN_KEY_CHECKS=0');
-                    $pdo->prepare($sql)->execute($vals);
-                    $pdo->exec('SET FOREIGN_KEY_CHECKS=1');
-                    return true;
-                } catch (PDOException $e2) {
-                    try { $pdo->exec('SET FOREIGN_KEY_CHECKS=1'); } catch (Throwable $ignored) {}
-                    $last = $e2;
-                }
-            }
-        }
-    }
-    if ($last instanceof Throwable) {
-        throw $last;
-    }
-    return false;
+    $pdo->prepare($sql)->execute($vals);
+    return true;
 }
 
-/**
- * Insert a conversion using the richest column set the live schema accepts.
- */
 function tf_record_conversion(PDO $pdo, array $row) {
-    $attempts = [
-        ['click_id','project_id','vendor_id','status','client_revenue','sale_amount','currency','vendor_cost','payout','profit','transaction_id','click_time','time_diff_seconds','is_manual','sub1','sub2','sub3','sub4','sub5'],
-        ['click_id','project_id','vendor_id','status','client_revenue','sale_amount','currency','vendor_cost','payout','profit','transaction_id','is_manual','sub1','sub2'],
-        ['click_id','project_id','vendor_id','status','client_revenue','sale_amount','currency','vendor_cost','profit','transaction_id','click_time','time_diff_seconds','is_manual'],
-        ['click_id','project_id','vendor_id','status','client_revenue','sale_amount','currency','vendor_cost','profit','transaction_id','is_manual'],
-        ['click_id','project_id','vendor_id','status','client_revenue','vendor_cost','profit','is_manual'],
-        ['click_id','project_id','vendor_id','status','client_revenue','vendor_cost','profit'],
+    $sql = 'INSERT INTO conversions (click_id,project_id,vendor_id,status,client_revenue,sale_amount,currency,vendor_cost,payout,profit,transaction_id,click_time,time_diff_seconds,is_manual,sub1,sub2,sub3,sub4,sub5) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)';
+    $vals = [
+        $row['click_id'] ?? null, (int)($row['project_id'] ?? 0), (int)($row['vendor_id'] ?? 0),
+        $row['status'] ?? 'complete', $row['client_revenue'] ?? 0, $row['sale_amount'] ?? 0,
+        $row['currency'] ?? 'USD', $row['vendor_cost'] ?? 0, $row['payout'] ?? ($row['vendor_cost'] ?? 0),
+        $row['profit'] ?? 0, $row['transaction_id'] ?? null, $row['click_time'] ?? null,
+        $row['time_diff_seconds'] ?? null, (int)($row['is_manual'] ?? 0),
+        $row['sub1'] ?? null, $row['sub2'] ?? null, $row['sub3'] ?? null, $row['sub4'] ?? null, $row['sub5'] ?? null,
     ];
-    $last = null;
-    foreach ($attempts as $cols) {
-        $placeholders = implode(',', array_fill(0, count($cols), '?'));
-        $sql = 'INSERT INTO conversions (' . implode(',', $cols) . ') VALUES (' . $placeholders . ')';
-        $vals = [];
-        foreach ($cols as $col) {
-            $vals[] = array_key_exists($col, $row) ? $row[$col] : null;
-        }
-        try {
-            $pdo->prepare($sql)->execute($vals);
-            return true;
-        } catch (PDOException $e) {
-            $last = $e;
-            error_log('tf_record_conversion attempt failed (' . implode(',', $cols) . '): ' . $e->getMessage());
-        }
-    }
-    if ($last instanceof Throwable) {
-        throw $last;
-    }
-    return false;
+    $pdo->prepare($sql)->execute($vals);
+    return true;
 }
 
 function tf_log_event(PDO $pdo, $type, $status, $message, $project_id = null, $vendor_id = null, $click_id = null) {

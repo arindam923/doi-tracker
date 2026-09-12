@@ -17,10 +17,20 @@ if (!$doc) {
     die('Document not found.');
 }
 
+if (!preg_match('/^[a-f0-9]{32}\.[a-z0-9]{2,4}$/', $doc['stored_filename'])) {
+    http_response_code(400);
+    die('Invalid file.');
+}
 $path = __DIR__ . '/../storage/client_docs/' . $doc['stored_filename'];
 if (!is_file($path)) {
     http_response_code(404);
     die('File missing on disk.');
+}
+$real = realpath($path);
+$base = realpath(__DIR__ . '/../storage/client_docs');
+if ($real === false || $base === false || strpos($real, $base) !== 0) {
+    http_response_code(400);
+    die('Invalid file path.');
 }
 
 // Best-effort MIME detection
@@ -43,7 +53,8 @@ $mime = match ($ext) {
 
 header('Content-Type: ' . $mime);
 header('Content-Length: ' . filesize($path));
-header('Content-Disposition: attachment; filename="' . rawurlencode($doc['original_filename']) . '"');
+header('Content-Disposition: attachment; filename="' . rawurlencode($doc['original_filename']) . '"; filename*=UTF-8\'\'' . rawurlencode($doc['original_filename']));
 header('Cache-Control: no-cache, must-revalidate');
+header('X-Content-Type-Options: nosniff');
 readfile($path);
 exit;
