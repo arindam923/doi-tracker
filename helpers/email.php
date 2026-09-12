@@ -588,19 +588,38 @@ function email_ensure_starter_templates(PDO $pdo, $created_by = null) {
     }
 }
 
-function email_campaign_eligible_count(PDO $pdo, int $project_id, int $vendor_id): int {
+function email_campaign_geos(PDO $pdo, int $campaign_id, int $project_id): array {
     $geos = [];
+    try {
+        $stmt = $pdo->prepare('SELECT country_code FROM email_campaign_geo WHERE campaign_id = ?');
+        $stmt->execute([$campaign_id]);
+        foreach ($stmt->fetchAll() as $row) {
+            $code = strtoupper(substr((string)($row['country_code'] ?? ''), 0, 2));
+            if ($code !== '') $geos[] = $code;
+        }
+        if ($geos) return array_values(array_unique($geos));
+    } catch (Throwable $e) {}
     $g = $pdo->prepare('SELECT country_code FROM campaign_geo WHERE project_id = ?');
     $g->execute([$project_id]);
     foreach ($g->fetchAll() as $row) {
-        $code = strtoupper(substr($row['country_code'], 0, 2));
-        if ($code !== '') {
-            $geos[] = $code;
-        }
+        $code = strtoupper(substr((string)($row['country_code'] ?? ''), 0, 2));
+        if ($code !== '') $geos[] = $code;
     }
+    return array_values(array_unique($geos));
+}
+
+function email_campaign_eligible_count(PDO $pdo, int $project_id, int $vendor_id, int $campaign_id = 0): int {
+    $geos = $campaign_id > 0 ? email_campaign_geos($pdo, $campaign_id, $project_id) : [];
     if (!$geos) {
-        return 0;
+        $g = $pdo->prepare('SELECT country_code FROM campaign_geo WHERE project_id = ?');
+        $g->execute([$project_id]);
+        foreach ($g->fetchAll() as $row) {
+            $code = strtoupper(substr((string)($row['country_code'] ?? ''), 0, 2));
+            if ($code !== '') $geos[] = $code;
+        }
+        $geos = array_values(array_unique($geos));
     }
+    if (!$geos) return 0;
     $ph = implode(',', array_fill(0, count($geos), '?'));
     return email_count_scalar(
         $pdo,
@@ -612,4 +631,40 @@ function email_campaign_eligible_count(PDO $pdo, int $project_id, int $vendor_id
            AND UPPER(ele.country) IN ($ph)",
         array_merge([$vendor_id], $geos)
     );
+}
+
+function email_campaign_save_geos(PDO $pdo, int $campaign_id, array $codes): void {
+    $codes = tf_normalize_geo_codes($codes);
+    try {
+        $pdo->prepare('DELETE FROM email_campaign_geo WHERE campaign_id = ?')->execute([$campaign_id]);
+    } catch (Throwable $e) {
+        try { $pdo->exec("CREATE TABLE IF NOT EXISTS `email_campaign_geo` (`id` INT AUTO_INCREMENT PRIMARY KEY, `campaign_id` INT NOT NULL, `country_code` CHAR(2) NOT NULL, `country_name` VARCHAR(100) DEFAULT NULL, `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE KEY uk_campaign_country (`campaign_id`,`country_code`), INDEX idx_country_code (`country_code`)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"); } catch (Throwable $e2) {}
+        try { $pdo->prepare('DELETE FROM email_campaign_geo WHERE campaign_id = ?')->execute([$campaign_id]); } catch (Throwable $e3) { return; }
+    }
+    if (!$codes) return;
+    $stmt = $pdo->prepare('INSERT INTO email_campaign_geo (campaign_id, country_code, country_name) VALUES (?, ?, ?)');
+    $countries = tf_countries();
+    foreach ($codes as $code) {
+        try { $stmt->execute([$campaign_id, $code, $countries[$code] ?? null]); } catch (Throwable $e) {}
+    }
+}
+
+function email_ensure_campaign_sends_schema(PDO $pdo): void {
+    try {
+        $pdo->query("SELECT next_retry_at FROM email_campaign_sends LIMIT 0");
+    } catch (Throwable $e) {
+        try { $pdo->exec("ALTER TABLE email_campaign_sends ADD COLUMN next_retry_at DATETIME DEFAULT NULL AFTER retry_count"); } catch (Throwable $e2) {}
+        try { $pdo->exec("ALTER TABLE email_campaign_sends ADD INDEX idx_next_retry (next_retry_at)"); } catch (Throwable $e2) {}
+    }
+    try {
+        $pdo->exec("ALTER TABLE email_campaign_sends MODIFY status ENUM('queued','sent','delivered','opened','clicked','converted','bounced','failed','skipped','retrying') DEFAULT 'queued'");
+    } catch (Throwable $e) {}
+    try {
+        $cols = $pdo->query("SHOW INDEX FROM email_campaign_sends WHERE Key_name='uk_campaign_recipient'")->fetchAll();
+        if ($cols) {
+            $pdo->exec("ALTER TABLE email_campaign_sends DROP INDEX uk_campaign_recipient");
+            $pdo->exec("ALTER TABLE email_campaign_sends ADD INDEX idx_campaign_recipient (campaign_id, recipient_email)");
+        }
+    } catch (Throwable $e) {}
+    try { $pdo->exec("CREATE TABLE IF NOT EXISTS `email_campaign_geo` (`id` INT AUTO_INCREMENT PRIMARY KEY, `campaign_id` INT NOT NULL, `country_code` CHAR(2) NOT NULL, `country_name` VARCHAR(100) DEFAULT NULL, `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE KEY uk_campaign_country (`campaign_id`,`country_code`), INDEX idx_country_code (`country_code`)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"); } catch (Throwable $e) {}
 }

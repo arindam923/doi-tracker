@@ -39,6 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $daily_limit = intval($_POST['daily_limit'] ?? 1000);
     $total_limit = intval($_POST['total_limit'] ?? 0);
     $is_multi_step = !empty($_POST['is_multi_step']) ? 1 : 0;
+    $geo_codes = tf_normalize_geo_codes($_POST['geo_codes'] ?? []);
 
     $errors = [];
     if (!$vendor_id) $errors[] = 'Please select a vendor.';
@@ -55,6 +56,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
         $stmt = $pdo->prepare("UPDATE email_campaigns SET vendor_id=?, template_id=?, name=?, subject=?, html_body=?, from_name=?, from_email=?, daily_limit=?, total_limit=?, is_multi_step=?, updated_at=NOW() WHERE id=?");
         $stmt->execute([$vendor_id, $template_id ?: null, $name, $subject, $html_body, $from_name ?: null, $from_email ?: null, $daily_limit, $total_limit, $is_multi_step, $id]);
+        email_campaign_save_geos($pdo, $id, $geo_codes);
 
         audit_log($pdo, 'update', 'email_campaign', $id, null, ['name' => $name]);
         set_flash('success', 'Campaign updated.');
@@ -144,11 +146,19 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                         <input type="email" id="from_email" name="from_email" class="form-control" value="<?php echo sanitize($campaign['from_email'] ?? ''); ?>">
                     </div>
                 </div>
+                <?php $campaign_geos = email_campaign_geos($pdo, $id, (int)$campaign['project_id']); $is_override = !empty($campaign_geos) || $pdo->query("SELECT COUNT(*) FROM email_campaign_geo WHERE campaign_id=".(int)$id)->fetchColumn() > 0; ?>
+                <div class="tf-form-row">
+                    <div class="tf-field col-12">
+                        <label class="tf-label">Target GEO</label>
+                        <?php echo tf_geo_picker_html($campaign_geos); ?>
+                        <p class="tf-help">Leave empty to use project GEO (<?php echo sanitize(implode(', ', tf_normalize_geo_codes(array_column($pdo->query("SELECT country_code FROM campaign_geo WHERE project_id=".(int)$campaign['project_id'])->fetchAll(), 'country_code')))); ?>). Campaign selection overrides project.</p>
+                    </div>
+                </div>
                 <div class="tf-form-row">
                     <div class="tf-field col-12">
                         <div class="form-check">
                             <input class="form-check-input" type="checkbox" id="is_multi_step" name="is_multi_step" value="1" <?php echo $campaign['is_multi_step'] ? 'checked' : ''; ?>>
-                            <label class="form-check-label" for="is_multi_step">Allow multiple emails to same recipient for this campaign</label>
+                            <label class="form-check-label" for="is_multi_step">Allow manual resend — same email can receive this campaign multiple times</label>
                         </div>
                     </div>
                 </div>

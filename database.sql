@@ -368,7 +368,7 @@ CREATE TABLE `short_links` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ============================================================
--- CAMPAIGN GEO
+-- CAMPAIGN GEO — project-level targeting
 -- ============================================================
 CREATE TABLE `campaign_geo` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
@@ -379,6 +379,20 @@ CREATE TABLE `campaign_geo` (
   UNIQUE KEY uk_project_country (`project_id`, `country_code`),
   INDEX idx_country_code (`country_code`),
   CONSTRAINT fk_geo_project FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- ============================================================
+-- EMAIL CAMPAIGN GEO — per-campaign override (falls back to campaign_geo)
+-- ============================================================
+CREATE TABLE `email_campaign_geo` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `campaign_id` INT NOT NULL,
+  `country_code` CHAR(2) NOT NULL,
+  `country_name` VARCHAR(100) DEFAULT NULL,
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_campaign_country (`campaign_id`, `country_code`),
+  INDEX idx_country_code (`country_code`),
+  CONSTRAINT fk_ecg_campaign FOREIGN KEY (`campaign_id`) REFERENCES `email_campaigns`(`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ============================================================
@@ -525,7 +539,7 @@ CREATE TABLE `email_campaign_sends` (
   `recipient_email` VARCHAR(254) NOT NULL,
   `recipient_name` VARCHAR(200) DEFAULT NULL,
   `country` CHAR(2) DEFAULT NULL,
-  `status` ENUM('queued','sent','delivered','opened','clicked','converted','bounced','failed','skipped') DEFAULT 'queued',
+  `status` ENUM('queued','sent','delivered','opened','clicked','converted','bounced','failed','skipped','retrying') DEFAULT 'queued',
   `resend_id` VARCHAR(100) DEFAULT NULL,
   `sent_at` DATETIME DEFAULT NULL,
   `opened_at` DATETIME DEFAULT NULL,
@@ -533,11 +547,13 @@ CREATE TABLE `email_campaign_sends` (
   `converted_at` DATETIME DEFAULT NULL,
   `error_message` TEXT DEFAULT NULL,
   `retry_count` INT DEFAULT 0,
+  `next_retry_at` DATETIME DEFAULT NULL,
   `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE KEY uk_campaign_recipient (`campaign_id`, `recipient_email`),
+  INDEX idx_campaign_recipient (`campaign_id`, `recipient_email`),
   INDEX idx_campaign (`campaign_id`),
   INDEX idx_list (`list_id`),
   INDEX idx_status (`status`),
+  INDEX idx_next_retry (`next_retry_at`),
   CONSTRAINT fk_ecs_campaign FOREIGN KEY (`campaign_id`) REFERENCES `email_campaigns`(`id`) ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT fk_ecs_list FOREIGN KEY (`list_id`) REFERENCES `email_lists`(`id`) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;

@@ -39,6 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $daily_limit = intval($_POST['daily_limit'] ?? 1000);
     $total_limit = intval($_POST['total_limit'] ?? 0);
     $is_multi_step = !empty($_POST['is_multi_step']) ? 1 : 0;
+    $geo_codes = tf_normalize_geo_codes($_POST['geo_codes'] ?? []);
 
     $errors = [];
     if (!$vendor_id) $errors[] = 'Please select a vendor.';
@@ -58,6 +59,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->execute([$project_id, $vendor_id, $template_id ?: null, $name, $subject, $html_body, $from_name ?: null, $from_email ?: null, $daily_limit, $total_limit, $is_multi_step, $_SESSION['user_id'] ?? null]);
 
         $new_id = (int)$pdo->lastInsertId();
+        email_campaign_save_geos($pdo, $new_id, $geo_codes);
         audit_log($pdo, 'create', 'email_campaign', $new_id, null, ['project_id' => $project_id, 'vendor_id' => $vendor_id, 'name' => $name]);
         set_flash('success', 'Campaign created.');
         redirect(BASE_URL . '/projects/detail.php?id=' . $project_id . '#email-campaigns');
@@ -155,9 +157,16 @@ require_once __DIR__ . '/../helpers/layout_header.php';
                 </div>
                 <div class="tf-form-row">
                     <div class="tf-field col-12">
+                        <label class="tf-label">Target GEO</label>
+                        <?php echo tf_geo_picker_html($form_data['geo_codes'] ?? []); ?>
+                        <p class="tf-help">Leave empty to use project GEO. Select campaign-specific countries to override.</p>
+                    </div>
+                </div>
+                <div class="tf-form-row">
+                    <div class="tf-field col-12">
                         <div class="form-check">
                             <input class="form-check-input" type="checkbox" id="is_multi_step" name="is_multi_step" value="1" <?php echo !empty($form_data['is_multi_step']) ? 'checked' : ''; ?>>
-                            <label class="form-check-label" for="is_multi_step">Allow multiple emails to same recipient for this campaign</label>
+                            <label class="form-check-label" for="is_multi_step">Allow manual resend — same email can receive this campaign multiple times</label>
                         </div>
                     </div>
                 </div>

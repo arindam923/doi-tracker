@@ -32,8 +32,17 @@ if ($action === 'launch' && in_array($status, ['draft', 'paused', 'scheduled'], 
 } elseif ($action === 'resume' && $status === 'paused') {
     $next = 'running';
 } elseif ($action === 'launch' && $status === 'completed') {
-    set_flash('danger', 'Completed campaigns cannot be relaunched. Create a new campaign.');
-    redirect($redirect);
+    if (empty($campaign['is_multi_step'])) {
+        set_flash('danger', 'Completed campaigns cannot be relaunched. Create a new campaign.');
+        redirect($redirect);
+    }
+    $next = 'running';
+} elseif ($action === 'resend' && in_array($status, ['completed','running','paused'], true)) {
+    if (empty($campaign['is_multi_step'])) {
+        set_flash('danger', 'Only multi-step campaigns allow manual resend.');
+        redirect($redirect);
+    }
+    $next = 'running';
 }
 
 if (!$next) {

@@ -78,6 +78,7 @@ require_once __DIR__ . '/helpers/constants.php';
 require_once __DIR__ . '/helpers/vendor_portal.php';
 require_once __DIR__ . '/helpers/dedupe.php';
 require_once __DIR__ . '/helpers/email.php';
+try { if (isset($pdo) && $pdo instanceof PDO) email_ensure_campaign_sends_schema($pdo); } catch (Throwable $e) {}
 if (!$__is_tracking) {
     require_once __DIR__ . '/helpers/csrf.php';
     require_once __DIR__ . '/helpers/auth_middleware.php';

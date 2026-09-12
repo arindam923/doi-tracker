@@ -591,11 +591,12 @@ $unsub_total = email_count_scalar($pdo, 'SELECT COALESCE(SUM(unsubscribed_count)
 $eligible_total = 0;
 $pending_total = 0;
 foreach ($email_campaigns as &$ec_row) {
-    $elig = email_campaign_eligible_count($pdo, $id, (int)$ec_row['vendor_id']);
-    $sent_c = email_count_scalar($pdo, "SELECT COUNT(*) FROM email_campaign_sends WHERE campaign_id = ? AND status NOT IN ('queued','skipped')", [(int)$ec_row['id']]);
+    $elig = email_campaign_eligible_count($pdo, $id, (int)$ec_row['vendor_id'], (int)$ec_row['id']);
+    $sent_c = email_count_scalar($pdo, "SELECT COUNT(*) FROM email_campaign_sends WHERE campaign_id = ? AND status NOT IN ('queued','skipped','retrying')", [(int)$ec_row['id']]);
     $ec_row['_eligible'] = $elig;
     $ec_row['_sent'] = $sent_c;
     $ec_row['_pending'] = max(0, $elig - $sent_c);
+    $ec_row['_geos'] = email_campaign_geos($pdo, (int)$ec_row['id'], $id);
     $eligible_total += $elig;
     $pending_total += $ec_row['_pending'];
 }
@@ -639,7 +640,7 @@ $sent_n = (int)($sa['sent'] ?? 0);
                 <tr><td colspan="7" class="text-center py-4 text-muted">No email campaigns yet. Attach an Email vendor, then create a campaign.</td></tr>
                 <?php else: foreach ($email_campaigns as $ec): ?>
                 <tr>
-                    <td class="fw-semibold"><?php echo sanitize($ec['name']); ?></td>
+                    <td class="fw-semibold"><?php echo sanitize($ec['name']); ?><?php if (!empty($ec['_geos'])): ?><div class="small text-muted"><?php foreach (array_slice($ec['_geos'],0,4) as $gc) echo sanitize($gc).' '; if (count($ec['_geos'])>4) echo '+'.(count($ec['_geos'])-4); ?></div><?php endif; ?></td>
                     <td><?php echo sanitize($ec['vendor_name']); ?></td>
                     <td><?php echo status_badge($ec['status']); ?></td>
                     <td class="text-end"><?php echo number_format((int)$ec['_eligible']); ?></td>
