@@ -29,7 +29,9 @@ $page_title = 'Reporting';
 require_once __DIR__ . '/../helpers/layout_header.php';
 
 $query = static function (array $overrides = []) use ($filters) {
-    return '?' . http_build_query(array_merge($filters, $overrides));
+    $merged = array_merge($filters, $overrides);
+    unset($merged['page']);
+    return '?' . http_build_query($merged);
 };
 $period_labels = ['daily' => 'Daily', 'weekly' => 'Weekly', 'monthly' => 'Monthly', 'custom' => 'Custom Date Range'];
 $metric_currency = static function ($value) { return format_currency($value); };

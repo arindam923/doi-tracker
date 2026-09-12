@@ -11,14 +11,19 @@ function tf_reporting_groups() {
 }
 
 function tf_reporting_date($value, $fallback) {
-    return preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)$value) ? (string)$value : $fallback;
+    $v = is_array($value) ? $fallback : (string)$value;
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $v)) return $fallback;
+    [$y,$m,$d]=explode('-',$v);
+    return checkdate((int)$m,(int)$d,(int)$y) ? $v : $fallback;
 }
 
 function tf_reporting_normalize_filters(array $input, array $defaults = []) {
     $today = date('Y-m-d');
     $default_from = $defaults['from'] ?? date('Y-m-d', strtotime('-30 days'));
-    $period = in_array(($input['period'] ?? ''), tf_reporting_periods(), true) ? $input['period'] : ($defaults['period'] ?? 'daily');
-    $group = in_array(($input['group'] ?? ''), tf_reporting_groups(), true) ? $input['group'] : ($defaults['group'] ?? 'project');
+    $period_raw = is_array($input['period'] ?? null) ? '' : (string)($input['period'] ?? '');
+    $group_raw = is_array($input['group'] ?? null) ? '' : (string)($input['group'] ?? '');
+    $period = in_array($period_raw, tf_reporting_periods(), true) ? $period_raw : ($defaults['period'] ?? 'daily');
+    $group = in_array($group_raw, tf_reporting_groups(), true) ? $group_raw : ($defaults['group'] ?? 'project');
     $from = tf_reporting_date($input['from'] ?? '', $default_from);
     $to = tf_reporting_date($input['to'] ?? '', $today);
     if ($to < $from) [$from, $to] = [$to, $from];

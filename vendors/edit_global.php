@@ -3,7 +3,7 @@ require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../helpers/email.php';
 require_role(['super_admin', 'campaign_manager']);
 
-$id = intval($_GET['id'] ?? 0);
+$id = tf_get_int('id');
 if (!$id) redirect(BASE_URL . '/vendors/global.php');
 
 $stmt = $pdo->prepare("SELECT * FROM global_vendors WHERE id = ?");
@@ -255,26 +255,36 @@ require_once __DIR__ . '/../helpers/layout_header.php';
 <?php
 if (tf_traffic_type_includes($vendor['traffic_type'] ?? '', 'Email')):
     $list_id = ensure_vendor_email_list($pdo, $id, (int)($_SESSION['user_id'] ?? 0));
-    $status_filter = $_GET['estatus'] ?? '';
-    $search = trim($_GET['esearch'] ?? '');
-    $epage = max(1, intval($_GET['page'] ?? 1));
+    $estatus = tf_get_string('estatus');
+    if ($estatus !== '' && !in_array($estatus, ['active', 'unsubscribed', 'bounced', 'invalid'], true)) $estatus = '';
+    $esearch = tf_get_string('esearch');
+    $epage = max(1, tf_get_int('epage', 1));
+    if (isset($_GET['page']) && !isset($_GET['epage'])) {
+        $legacy_page = tf_get_int('page', 1);
+        if ($legacy_page > 1) $epage = max(1, $legacy_page);
+    }
     $where = ['ele.list_id = ?'];
     $params = [$list_id];
-    if (in_array($status_filter, ['active', 'unsubscribed', 'bounced', 'invalid'], true)) {
+    if ($estatus !== '') {
         $where[] = 'ele.status = ?';
-        $params[] = $status_filter;
+        $params[] = $estatus;
     }
-    if ($search !== '') {
-        $where[] = '(ele.email LIKE ? OR ele.first_name LIKE ? OR ele.last_name LIKE ? OR ele.name LIKE ?)';
-        $like = '%' . $search . '%';
+    if ($esearch !== '') {
+        $where[] = '(ele.email LIKE ? ESCAPE \'\\\' OR ele.first_name LIKE ? ESCAPE \'\\\' OR ele.last_name LIKE ? ESCAPE \'\\\' OR ele.name LIKE ? ESCAPE \'\\\')';
+        $like = '%' . tf_like_escape($esearch) . '%';
         array_push($params, $like, $like, $like, $like);
     }
     $where_sql = 'WHERE ' . implode(' AND ', $where);
     $total_contacts = email_count_scalar($pdo, "SELECT COUNT(*) FROM email_list_entries ele $where_sql", $params);
     $epagination = paginate($total_contacts, 50, $epage);
-    $estmt = $pdo->prepare("SELECT ele.* FROM email_list_entries ele $where_sql ORDER BY ele.added_at DESC LIMIT {$epagination['per_page']} OFFSET {$epagination['offset']}");
-    $estmt->execute($params);
-    $entries = $estmt->fetchAll();
+    try {
+        $estmt = $pdo->prepare("SELECT ele.* FROM email_list_entries ele $where_sql ORDER BY ele.added_at DESC LIMIT {$epagination['per_page']} OFFSET {$epagination['offset']}");
+        $estmt->execute($params);
+        $entries = $estmt->fetchAll();
+    } catch (Throwable $e) {
+        error_log('vendors/edit_global contacts query: ' . $e->getMessage());
+        $entries = [];
+    }
     $list_total = email_count_scalar($pdo, 'SELECT COUNT(*) FROM email_list_entries WHERE list_id = ?', [$list_id]);
 ?>
 <div class="row justify-content-center mt-4" id="email-db">
@@ -303,13 +313,13 @@ if (tf_traffic_type_includes($vendor['traffic_type'] ?? '', 'Email')):
                 <form method="GET" class="row g-2 align-items-end">
                     <input type="hidden" name="id" value="<?php echo (int)$id; ?>">
                     <div class="col-12 col-md-5">
-                        <input type="text" name="esearch" class="form-control form-control-sm" value="<?php echo sanitize($search); ?>" placeholder="Search email or name">
+                        <input type="text" name="esearch" class="form-control form-control-sm" value="<?php echo sanitize($esearch); ?>" placeholder="Search email or name">
                     </div>
                     <div class="col-6 col-md-3">
                         <select name="estatus" class="form-select form-select-sm">
                             <option value="">All statuses</option>
                             <?php foreach (['active','unsubscribed','bounced','invalid'] as $st): ?>
-                            <option value="<?php echo $st; ?>" <?php echo $status_filter === $st ? 'selected' : ''; ?>><?php echo ucfirst($st); ?></option>
+                            <option value="<?php echo $st; ?>" <?php echo $estatus === $st ? 'selected' : ''; ?>><?php echo ucfirst($st); ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>
@@ -351,7 +361,13 @@ if (tf_traffic_type_includes($vendor['traffic_type'] ?? '', 'Email')):
                     </tbody>
                 </table>
             </div>
-            <div class="tf-card-footer"><?php echo render_pagination($epagination, BASE_URL . '/vendors/edit_global.php?id=' . (int)$id . '&esearch=' . urlencode($search) . '&estatus=' . urlencode($status_filter)); ?></div>
+            <div class="tf-card-footer"><?php
+                $epag_q = http_build_query(array_filter(['id' => $id, 'esearch' => $esearch, 'estatus' => $estatus], static fn($v) => $v !== '' && $v !== null));
+                $epag_url = BASE_URL . '/vendors/edit_global.php' . ($epag_q ? '?' . $epag_q : '');
+                $epag_html = render_pagination($epagination, $epag_url);
+                $epag_html = str_replace('page=', 'epage=', $epag_html);
+                echo $epag_html;
+            ?></div>
         </div>
     </div>
 </div>

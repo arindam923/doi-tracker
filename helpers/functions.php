@@ -367,6 +367,7 @@ function status_badge($status) {
         'unsubscribed' => 'bg-light',
         'invalid' => 'bg-danger',
         'queued' => 'bg-secondary',
+        'retrying' => 'bg-warning',
         'skipped' => 'bg-light',
         'scheduled' => 'bg-info',
     ];
@@ -801,6 +802,26 @@ function tf_record_conversion(PDO $pdo, array $row) {
     ];
     $pdo->prepare($sql)->execute($vals);
     return true;
+}
+
+function tf_get_string($key, $default = '') {
+    $v = $_GET[$key] ?? $default;
+    if (is_array($v)) return $default;
+    return trim((string)$v);
+}
+function tf_get_int($key, $default = 0) {
+    $v = $_GET[$key] ?? $default;
+    if (is_array($v)) return $default;
+    return (int)$v;
+}
+function tf_get_date($key, $fallback = '') {
+    $v = tf_get_string($key, $fallback);
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $v)) return $fallback;
+    [$y,$m,$d] = explode('-', $v);
+    return checkdate((int)$m,(int)$d,(int)$y) ? $v : $fallback;
+}
+function tf_like_escape($s) {
+    return addcslashes((string)$s, '%_\\');
 }
 
 function tf_log_event(PDO $pdo, $type, $status, $message, $project_id = null, $vendor_id = null, $click_id = null) {

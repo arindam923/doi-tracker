@@ -15,7 +15,8 @@ $report_filters = tf_reporting_normalize_filters($_GET);
 $from_date = $report_filters['from'];
 $to_date = $report_filters['to'];
 $project_filter = $report_filters['project_id'];
-$type = $_GET['type'] ?? 'conversions'; // clicks or conversions
+$type_raw = tf_get_string('type', 'conversions');
+$type = in_array($type_raw, ['clicks', 'conversions'], true) ? $type_raw : 'conversions';
 
 if ($type === 'clicks') {
     // Export raw clicks
@@ -32,9 +33,15 @@ if ($type === 'clicks') {
     }
     $sql .= " ORDER BY cl.clicked_at DESC";
 
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute($params);
-    $rows = $stmt->fetchAll();
+    try {
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        $rows = $stmt->fetchAll();
+    } catch (Throwable $e) {
+        error_log('reports export clicks failed: ' . $e->getMessage());
+        http_response_code(500);
+        exit('Export failed.');
+    }
 
     $filename = 'clicks_' . $from_date . '_to_' . $to_date . '.csv';
 
@@ -57,8 +64,14 @@ if ($type === 'clicks') {
     fclose($output);
 
 } else {
-    $report = tf_reporting_build_report($pdo, $_GET);
-    $rows = $report['rows'];
+    try {
+        $report = tf_reporting_build_report($pdo, $_GET);
+        $rows = $report['rows'];
+    } catch (Throwable $e) {
+        error_log('reports export conversions failed: ' . $e->getMessage());
+        http_response_code(500);
+        exit('Export failed.');
+    }
 
     $filename = 'conversions_' . $from_date . '_to_' . $to_date . '.csv';
 

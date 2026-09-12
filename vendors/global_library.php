@@ -2,36 +2,44 @@
 require_once __DIR__ . '/../config.php';
 require_role(['super_admin', 'campaign_manager']);
 
-$search = trim($_GET['search'] ?? '');
-$status_filter = $_GET['status'] ?? '';
-$traffic_filter = $_GET['traffic'] ?? '';
-$project_filter = intval($_GET['project_id'] ?? 0);
-$page = max(1, intval($_GET['page'] ?? 1));
+$search = tf_get_string('search');
+$status_filter = tf_get_string('status');
+if ($status_filter !== '' && !array_key_exists($status_filter, tf_vendor_statuses())) $status_filter = '';
+$traffic_filter = tf_get_string('traffic');
+if ($traffic_filter !== '' && !in_array($traffic_filter, tf_traffic_types(), true)) $traffic_filter = '';
+$project_filter = tf_get_int('project_id');
+$page = max(1, tf_get_int('page', 1));
 $per_page = 50;
 
 $where = [];
 $params = [];
 if ($search !== '') {
-    $where[] = "(gv.vendor_code LIKE ? OR gv.vendor_name LIKE ? OR gv.email LIKE ?)";
-    $needle = "%$search%";
+    $where[] = "(gv.vendor_code LIKE ? ESCAPE '\\' OR gv.vendor_name LIKE ? ESCAPE '\\' OR gv.email LIKE ? ESCAPE '\\')";
+    $needle = '%' . tf_like_escape($search) . '%';
     $params = array_merge($params, [$needle, $needle, $needle]);
 }
-if ($status_filter !== '' && array_key_exists($status_filter, tf_vendor_statuses())) {
+if ($status_filter !== '') {
     $where[] = "gv.vendor_status = ?";
     $params[] = $status_filter;
 }
-if ($traffic_filter !== '' && in_array($traffic_filter, tf_traffic_types(), true)) {
+if ($traffic_filter !== '') {
     $where[] = "FIND_IN_SET(?, gv.traffic_type)";
     $params[] = $traffic_filter;
 }
 $where_sql = $where ? 'WHERE ' . implode(' AND ', $where) : '';
 
-$count = $pdo->prepare("SELECT COUNT(*) as cnt FROM global_vendors gv $where_sql");
-$count->execute($params);
-$total = (int)$count->fetch()['cnt'];
+try {
+    $count = $pdo->prepare("SELECT COUNT(*) as cnt FROM global_vendors gv $where_sql");
+    $count->execute($params);
+    $total = (int)($count->fetch()['cnt'] ?? 0);
+} catch (Throwable $e) {
+    error_log('vendors/global_library count: ' . $e->getMessage());
+    $total = 0;
+}
 $pagination = paginate($total, $per_page, $page);
 
-$vendors = $pdo->prepare("
+try {
+    $vendors = $pdo->prepare("
     SELECT gv.*,
         (SELECT COUNT(DISTINCT pv.project_id) FROM project_vendor pv WHERE pv.vendor_id = gv.id) AS attached_projects,
         (SELECT COUNT(*) FROM clicks c WHERE c.vendor_id = gv.id) AS total_clicks,
@@ -42,8 +50,12 @@ $vendors = $pdo->prepare("
     ORDER BY gv.vendor_status = 'approved' DESC, gv.created_at DESC
     LIMIT {$pagination['per_page']} OFFSET {$pagination['offset']}
 ");
-$vendors->execute($params);
-$gv_list = $vendors->fetchAll();
+    $vendors->execute($params);
+    $gv_list = $vendors->fetchAll();
+} catch (Throwable $e) {
+    error_log('vendors/global_library query: ' . $e->getMessage());
+    $gv_list = [];
+}
 
 $projects_list = $pdo->query("SELECT id, project_code, project_name FROM projects ORDER BY project_name")->fetchAll();
 
@@ -160,7 +172,11 @@ require_once __DIR__ . '/../helpers/layout_header.php';
         </table>
     </div>
     <div class="tf-card-footer">
-        <?php echo render_pagination($pagination, BASE_URL . '/vendors/global_library.php?' . http_build_query($_GET)); ?>
+        <?php
+        $gl_filters = array_filter(['search' => $search, 'status' => $status_filter, 'traffic' => $traffic_filter, 'project_id' => $project_filter ? (string)$project_filter : ''], static fn($v) => $v !== '');
+        $gl_base = BASE_URL . '/vendors/global_library.php' . ($gl_filters ? '?' . http_build_query($gl_filters) : '');
+        echo render_pagination($pagination, $gl_base);
+        ?>
     </div>
 </div>
 

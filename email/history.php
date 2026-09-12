@@ -10,13 +10,14 @@ function escape_csv($value) {
     return $value;
 }
 
-$export = isset($_GET['export']) && $_GET['export'] === 'csv';
-$page = $export ? 1 : max(1, intval($_GET['page'] ?? 1));
+$export = tf_get_string('export', '') === 'csv';
+$page = $export ? 1 : max(1, tf_get_int('page', 1));
 $per_page = $export ? 0 : 50;
-$status_filter = $_GET['status'] ?? '';
-$batch_filter = trim($_GET['batch_id'] ?? '');
-$date_from = sanitize($_GET['from'] ?? '');
-$date_to = sanitize($_GET['to'] ?? '');
+$status_raw = tf_get_string('status', '');
+$status_filter = in_array($status_raw, ['sent', 'failed', 'queued', 'retrying'], true) ? $status_raw : '';
+$batch_filter = tf_get_string('batch_id', '');
+$date_from = tf_get_date('from', '');
+$date_to = tf_get_date('to', '');
 
 $where = [];
 $params = [];
@@ -29,35 +30,46 @@ if ($batch_filter !== '') {
     $where[] = "e.batch_id = ?";
     $params[] = $batch_filter;
 }
-if ($date_from && preg_match('/^\d{4}-\d{2}-\d{2}$/', $date_from)) {
+if ($date_from !== '') {
     $where[] = "e.created_at >= ?";
     $params[] = $date_from;
 }
-if ($date_to && preg_match('/^\d{4}-\d{2}-\d{2}$/', $date_to)) {
+if ($date_to !== '') {
     $where[] = "e.created_at <= DATE_ADD(?, INTERVAL 1 DAY)";
     $params[] = $date_to;
 }
 
 $where_sql = $where ? 'WHERE ' . implode(' AND ', $where) : '';
 
-$count_stmt = $pdo->prepare("SELECT COUNT(*) as cnt FROM sent_emails e $where_sql");
-$count_stmt->execute($params);
-$total = $count_stmt->fetch()['cnt'];
+try {
+    $count_stmt = $pdo->prepare("SELECT COUNT(*) as cnt FROM sent_emails e $where_sql");
+    $count_stmt->execute($params);
+    $total = (int)($count_stmt->fetch()['cnt'] ?? 0);
+} catch (Throwable $e) {
+    error_log('email history count failed: ' . $e->getMessage());
+    $total = 0;
+}
 $pagination = [];
 if (!$export) {
     $pagination = paginate($total, $per_page, $page);
 }
 
-$stmt = $pdo->prepare("
+try {
+    $stmt = $pdo->prepare("
     SELECT e.*, u.username as sent_by_name
     FROM sent_emails e
     LEFT JOIN users u ON e.sent_by = u.id
     $where_sql
     ORDER BY e.created_at DESC
     " . ($export ? '' : "LIMIT {$pagination['per_page']} OFFSET {$pagination['offset']}")
-);
-$stmt->execute($params);
-$emails = $stmt->fetchAll();
+    );
+    $stmt->execute($params);
+    $emails = $stmt->fetchAll();
+} catch (Throwable $e) {
+    error_log('email history fetch failed: ' . $e->getMessage());
+    $emails = [];
+    if (!$export) $total = 0;
+}
 
 if ($export) {
     $filename = 'email_history_' . date('Y-m-d') . '.csv';
@@ -118,8 +130,14 @@ require_once __DIR__ . '/../helpers/layout_header.php';
             </div>
         </div>
     </form>
+    <?php
+    $export_params = array_filter(['status' => $status_filter, 'batch_id' => $batch_filter, 'from' => $date_from, 'to' => $date_to], static fn($v) => $v !== '' && $v !== null);
+    $export_href = BASE_URL . '/email/history.php?export=csv' . ($export_params ? '&' . http_build_query($export_params) : '');
+    $history_params = array_filter(['status' => $status_filter, 'batch_id' => $batch_filter, 'from' => $date_from, 'to' => $date_to], static fn($v) => $v !== '' && $v !== null);
+    $history_base = BASE_URL . '/email/history.php' . ($history_params ? '?' . http_build_query($history_params) : '');
+    ?>
     <div class="card-footer bg-white border-top d-flex justify-content-end py-2">
-        <a href="<?php echo BASE_URL; ?>/email/history.php?export=csv<?php echo $status_filter ? '&status=' . urlencode($status_filter) : ''; ?><?php echo $batch_filter ? '&batch_id=' . urlencode($batch_filter) : ''; ?><?php echo $date_from ? '&from=' . urlencode($date_from) : ''; ?><?php echo $date_to ? '&to=' . urlencode($date_to) : ''; ?>" class="btn btn-outline-success btn-sm">
+        <a href="<?php echo $export_href; ?>" class="btn btn-outline-success btn-sm">
             <i class="bi bi-download"></i>Export CSV
         </a>
     </div>
@@ -181,7 +199,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
     </div>
 </div>
 
-<?php echo render_pagination($pagination, BASE_URL . '/email/history.php'); ?>
+<?php if (!$export && !empty($pagination)) echo render_pagination($pagination, $history_base ?? BASE_URL . '/email/history.php'); ?>
 
 <!-- View Email Modal -->
 <div id="viewEmailModal" class="tf-modal is-lg" hidden role="dialog" aria-modal="true" aria-labelledby="viewEmailModal-title">

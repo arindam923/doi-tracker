@@ -2,36 +2,44 @@
 require_once __DIR__ . '/../config.php';
 require_role(['super_admin', 'campaign_manager']);
 
-$search = trim($_GET['search'] ?? '');
-$status_filter = $_GET['status'] ?? '';
-$traffic_filter = $_GET['traffic'] ?? '';
-$page = max(1, intval($_GET['page'] ?? 1));
+$search = tf_get_string('search');
+$status_filter = tf_get_string('status');
+if ($status_filter !== '' && !array_key_exists($status_filter, tf_vendor_statuses())) $status_filter = '';
+$traffic_filter = tf_get_string('traffic');
+if ($traffic_filter !== '' && !in_array($traffic_filter, tf_traffic_types(), true)) $traffic_filter = '';
+$page = max(1, tf_get_int('page', 1));
 $per_page = 10;
 
 $where = [];
 $params = [];
 if ($search !== '') {
-    $where[] = "(gv.vendor_code LIKE ? OR gv.vendor_name LIKE ? OR gv.email LIKE ?)";
-    $needle = "%$search%";
+    $where[] = "(gv.vendor_code LIKE ? ESCAPE '\\' OR gv.vendor_name LIKE ? ESCAPE '\\' OR gv.email LIKE ? ESCAPE '\\')";
+    $needle = '%' . tf_like_escape($search) . '%';
     $params = array_merge($params, [$needle, $needle, $needle]);
 }
-if ($status_filter !== '' && array_key_exists($status_filter, tf_vendor_statuses())) {
+if ($status_filter !== '') {
     $where[] = "gv.vendor_status = ?";
     $params[] = $status_filter;
 }
-if ($traffic_filter !== '' && in_array($traffic_filter, tf_traffic_types(), true)) {
+if ($traffic_filter !== '') {
     $where[] = "FIND_IN_SET(?, gv.traffic_type)";
     $params[] = $traffic_filter;
 }
 $where_sql = $where ? 'WHERE ' . implode(' AND ', $where) : '';
 
-$count_stmt = $pdo->prepare("SELECT COUNT(*) as cnt FROM global_vendors gv $where_sql");
-$count_stmt->execute($params);
-$total = (int)$count_stmt->fetch()['cnt'];
+try {
+    $count_stmt = $pdo->prepare("SELECT COUNT(*) as cnt FROM global_vendors gv $where_sql");
+    $count_stmt->execute($params);
+    $total = (int)($count_stmt->fetch()['cnt'] ?? 0);
+} catch (Throwable $e) {
+    error_log('vendors/global count: ' . $e->getMessage());
+    $total = 0;
+}
 
 $pagination = paginate($total, $per_page, $page);
 
-$stmt = $pdo->prepare("
+try {
+    $stmt = $pdo->prepare("
     SELECT gv.*,
         (SELECT COUNT(DISTINCT pv.project_id) FROM project_vendor pv WHERE pv.vendor_id = gv.id) AS attached_projects,
         (SELECT COUNT(*) FROM clicks c WHERE c.vendor_id = gv.id) AS total_clicks,
@@ -42,8 +50,12 @@ $stmt = $pdo->prepare("
     ORDER BY gv.created_at DESC
     LIMIT {$pagination['per_page']} OFFSET {$pagination['offset']}
 ");
-$stmt->execute($params);
-$vendors = $stmt->fetchAll();
+    $stmt->execute($params);
+    $vendors = $stmt->fetchAll();
+} catch (Throwable $e) {
+    error_log('vendors/global query: ' . $e->getMessage());
+    $vendors = [];
+}
 
 $page_title = 'Vendors';
 $page_actions = '<a href="' . BASE_URL . '/vendors/create.php" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg"></i>Add Vendor</a>';
@@ -151,6 +163,8 @@ require_once __DIR__ . '/../helpers/layout_header.php';
 </div>
 
 <?php
-echo render_pagination($pagination, BASE_URL . '/vendors/global.php');
+$pagination_filters = array_filter(['search' => $search, 'status' => $status_filter, 'traffic' => $traffic_filter], static fn($v) => $v !== '');
+$pagination_base = BASE_URL . '/vendors/global.php' . ($pagination_filters ? '?' . http_build_query($pagination_filters) : '');
+echo render_pagination($pagination, $pagination_base);
 require_once __DIR__ . '/../helpers/layout_footer.php';
 ?>

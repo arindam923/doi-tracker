@@ -27,9 +27,18 @@ try {
     $campaign = $pdo->query("SELECT ec.*, p.project_code, p.project_name FROM email_campaigns ec JOIN projects p ON ec.project_id = p.id WHERE ec.status = 'running' ORDER BY ec.created_at ASC LIMIT 1 FOR UPDATE SKIP LOCKED")->fetch();
     if (!$campaign) {
         $pdo->commit();
-        $retry = $pdo->prepare("SELECT id, campaign_id, project_id, vendor_id, list_id, entry_id, recipient_email, recipient_name, country, retry_count FROM email_campaign_sends WHERE status='retrying' AND (next_retry_at IS NULL OR next_retry_at <= NOW()) ORDER BY next_retry_at ASC LIMIT 1");
-        $retry->execute();
-        $rs = $retry->fetch();
+        $rs = null;
+        try {
+            $retry = $pdo->prepare("SELECT id, campaign_id, project_id, vendor_id, list_id, entry_id, recipient_email, recipient_name, country, retry_count FROM email_campaign_sends WHERE status='retrying' AND (next_retry_at IS NULL OR next_retry_at <= NOW()) ORDER BY next_retry_at ASC LIMIT 1");
+            $retry->execute();
+            $rs = $retry->fetch();
+        } catch (Throwable $e) {
+            try {
+                $retry = $pdo->prepare("SELECT id, campaign_id, project_id, vendor_id, list_id, entry_id, recipient_email, recipient_name, country, retry_count FROM email_campaign_sends WHERE status='retrying' ORDER BY created_at ASC LIMIT 1");
+                $retry->execute();
+                $rs = $retry->fetch();
+            } catch (Throwable $e2) { $rs = null; }
+        }
         if ($rs) {
             $rc = (int)($rs['campaign_id'] ?? 0);
             $camp = tf_fetch_one($pdo, "SELECT * FROM email_campaigns WHERE id=?", [$rc]);

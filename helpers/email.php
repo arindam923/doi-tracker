@@ -650,21 +650,16 @@ function email_campaign_save_geos(PDO $pdo, int $campaign_id, array $codes): voi
 }
 
 function email_ensure_campaign_sends_schema(PDO $pdo): void {
+    static $done = false;
+    if ($done) return;
+    $done = true;
+    try { $pdo->exec("CREATE TABLE IF NOT EXISTS `email_campaign_geo` (`id` INT AUTO_INCREMENT PRIMARY KEY, `campaign_id` INT NOT NULL, `country_code` CHAR(2) NOT NULL, `country_name` VARCHAR(100) DEFAULT NULL, `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE KEY uk_campaign_country (`campaign_id`,`country_code`), INDEX idx_country_code (`country_code`)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"); } catch (Throwable $e) {}
     try {
-        $pdo->query("SELECT next_retry_at FROM email_campaign_sends LIMIT 0");
-    } catch (Throwable $e) {
-        try { $pdo->exec("ALTER TABLE email_campaign_sends ADD COLUMN next_retry_at DATETIME DEFAULT NULL AFTER retry_count"); } catch (Throwable $e2) {}
-        try { $pdo->exec("ALTER TABLE email_campaign_sends ADD INDEX idx_next_retry (next_retry_at)"); } catch (Throwable $e2) {}
-    }
-    try {
-        $pdo->exec("ALTER TABLE email_campaign_sends MODIFY status ENUM('queued','sent','delivered','opened','clicked','converted','bounced','failed','skipped','retrying') DEFAULT 'queued'");
-    } catch (Throwable $e) {}
-    try {
-        $cols = $pdo->query("SHOW INDEX FROM email_campaign_sends WHERE Key_name='uk_campaign_recipient'")->fetchAll();
-        if ($cols) {
-            $pdo->exec("ALTER TABLE email_campaign_sends DROP INDEX uk_campaign_recipient");
-            $pdo->exec("ALTER TABLE email_campaign_sends ADD INDEX idx_campaign_recipient (campaign_id, recipient_email)");
+        $has = false;
+        try { $pdo->query("SELECT next_retry_at FROM email_campaign_sends LIMIT 0"); $has = true; } catch (Throwable $e) { $has = false; }
+        if (!$has) {
+            try { $pdo->exec("ALTER TABLE email_campaign_sends ADD COLUMN next_retry_at DATETIME DEFAULT NULL AFTER retry_count"); } catch (Throwable $e2) {}
+            try { $pdo->exec("ALTER TABLE email_campaign_sends ADD INDEX idx_next_retry (next_retry_at)"); } catch (Throwable $e2) {}
         }
     } catch (Throwable $e) {}
-    try { $pdo->exec("CREATE TABLE IF NOT EXISTS `email_campaign_geo` (`id` INT AUTO_INCREMENT PRIMARY KEY, `campaign_id` INT NOT NULL, `country_code` CHAR(2) NOT NULL, `country_name` VARCHAR(100) DEFAULT NULL, `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE KEY uk_campaign_country (`campaign_id`,`country_code`), INDEX idx_country_code (`country_code`)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"); } catch (Throwable $e) {}
 }

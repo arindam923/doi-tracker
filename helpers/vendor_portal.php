@@ -20,6 +20,7 @@ function tf_vendor_assignment_sql($alias = 'pv') {
  * Accept only ISO calendar dates for report filters.
  */
 function tf_vendor_date($value) {
+    if (is_array($value)) return null;
     $value = trim((string)$value);
     if ($value === '') return null;
     $date = DateTimeImmutable::createFromFormat('!Y-m-d', $value);

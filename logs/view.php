@@ -2,13 +2,11 @@
 require_once __DIR__ . '/../config.php';
 require_role(['super_admin', 'campaign_manager']);
 
-$log_type = $_GET['type'] ?? '';
-$status_filter = $_GET['status'] ?? '';
-$date_from = sanitize($_GET['from'] ?? '');
-$date_to = sanitize($_GET['to'] ?? '');
-if ($date_from && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $date_from)) $date_from = '';
-if ($date_to && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $date_to)) $date_to = '';
-$page = max(1, intval($_GET['page'] ?? 1));
+$log_type = tf_get_string('type');
+$status_filter = tf_get_string('status');
+$date_from = tf_get_date('from', '');
+$date_to = tf_get_date('to', '');
+$page = max(1, tf_get_int('page', 1));
 $per_page = 100;
 
 $where = [];
@@ -33,13 +31,16 @@ if ($date_to) {
 
 $where_sql = $where ? 'WHERE ' . implode(' AND ', $where) : '';
 
-$count_stmt = $pdo->prepare("SELECT COUNT(*) as cnt FROM logs l $where_sql");
-$count_stmt->execute($params);
-$total = $count_stmt->fetch()['cnt'];
+$logs_params = array_filter(['type'=>$log_type,'status'=>$status_filter,'from'=>$date_from,'to'=>$date_to], fn($v)=>$v!=='' && $v!==null);
+$logs_qs = http_build_query($logs_params);
+$logs_base = BASE_URL . '/logs/view.php' . ($logs_qs !== '' ? '?' . $logs_qs : '');
 
-$pagination = paginate($total, $per_page, $page);
-
-$stmt = $pdo->prepare("
+try {
+    $count_stmt = $pdo->prepare("SELECT COUNT(*) as cnt FROM logs l $where_sql");
+    $count_stmt->execute($params);
+    $total = (int)$count_stmt->fetch()['cnt'];
+    $pagination = paginate($total, $per_page, $page);
+    $stmt = $pdo->prepare("
     SELECT l.*, p.project_code, gv.vendor_name
     FROM logs l
     LEFT JOIN projects p ON l.project_id = p.id
@@ -47,9 +48,15 @@ $stmt = $pdo->prepare("
     $where_sql
     ORDER BY l.created_at DESC
     LIMIT {$pagination['per_page']} OFFSET {$pagination['offset']}
-");
-$stmt->execute($params);
-$logs = $stmt->fetchAll();
+ ");
+    $stmt->execute($params);
+    $logs = $stmt->fetchAll();
+} catch (Throwable $e) {
+    error_log('logs/view query failed: '.$e->getMessage());
+    $total = 0;
+    $pagination = paginate(0, $per_page, $page);
+    $logs = [];
+}
 
 $log_types = ['click', 'postback', 'error', 'status_change', 'manual', 'vendor_postback', 'login', 'vendor_change'];
 $statuses = ['success', 'failed', 'duplicate', 'rejected'];
@@ -141,6 +148,6 @@ require_once __DIR__ . '/../helpers/layout_header.php';
 </div>
 
 <?php
-echo render_pagination($pagination, BASE_URL . '/logs/view.php');
+echo render_pagination($pagination, $logs_base);
 require_once __DIR__ . '/../helpers/layout_footer.php';
 ?>

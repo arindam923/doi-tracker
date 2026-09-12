@@ -2,23 +2,34 @@
 require_once __DIR__ . '/../config.php';
 require_role(['super_admin', 'campaign_manager']);
 
-$id = intval($_GET['id'] ?? 0);
+$id = tf_get_int('id', 0);
 if (!$id) redirect(BASE_URL . '/projects/list.php');
 
-$stmt = $pdo->prepare("SELECT ec.*, p.project_code, p.project_name, p.id as project_id, gv.vendor_name FROM email_campaigns ec JOIN projects p ON ec.project_id = p.id JOIN global_vendors gv ON ec.vendor_id = gv.id WHERE ec.id = ?");
-$stmt->execute([$id]);
-$campaign = $stmt->fetch();
+try {
+    $stmt = $pdo->prepare("SELECT ec.*, p.project_code, p.project_name, p.id as project_id, gv.vendor_name FROM email_campaigns ec JOIN projects p ON ec.project_id = p.id JOIN global_vendors gv ON ec.vendor_id = gv.id WHERE ec.id = ?");
+    $stmt->execute([$id]);
+    $campaign = $stmt->fetch();
+} catch (Throwable $e) {
+    error_log('campaign_detail fetch failed: ' . $e->getMessage());
+    $campaign = false;
+}
 if (!$campaign) { set_flash('danger','Campaign not found.'); redirect(BASE_URL.'/projects/list.php'); }
 
-if (isset($_GET['export']) && $_GET['export']==='csv') {
-    $sends = $pdo->prepare("SELECT recipient_email, recipient_name, country, status, sent_at, opened_at, clicked_at, converted_at, error_message FROM email_campaign_sends WHERE campaign_id=? ORDER BY created_at DESC");
-    $sends->execute([$id]);
-    header('Content-Type: text/csv; charset=utf-8');
-    header('Content-Disposition: attachment; filename="campaign_'.$id.'_sends_'.date('Ymd').'.csv"');
-    $out=fopen('php://output','w');
-    fputcsv($out,['Email','Name','Country','Status','Sent At','Opened At','Clicked At','Converted At','Error']);
-    foreach ($sends->fetchAll() as $r) fputcsv($out,[$r['recipient_email'],$r['recipient_name'],$r['country'],$r['status'],$r['sent_at'],$r['opened_at'],$r['clicked_at'],$r['converted_at'],$r['error_message']]);
-    fclose($out); exit;
+if (tf_get_string('export', '') === 'csv') {
+    try {
+        $sends = $pdo->prepare("SELECT recipient_email, recipient_name, country, status, sent_at, opened_at, clicked_at, converted_at, error_message FROM email_campaign_sends WHERE campaign_id=? ORDER BY created_at DESC");
+        $sends->execute([$id]);
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename="campaign_'.$id.'_sends_'.date('Ymd').'.csv"');
+        $out=fopen('php://output','w');
+        fputcsv($out,['Email','Name','Country','Status','Sent At','Opened At','Clicked At','Converted At','Error']);
+        foreach ($sends->fetchAll() as $r) fputcsv($out,[$r['recipient_email'],$r['recipient_name'],$r['country'],$r['status'],$r['sent_at'],$r['opened_at'],$r['clicked_at'],$r['converted_at'],$r['error_message']]);
+        fclose($out); exit;
+    } catch (Throwable $e) {
+        error_log('campaign_detail export failed: ' . $e->getMessage());
+        http_response_code(500);
+        exit('Export failed.');
+    }
 }
 
 $campaign_geos = email_campaign_geos($pdo, $id, (int)$campaign['project_id']);
@@ -29,16 +40,28 @@ $send_stats->execute([$id]); $stats=$send_stats->fetch();
 $den = (int)($stats['sent']??0)+(int)($stats['delivered']??0)+(int)($stats['opened']??0)+(int)($stats['clicked']??0)+(int)($stats['converted']??0);
 if ($den<=0) $den=(int)($stats['total']??0);
 
-$page=max(1,intval($_GET['page']??1)); $per_page=20;
-$search=trim($_GET['search']??''); $fstatus=trim($_GET['fstatus']??''); $fcountry=trim($_GET['fcountry']??'');
+$page=max(1,tf_get_int('page',1)); $per_page=20;
+$search=tf_get_string('search',''); $fstatus_raw=tf_get_string('fstatus',''); $fcountry_raw=tf_get_string('fcountry','');
+$fstatus=in_array($fstatus_raw,['queued','sent','delivered','opened','clicked','converted','bounced','failed','retrying','skipped'],true) ? $fstatus_raw : '';
+$fcountry=preg_match('/^[A-Za-z]{2}$/',$fcountry_raw) ? $fcountry_raw : '';
 $where=['campaign_id=?']; $params=[$id];
-if ($search) { $where[]='(recipient_email LIKE ? OR recipient_name LIKE ?)'; $params[]="%$search%"; $params[]="%$search%"; }
-if ($fstatus && in_array($fstatus,['queued','sent','delivered','opened','clicked','converted','bounced','failed','retrying','skipped'],true)) { $where[]='status=?'; $params[]=$fstatus; }
-if ($fcountry && preg_match('/^[A-Za-z]{2}$/',$fcountry)) { $where[]='UPPER(country)=?'; $params[]=strtoupper($fcountry); }
+if ($search !== '') { $where[]='(recipient_email LIKE ? ESCAPE \'\\\' OR recipient_name LIKE ? ESCAPE \'\\\' )'; $esc='%'.tf_like_escape($search).'%'; $params[]=$esc; $params[]=$esc; }
+if ($fstatus !== '') { $where[]='status=?'; $params[]=$fstatus; }
+if ($fcountry !== '') { $where[]='UPPER(country)=?'; $params[]=strtoupper($fcountry); }
 $where_sql='WHERE '.implode(' AND ',$where);
-$count_stmt=$pdo->prepare("SELECT COUNT(*) as cnt FROM email_campaign_sends $where_sql"); $count_stmt->execute($params); $total=(int)$count_stmt->fetch()['cnt'];
+try {
+    $count_stmt=$pdo->prepare("SELECT COUNT(*) as cnt FROM email_campaign_sends $where_sql"); $count_stmt->execute($params); $total=(int)($count_stmt->fetch()['cnt'] ?? 0);
+} catch (Throwable $e) {
+    error_log('campaign_detail count failed: ' . $e->getMessage());
+    $total=0;
+}
 $pagination=paginate($total,$per_page,$page);
-$stmt=$pdo->prepare("SELECT * FROM email_campaign_sends $where_sql ORDER BY created_at DESC LIMIT {$pagination['per_page']} OFFSET {$pagination['offset']}"); $stmt->execute($params); $sends=$stmt->fetchAll();
+try {
+    $stmt=$pdo->prepare("SELECT * FROM email_campaign_sends $where_sql ORDER BY created_at DESC LIMIT {$pagination['per_page']} OFFSET {$pagination['offset']}"); $stmt->execute($params); $sends=$stmt->fetchAll();
+} catch (Throwable $e) {
+    error_log('campaign_detail sends fetch failed: ' . $e->getMessage());
+    $sends=[];
+}
 
 $page_title='Campaign Detail';
 require_once __DIR__ . '/../helpers/layout_header.php';
@@ -130,7 +153,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
             </tbody>
         </table>
     </div>
-    <div class="tf-card-footer"><?php $q=http_build_query(array_filter(['search'=>$search,'fstatus'=>$fstatus,'fcountry'=>$fcountry])); echo render_pagination($pagination, BASE_URL.'/email/campaign_detail.php?id='.$id.($q?'&'.$q:'')); ?></div>
+    <div class="tf-card-footer"><?php $q=http_build_query(array_filter(['search'=>$search,'fstatus'=>$fstatus,'fcountry'=>$fcountry], static fn($v) => $v !== '' && $v !== null)); echo render_pagination($pagination, BASE_URL.'/email/campaign_detail.php?id='.$id.($q?'&'.$q:'')); ?></div>
 </div>
 
 <?php require_once __DIR__ . '/../helpers/layout_footer.php'; ?>

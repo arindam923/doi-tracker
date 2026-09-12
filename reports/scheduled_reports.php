@@ -3,10 +3,11 @@ require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../helpers/reporting.php';
 require_role(['super_admin', 'campaign_manager']);
 
-$page = max(1, intval($_GET['page'] ?? 1));
+$page = max(1, tf_get_int('page', 1));
 $per_page = 50;
-$action = $_GET['action'] ?? 'list';
-$edit_id = intval($_GET['id'] ?? 0);
+$action_raw = tf_get_string('action', 'list');
+$action = in_array($action_raw, ['list', 'new', 'edit'], true) ? $action_raw : 'list';
+$edit_id = tf_get_int('id', 0);
 
 // ─── Handle POST ────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -140,20 +141,30 @@ if ($edit_id > 0) {
     $edit_filters = json_decode((string)$edit_data['filters_json'], true) ?: [];
 }
 
-$count = $pdo->prepare("SELECT COUNT(*) AS c FROM scheduled_reports");
-$count->execute();
-$total = (int)$count->fetch()['c'];
+try {
+    $count = $pdo->prepare("SELECT COUNT(*) AS c FROM scheduled_reports");
+    $count->execute();
+    $total = (int)$count->fetch()['c'];
+} catch (Throwable $e) {
+    error_log('scheduled_reports count failed: ' . $e->getMessage());
+    $total = 0;
+}
 $pagination = paginate($total, $per_page, $page);
 
-$stmt = $pdo->prepare("
+try {
+    $stmt = $pdo->prepare("
     SELECT sr.*, u.username AS owner_name
     FROM scheduled_reports sr
     LEFT JOIN users u ON sr.owner_id = u.id
     ORDER BY sr.is_active DESC, sr.next_run_at ASC, sr.created_at DESC
     LIMIT {$pagination['per_page']} OFFSET {$pagination['offset']}
 ");
-$stmt->execute();
-$reports = $stmt->fetchAll();
+    $stmt->execute();
+    $reports = $stmt->fetchAll();
+} catch (Throwable $e) {
+    error_log('scheduled_reports fetch failed: ' . $e->getMessage());
+    $reports = [];
+}
 
 $projects_list = $pdo->query("SELECT id, project_code, project_name FROM projects ORDER BY project_name")->fetchAll();
 $clients_list = $pdo->query("SELECT id, client_name FROM clients ORDER BY client_name")->fetchAll();

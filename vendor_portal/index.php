@@ -6,9 +6,10 @@ $global_vendor_id = (int)$vendor['global_vendor_id'];
 $from_date = tf_vendor_date($_GET['from'] ?? '') ?: date('Y-m-d', strtotime('-29 days'));
 $to_date = tf_vendor_date($_GET['to'] ?? '') ?: date('Y-m-d');
 if ($from_date > $to_date) [$from_date, $to_date] = [$to_date, $from_date];
-$project_filter = max(0, intval($_GET['project_id'] ?? 0));
-$approval_filter = trim($_GET['approval'] ?? '');
-$page = max(1, intval($_GET['page'] ?? 1));
+$project_filter = tf_get_int('project_id');
+$approval_filter = tf_get_string('approval');
+if (!in_array($approval_filter, ['pending','approved','rejected'], true)) $approval_filter = '';
+$page = max(1, tf_get_int('page', 1));
 $per_page = 25;
 
 $date_clicks = " AND c.clicked_at >= ? AND c.clicked_at < DATE_ADD(?, INTERVAL 1 DAY)";

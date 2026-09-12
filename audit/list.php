@@ -2,13 +2,13 @@
 require_once __DIR__ . '/../config.php';
 require_role(['super_admin']);
 
-$actor_filter = intval($_GET['actor_id'] ?? 0);
-$action_filter = trim($_GET['action'] ?? '');
-$entity_type_filter = trim($_GET['entity_type'] ?? '');
-$entity_id_filter = trim($_GET['entity_id'] ?? '');
-$from_date = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['from'] ?? '') ? $_GET['from'] : '';
-$to_date   = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['to'] ?? '') ? $_GET['to'] : '';
-$page = max(1, intval($_GET['page'] ?? 1));
+$actor_filter = tf_get_int('actor_id');
+$action_filter = tf_get_string('action');
+$entity_type_filter = tf_get_string('entity_type');
+$entity_id_filter = tf_get_string('entity_id');
+$from_date = tf_get_date('from', '');
+$to_date   = tf_get_date('to', '');
+$page = max(1, tf_get_int('page', 1));
 $per_page = 50;
 
 $where = [];
@@ -24,23 +24,38 @@ $where_sql = $where ? 'WHERE ' . implode(' AND ', $where) : '';
 // Interesting actions (subscribed list for the filter dropdown)
 $action_options = ['create','edit','update','delete','attach','detach','approve','reject','login','logout','status_change','upload','download','note','hold','resume'];
 
-$cnt = $pdo->prepare("SELECT COUNT(*) AS c FROM audit_logs a $where_sql");
-$cnt->execute($params);
-$total = (int)$cnt->fetch()['c'];
-$pagination = paginate($total, $per_page, $page);
+$audit_params = array_filter(['actor_id'=>$actor_filter,'action'=>$action_filter,'entity_type'=>$entity_type_filter,'entity_id'=>$entity_id_filter,'from'=>$from_date,'to'=>$to_date], fn($v)=>$v!=='' && $v!==null && $v!==0);
+$audit_qs = http_build_query($audit_params);
+$audit_base = BASE_URL . '/audit/list.php' . ($audit_qs !== '' ? '?' . $audit_qs : '');
 
-$stmt = $pdo->prepare("
+try {
+    $cnt = $pdo->prepare("SELECT COUNT(*) AS c FROM audit_logs a $where_sql");
+    $cnt->execute($params);
+    $total = (int)$cnt->fetch()['c'];
+    $pagination = paginate($total, $per_page, $page);
+    $stmt = $pdo->prepare("
     SELECT a.*, u.username AS actor_name
     FROM audit_logs a
     LEFT JOIN users u ON a.actor_id = u.id
     $where_sql
     ORDER BY a.created_at DESC, a.id DESC
     LIMIT {$pagination['per_page']} OFFSET {$pagination['offset']}
-");
-$stmt->execute($params);
-$entries = $stmt->fetchAll();
+ ");
+    $stmt->execute($params);
+    $entries = $stmt->fetchAll();
+} catch (Throwable $e) {
+    error_log('audit/list query failed: '.$e->getMessage());
+    $total = 0;
+    $pagination = paginate(0, $per_page, $page);
+    $entries = [];
+}
 
-$users_opt = $pdo->query("SELECT id, username FROM users ORDER BY username")->fetchAll();
+try {
+    $users_opt = $pdo->query("SELECT id, username FROM users ORDER BY username")->fetchAll();
+} catch (Throwable $e) {
+    error_log('audit/list users lookup failed: '.$e->getMessage());
+    $users_opt = $users_opt ?? [];
+}
 
 $page_title = 'Audit Log';
 require_once __DIR__ . '/../helpers/layout_header.php';
@@ -133,7 +148,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
             </tbody>
         </table>
     </div>
-    <div class="tf-card-footer"><?php echo render_pagination($pagination, BASE_URL . '/audit/list.php?' . http_build_query($_GET)); ?></div>
+    <div class="tf-card-footer"><?php echo render_pagination($pagination, $audit_base); ?></div>
 </div>
 
 <?php require_once __DIR__ . '/../helpers/layout_footer.php'; ?>

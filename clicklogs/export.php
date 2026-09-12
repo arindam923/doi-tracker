@@ -8,7 +8,8 @@ $to_date = $filters['to'];
 $where_sql = $filters['where_sql'];
 $params = $filters['params'];
 
-$stmt = $pdo->prepare("
+try {
+    $stmt = $pdo->prepare("
     SELECT c.click_id, c.clicked_at, p.project_code, gv.vendor_name, c.ip_address,
            c.country_code, c.device_type, c.browser, c.os, c.isp, c.browser_lang, c.user_agent, c.is_converted,
            c.referrer, c.sub1, c.sub2, c.sub3, c.sub4, c.sub5
@@ -18,7 +19,12 @@ $stmt = $pdo->prepare("
     $where_sql
     ORDER BY c.clicked_at DESC
 ");
-$stmt->execute($params);
+    $stmt->execute($params);
+} catch (Throwable $e) {
+    error_log('clicklogs export failed: ' . $e->getMessage());
+    http_response_code(500);
+    exit('Export failed.');
+}
 
 header('Content-Type: text/csv; charset=utf-8');
 header('Content-Disposition: attachment; filename="clicklogs_' . $from_date . '_to_' . $to_date . '.csv"');

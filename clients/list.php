@@ -2,19 +2,21 @@
 require_once __DIR__ . '/../config.php';
 require_role(['super_admin', 'campaign_manager']);
 
-$search = trim($_GET['search'] ?? '');
-$status_filter = $_GET['status'] ?? '';
-$page = max(1, intval($_GET['page'] ?? 1));
+$search = tf_get_string('search');
+$status_filter = tf_get_string('status');
+if ($status_filter !== '' && !in_array($status_filter, ['active','archived'], true)) $status_filter = '';
+$page = max(1, tf_get_int('page', 1));
 $per_page = 10;
 
 $where = [];
 $params = [];
 
-if ($search) {
-    $where[] = "(client_name LIKE ? OR client_code LIKE ? OR contact_person LIKE ?)";
-    $params[] = "%$search%";
-    $params[] = "%$search%";
-    $params[] = "%$search%";
+if ($search !== '') {
+    $where[] = "(client_name LIKE ? ESCAPE '\\' OR client_code LIKE ? ESCAPE '\\' OR contact_person LIKE ? ESCAPE '\\')";
+    $needle = '%' . tf_like_escape($search) . '%';
+    $params[] = $needle;
+    $params[] = $needle;
+    $params[] = $needle;
 }
 
 if ($status_filter === 'active') {
@@ -25,15 +27,25 @@ if ($status_filter === 'active') {
 
 $where_sql = $where ? 'WHERE ' . implode(' AND ', $where) : '';
 
-$count_stmt = $pdo->prepare("SELECT COUNT(*) as cnt FROM clients $where_sql");
-$count_stmt->execute($params);
-$total = $count_stmt->fetch()['cnt'];
+try {
+    $count_stmt = $pdo->prepare("SELECT COUNT(*) as cnt FROM clients $where_sql");
+    $count_stmt->execute($params);
+    $total = (int)($count_stmt->fetch()['cnt'] ?? 0);
+} catch (Throwable $e) {
+    error_log('clients/list count: ' . $e->getMessage());
+    $total = 0;
+}
 
 $pagination = paginate($total, $per_page, $page);
 
-$stmt = $pdo->prepare("SELECT * FROM clients $where_sql ORDER BY created_at DESC LIMIT {$pagination['per_page']} OFFSET {$pagination['offset']}");
-$stmt->execute($params);
-$clients = $stmt->fetchAll();
+try {
+    $stmt = $pdo->prepare("SELECT * FROM clients $where_sql ORDER BY created_at DESC LIMIT {$pagination['per_page']} OFFSET {$pagination['offset']}");
+    $stmt->execute($params);
+    $clients = $stmt->fetchAll();
+} catch (Throwable $e) {
+    error_log('clients/list query: ' . $e->getMessage());
+    $clients = [];
+}
 
 $client_ids = array_column($clients, 'id');
 $project_counts = [];
@@ -163,6 +175,8 @@ require_once __DIR__ . '/../helpers/layout_header.php';
 </div>
 
 <?php
-echo render_pagination($pagination, BASE_URL . '/clients/list.php');
+$client_filters = array_filter(['search' => $search, 'status' => $status_filter], static fn($v) => $v !== '');
+$client_base = BASE_URL . '/clients/list.php' . ($client_filters ? '?' . http_build_query($client_filters) : '');
+echo render_pagination($pagination, $client_base);
 require_once __DIR__ . '/../helpers/layout_footer.php';
 ?>

@@ -10,7 +10,8 @@
 require_once __DIR__ . '/../config.php';
 require_role(['super_admin', 'campaign_manager']);
 
-$project_id = intval($_GET['id'] ?? $_GET['project_id'] ?? 0);
+$project_id = tf_get_int('id', 0);
+if (!$project_id) $project_id = tf_get_int('project_id', 0);
 if (!$project_id) {
     set_flash('danger', 'Project id is required.');
     redirect(BASE_URL . '/projects/list.php');
@@ -30,13 +31,16 @@ if (!$project) {
     redirect(BASE_URL . '/projects/list.php');
 }
 
-$from_date = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['from'] ?? '') ? $_GET['from'] : '';
-$to_date   = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['to'] ?? '') ? $_GET['to'] : date('Y-m-d');
+$from_date = tf_get_date('from', '');
+$to_date   = tf_get_date('to', date('Y-m-d'));
 if ($from_date === '') {
     $start = (string)($project['start_date'] ?? '');
-    $from_date = preg_match('/^\d{4}-\d{2}-\d{2}$/', $start) && strpos($start, '0000-') !== 0
-        ? $start
-        : date('Y-m-d', strtotime('-365 days'));
+    if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $start) && strpos($start, '0000-') !== 0) {
+        [$sy,$sm,$sd] = explode('-', $start);
+        $from_date = checkdate((int)$sm,(int)$sd,(int)$sy) ? $start : date('Y-m-d', strtotime('-365 days'));
+    } else {
+        $from_date = date('Y-m-d', strtotime('-365 days'));
+    }
 }
 if (strtotime($to_date) < strtotime($from_date)) {
     $to_date = $from_date;

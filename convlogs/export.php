@@ -2,19 +2,20 @@
 require_once __DIR__ . '/../config.php';
 require_role(['super_admin', 'campaign_manager']);
 
-$search = trim($_GET['search'] ?? '');
-$project_filter = intval($_GET['project_id'] ?? 0);
-$vendor_filter = intval($_GET['vendor_id'] ?? 0);
-$from_date = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['from'] ?? '') ? $_GET['from'] : date('Y-m-d', strtotime('-30 days'));
-$to_date   = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['to'] ?? '') ? $_GET['to'] : date('Y-m-d');
+$search = tf_get_string('search');
+$project_filter = tf_get_int('project_id');
+$vendor_filter = tf_get_int('vendor_id');
+$from_date = tf_get_date('from', date('Y-m-d', strtotime('-30 days')));
+$to_date   = tf_get_date('to', date('Y-m-d'));
 
 $where = ["cv.converted_at BETWEEN ? AND DATE_ADD(?, INTERVAL 1 DAY)"];
 $params = [$from_date, $to_date];
 
-if ($search) { $where[] = "(cv.click_id LIKE ? OR cv.transaction_id LIKE ?)"; $params[] = "%$search%"; $params[] = "%$search%"; }
+if ($search !== '') { $where[] = "(cv.click_id LIKE ? ESCAPE '\\' OR cv.transaction_id LIKE ? ESCAPE '\\')"; $esc='%'.tf_like_escape($search).'%'; $params[] = $esc; $params[] = $esc; }
 if ($project_filter) { $where[] = "cv.project_id = ?"; $params[] = $project_filter; }
 if ($vendor_filter) { $where[] = "cv.vendor_id = ?"; $params[] = $vendor_filter; }
 
+try {
 $stmt = $pdo->prepare("
     SELECT cv.*, p.project_code, gv.vendor_name, COALESCE(cv.click_time, c.clicked_at) AS clicked_at, c.country_code
     FROM conversions cv
@@ -23,8 +24,17 @@ $stmt = $pdo->prepare("
     LEFT JOIN clicks c ON cv.click_id = c.click_id
     WHERE " . implode(' AND ', $where) . "
     ORDER BY cv.converted_at DESC
-");
+ ");
 $stmt->execute($params);
+} catch (Throwable $e) {
+    error_log('convlogs/export query failed: '.$e->getMessage());
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="convlogs_' . $from_date . '_to_' . $to_date . '.csv"');
+    $out = fopen('php://output', 'w');
+    fputcsv($out, ['Click ID', 'Project', 'Vendor', 'Country', 'Click Time', 'Conversion Time', 'Time Difference (s)', 'Status', 'Approval', 'Revenue', 'Sale Amount', 'Currency', 'Payout', 'Profit', 'Transaction ID', 'Sub1', 'Sub2', 'Sub3', 'Sub4', 'Sub5']);
+    fclose($out);
+    exit;
+}
 
 header('Content-Type: text/csv; charset=utf-8');
 header('Content-Disposition: attachment; filename="convlogs_' . $from_date . '_to_' . $to_date . '.csv"');

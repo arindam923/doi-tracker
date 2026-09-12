@@ -2,21 +2,21 @@
 require_once __DIR__ . '/../config.php';
 require_role(['super_admin', 'campaign_manager']);
 
-$search = trim($_GET['search'] ?? '');
-$project_filter = intval($_GET['project_id'] ?? 0);
-$vendor_filter = intval($_GET['vendor_id'] ?? 0);
-$status_filter = $_GET['approval_status'] ?? '';
-$from_date = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['from'] ?? '') ? $_GET['from'] : date('Y-m-d', strtotime('-30 days'));
-$to_date   = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['to'] ?? '') ? $_GET['to'] : date('Y-m-d');
-$page = max(1, intval($_GET['page'] ?? 1));
+$search = tf_get_string('search');
+$project_filter = tf_get_int('project_id');
+$vendor_filter = tf_get_int('vendor_id');
+$status_filter = tf_get_string('approval_status');
+$from_date = tf_get_date('from', date('Y-m-d', strtotime('-30 days')));
+$to_date   = tf_get_date('to', date('Y-m-d'));
+$page = max(1, tf_get_int('page', 1));
 $per_page = 50;
 
 $where = ["cv.converted_at BETWEEN ? AND DATE_ADD(?, INTERVAL 1 DAY)"];
 $params = [$from_date, $to_date];
 
-if ($search) {
-    $where[] = "(cv.click_id LIKE ? OR cv.transaction_id LIKE ?)";
-    $params[] = "%$search%"; $params[] = "%$search%";
+if ($search !== '') {
+    $where[] = "(cv.click_id LIKE ? ESCAPE '\\' OR cv.transaction_id LIKE ? ESCAPE '\\')";
+    $esc = '%'.tf_like_escape($search).'%'; $params[] = $esc; $params[] = $esc;
 }
 if ($project_filter) { $where[] = "cv.project_id = ?"; $params[] = $project_filter; }
 if ($vendor_filter) { $where[] = "cv.vendor_id = ?"; $params[] = $vendor_filter; }
@@ -26,12 +26,16 @@ if (in_array($status_filter, ['pending', 'approved', 'rejected'], true)) {
 
 $where_sql = 'WHERE ' . implode(' AND ', $where);
 
-$count = $pdo->prepare("SELECT COUNT(*) as cnt FROM conversions cv $where_sql");
-$count->execute($params);
-$total = (int)$count->fetch()['cnt'];
-$pagination = paginate($total, $per_page, $page);
+$base_params = array_filter(['from'=>$from_date,'to'=>$to_date,'search'=>$search,'project_id'=>$project_filter,'vendor_id'=>$vendor_filter,'approval_status'=>$status_filter], fn($v)=>$v!=='' && $v!==null && $v!==0);
+$export_qs = http_build_query($base_params);
+$pagination_base = BASE_URL . '/convlogs/list.php' . ($export_qs !== '' ? '?' . $export_qs : '');
 
-$stmt = $pdo->prepare("
+try {
+    $count = $pdo->prepare("SELECT COUNT(*) as cnt FROM conversions cv $where_sql");
+    $count->execute($params);
+    $total = (int)$count->fetch()['cnt'];
+    $pagination = paginate($total, $per_page, $page);
+    $stmt = $pdo->prepare("
     SELECT cv.*, p.project_code, p.project_name, gv.vendor_name,
            c.clicked_at AS click_time_from_click, c.ip_address, c.country_code, c.device_type
     FROM conversions cv
@@ -41,15 +45,27 @@ $stmt = $pdo->prepare("
     $where_sql
     ORDER BY cv.converted_at DESC
     LIMIT {$pagination['per_page']} OFFSET {$pagination['offset']}
-");
-$stmt->execute($params);
-$conversions = $stmt->fetchAll();
+ ");
+    $stmt->execute($params);
+    $conversions = $stmt->fetchAll();
+} catch (Throwable $e) {
+    error_log('convlogs/list query failed: '.$e->getMessage());
+    $total = 0;
+    $pagination = paginate(0, $per_page, $page);
+    $conversions = [];
+}
 
-$projects_list = $pdo->query("SELECT id, project_code, project_name FROM projects ORDER BY project_name")->fetchAll();
-$vendors_list = $pdo->query("SELECT gv.id, gv.vendor_name, p.project_code FROM project_vendor pv JOIN global_vendors gv ON gv.id = pv.vendor_id JOIN projects p ON p.id = pv.project_id ORDER BY p.project_code, gv.vendor_name")->fetchAll();
+try {
+    $projects_list = $pdo->query("SELECT id, project_code, project_name FROM projects ORDER BY project_name")->fetchAll();
+    $vendors_list = $pdo->query("SELECT gv.id, gv.vendor_name, p.project_code FROM project_vendor pv JOIN global_vendors gv ON gv.id = pv.vendor_id JOIN projects p ON p.id = pv.project_id ORDER BY p.project_code, gv.vendor_name")->fetchAll();
+} catch (Throwable $e) {
+    error_log('convlogs/list lookup failed: '.$e->getMessage());
+    $projects_list = $projects_list ?? [];
+    $vendors_list = $vendors_list ?? [];
+}
 
 $page_title = 'Conversion Logs';
-$page_actions = '<a href="' . BASE_URL . '/convlogs/export.php?' . http_build_query($_GET) . '" class="btn btn-outline-secondary btn-sm"><i class="bi bi-download"></i>Export CSV</a>';
+$page_actions = '<a href="' . BASE_URL . '/convlogs/export.php' . ($export_qs !== '' ? '?' . $export_qs : '') . '" class="btn btn-outline-secondary btn-sm"><i class="bi bi-download"></i>Export CSV</a>';
 require_once __DIR__ . '/../helpers/layout_header.php';
 
 $fmt_when = static function ($dt) {
@@ -222,7 +238,7 @@ $fmt_when = static function ($dt) {
                 </tbody>
             </table>
         </div>
-        <div class="tf-card-footer"><?php echo render_pagination($pagination, BASE_URL . '/convlogs/list.php?' . http_build_query($_GET)); ?></div>
+        <div class="tf-card-footer"><?php echo render_pagination($pagination, $pagination_base); ?></div>
     </div>
 </div>
 

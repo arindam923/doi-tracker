@@ -3,22 +3,25 @@ require_once __DIR__ . '/../config.php';
 require_role(['super_admin', 'campaign_manager']);
 
 // ─── Filters ───
-$search = trim($_GET['search'] ?? '');
-$status_filter = $_GET['status'] ?? '';
-$client_filter = intval($_GET['client_id'] ?? 0);
-$campaign_type_filter = $_GET['campaign_type'] ?? '';
-$page = max(1, intval($_GET['page'] ?? 1));
+$search = tf_get_string('search');
+$status_filter = tf_get_string('status');
+if ($status_filter !== '' && !in_array($status_filter, ['live','hold','closed','archived'], true)) $status_filter = '';
+$client_filter = tf_get_int('client_id');
+$campaign_type_filter = tf_get_string('campaign_type');
+if ($campaign_type_filter !== '' && !in_array($campaign_type_filter, ['CPL','CPC','CPA'], true)) $campaign_type_filter = '';
+$page = max(1, tf_get_int('page', 1));
 $per_page = 10;
 
 $where = [];
 $params = [];
 
-if ($search) {
-    $where[] = "(p.project_code LIKE ? OR p.project_name LIKE ?)";
-    $params[] = "%$search%";
-    $params[] = "%$search%";
+if ($search !== '') {
+    $where[] = "(p.project_code LIKE ? ESCAPE '\\' OR p.project_name LIKE ? ESCAPE '\\')";
+    $needle = '%' . tf_like_escape($search) . '%';
+    $params[] = $needle;
+    $params[] = $needle;
 }
-if ($status_filter && in_array($status_filter, ['live','hold','closed','archived'])) {
+if ($status_filter !== '') {
     $where[] = "p.status = ?";
     $params[] = $status_filter;
 }
@@ -26,20 +29,26 @@ if ($client_filter) {
     $where[] = "p.client_id = ?";
     $params[] = $client_filter;
 }
-if ($campaign_type_filter && in_array($campaign_type_filter, ['CPL','CPC','CPA'], true)) {
+if ($campaign_type_filter !== '') {
     $where[] = "p.campaign_type = ?";
     $params[] = $campaign_type_filter;
 }
 
 $where_sql = $where ? 'WHERE ' . implode(' AND ', $where) : '';
 
-$count_stmt = $pdo->prepare("SELECT COUNT(*) as cnt FROM projects p $where_sql");
-$count_stmt->execute($params);
-$total = $count_stmt->fetch()['cnt'];
+try {
+    $count_stmt = $pdo->prepare("SELECT COUNT(*) as cnt FROM projects p $where_sql");
+    $count_stmt->execute($params);
+    $total = (int)($count_stmt->fetch()['cnt'] ?? 0);
+} catch (Throwable $e) {
+    error_log('projects/list count: ' . $e->getMessage());
+    $total = 0;
+}
 
 $pagination = paginate($total, $per_page, $page);
 
-$stmt = $pdo->prepare("
+try {
+    $stmt = $pdo->prepare("
     SELECT p.*, c.client_name
     FROM projects p
     LEFT JOIN clients c ON p.client_id = c.id
@@ -47,8 +56,12 @@ $stmt = $pdo->prepare("
     ORDER BY p.updated_at DESC
     LIMIT {$pagination['per_page']} OFFSET {$pagination['offset']}
 ");
-$stmt->execute($params);
-$projects = $stmt->fetchAll();
+    $stmt->execute($params);
+    $projects = $stmt->fetchAll();
+} catch (Throwable $e) {
+    error_log('projects/list query: ' . $e->getMessage());
+    $projects = [];
+}
 
 $clients_list = $pdo->query("SELECT id, client_name FROM clients WHERE is_active = 1 ORDER BY client_name")->fetchAll();
 
@@ -317,7 +330,9 @@ $project_vendors = $project_vendor_map[$p['id']] ?? [];
 <?php endif; ?>
 
 <?php
-echo render_pagination($pagination, BASE_URL . '/projects/list.php');
+$pagination_filters = array_filter(['search' => $search, 'status' => $status_filter, 'campaign_type' => $campaign_type_filter, 'client_id' => $client_filter ? (string)$client_filter : ''], static fn($v) => $v !== '');
+$pagination_base = BASE_URL . '/projects/list.php' . ($pagination_filters ? '?' . http_build_query($pagination_filters) : '');
+echo render_pagination($pagination, $pagination_base);
 
 $extra_js = <<<EOT
 <script>

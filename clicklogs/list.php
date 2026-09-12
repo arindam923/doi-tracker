@@ -14,19 +14,25 @@ $os_filter = $filters['os'];
 $isp_filter = $filters['isp'];
 $ip_filter = $filters['ip_address'];
 $click_id_filter = $filters['click_id'];
-$page = max(1, intval($_GET['page'] ?? 1));
+$page = max(1, tf_get_int('page', 1));
 $per_page = 50;
 
 $where_sql = $filters['where_sql'];
 $params = $filters['params'];
 
-$count = $pdo->prepare("SELECT COUNT(*) as cnt FROM clicks c $where_sql");
-$count->execute($params);
-$total = (int)$count->fetch()['cnt'];
+try {
+    $count = $pdo->prepare("SELECT COUNT(*) as cnt FROM clicks c $where_sql");
+    $count->execute($params);
+    $total = (int)$count->fetch()['cnt'];
+} catch (Throwable $e) {
+    error_log('clicklogs list count failed: ' . $e->getMessage());
+    $total = 0;
+}
 
 $pagination = paginate($total, $per_page, $page);
 
-$stmt = $pdo->prepare("
+try {
+    $stmt = $pdo->prepare("
     SELECT c.*, gv.vendor_name, p.project_code, p.project_name
     FROM clicks c
     JOIN global_vendors gv ON c.vendor_id = gv.id
@@ -35,14 +41,35 @@ $stmt = $pdo->prepare("
     ORDER BY c.clicked_at DESC
     LIMIT {$pagination['per_page']} OFFSET {$pagination['offset']}
 ");
-$stmt->execute($params);
-$clicks = $stmt->fetchAll();
+    $stmt->execute($params);
+    $clicks = $stmt->fetchAll();
+} catch (Throwable $e) {
+    error_log('clicklogs list fetch failed: ' . $e->getMessage());
+    $clicks = [];
+}
 
 $vendors_list = $pdo->query("SELECT gv.id, gv.vendor_name, p.project_code FROM project_vendor pv JOIN global_vendors gv ON gv.id = pv.vendor_id JOIN projects p ON p.id = pv.project_id ORDER BY p.project_code, gv.vendor_name")->fetchAll();
 $projects_list = $pdo->query("SELECT id, project_code, project_name FROM projects ORDER BY project_name")->fetchAll();
 
+$base_params = array_filter([
+    'from' => $from_date,
+    'to' => $to_date,
+    'vendor_id' => $vendor_filter ?: null,
+    'project_id' => $project_filter ?: null,
+    'country' => $country_filter,
+    'device' => $device_filter,
+    'browser' => $browser_filter,
+    'os' => $os_filter,
+    'isp' => $isp_filter,
+    'ip_address' => $ip_filter,
+    'click_id' => $click_id_filter,
+], static fn($v) => $v !== '' && $v !== null && $v !== 0 && $v !== false);
+$base_query = http_build_query($base_params);
+$export_href = BASE_URL . '/clicklogs/export.php' . ($base_query ? '?' . $base_query : '');
+$list_base = BASE_URL . '/clicklogs/list.php' . ($base_query ? '?' . $base_query : '');
+
 $page_title = 'Click Logs';
-$page_actions = '<a href="' . BASE_URL . '/clicklogs/export.php?' . http_build_query($_GET) . '" class="btn btn-outline-success btn-sm"><i class="bi bi-download"></i>Export CSV</a>';
+$page_actions = '<a href="' . $export_href . '" class="btn btn-outline-success btn-sm"><i class="bi bi-download"></i>Export CSV</a>';
 require_once __DIR__ . '/../helpers/layout_header.php';
 ?>
 
@@ -184,7 +211,7 @@ require_once __DIR__ . '/../helpers/layout_header.php';
             </tbody>
         </table>
     </div>
-    <div class="tf-card-footer"><?php echo render_pagination($pagination, BASE_URL . '/clicklogs/list.php?' . http_build_query($_GET)); ?></div>
+    <div class="tf-card-footer"><?php echo render_pagination($pagination, $list_base); ?></div>
 </div>
 
 <?php require_once __DIR__ . '/../helpers/layout_footer.php'; ?>
